@@ -80,15 +80,18 @@ export async function createGameplay(
   });
   function updatePresentation() {
     const title = document.body.classList.contains('on-title');
+    const waiting = document.body.classList.contains('is-waiting');
     checkers.forEach((checker) => (checker.visible = !title));
     const portrait = matchMedia('(max-aspect-ratio: 1/1)').matches;
     canvas.setAttribute(
       'aria-label',
-      title && portrait
-        ? 'Scattered original Plakoto checkers'
-        : title
-          ? 'Original Plakoto board without checkers'
-          : 'Plakoto board with red and ivory checkers',
+      waiting
+        ? 'Decorative original Plakoto dice and checkers'
+        : title && portrait
+          ? 'Scattered original Plakoto checkers'
+          : title
+            ? 'Original Plakoto board without checkers'
+            : 'Plakoto board with red and ivory checkers',
     );
   }
   updatePresentation();

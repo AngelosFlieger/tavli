@@ -75,7 +75,8 @@ export async function createStage(host: HTMLElement, boardFrame: HTMLElement) {
   const boardPass = new RenderPass(scene, camera);
   boardPass.clear = false;
   composer.addPass(boardPass);
-  composer.addPass(new OutputPass());
+  const output = new OutputPass();
+  composer.addPass(output);
   const retro = new ShaderPass({
     uniforms: {
       tDiffuse: { value: null },
@@ -112,20 +113,26 @@ export async function createStage(host: HTMLElement, boardFrame: HTMLElement) {
   scene.add(shadow);
 
   const layout: BoardLayout = { depth: 1, stackSlots: 5 };
+  const portraitQuery = matchMedia('(max-aspect-ratio: 1/1)');
   let home: { group: THREE.Group; update(dt: number, active: boolean): void } | undefined;
   let scatter: ScatterLayer | undefined;
   let waitingScatter: ScatterLayer | undefined;
   let onLayout: (() => void) | undefined;
+
+  function screen() {
+    const title = document.body.classList.contains('on-title');
+    const waiting = document.body.classList.contains('is-waiting');
+    const portrait = portraitQuery.matches;
+    return { title, waiting, portrait, desktopHome: title && !waiting && !portrait };
+  }
 
   function resize() {
     const frame = boardFrame.getBoundingClientRect();
     const width = frame.width;
     const height = frame.height;
     const aspect = width / height;
-    const title = document.body.classList.contains('on-title');
-    const portrait = matchMedia('(max-aspect-ratio: 1/1)').matches;
+    const { title, waiting, portrait } = screen();
     Object.assign(layout, boardLayout(portrait, title, aspect));
-    const waiting = document.body.classList.contains('is-waiting');
     const showBoard = !waiting && !(title && portrait);
     board.visible = showBoard;
     shadow.visible = showBoard;
@@ -135,14 +142,9 @@ export async function createStage(host: HTMLElement, boardFrame: HTMLElement) {
     root.updateMatrixWorld(true);
 
     const worldBounds = new THREE.Box3().setFromObject(board);
-    const projected = new THREE.Box3();
-    for (const x of [worldBounds.min.x, worldBounds.max.x])
-      for (const y of [worldBounds.min.y, worldBounds.max.y])
-        for (const z of [worldBounds.min.z, worldBounds.max.z])
-          projected.expandByPoint(
-            new THREE.Vector3(x, y, z).applyMatrix4(camera.matrixWorldInverse),
-          );
-
+    const projected = projectCorners(worldBounds, (point) =>
+      point.applyMatrix4(camera.matrixWorldInverse),
+    );
     const halfHeight = title
       ? (projected.max.x - projected.min.x) / 2 / aspect / 0.9
       : Math.max(
@@ -163,36 +165,8 @@ export async function createStage(host: HTMLElement, boardFrame: HTMLElement) {
     const screenHeight = host.clientHeight;
     scatter?.resize(screenWidth, screenHeight, title && portrait && !waiting);
     waitingScatter?.resize(screenWidth, screenHeight, waiting);
-    if (waiting)
-      renderer.domElement.setAttribute(
-        'aria-label',
-        'Decorative original Plakoto dice and checkers',
-      );
-    if (title && !portrait) {
-      // A lower viewing angle makes the home-screen board read as a laid-back table.
-      // Extend the near edge beyond the viewport so the board fills both lower corners.
-      titleCamera.aspect = aspect;
-      const direction = new THREE.Vector3(0, 0.55, 0.835).normalize();
-      const halfWidth = (worldBounds.max.x - worldBounds.min.x) / 2;
-      const halfDepth = (worldBounds.max.z - worldBounds.min.z) / 2;
-      const distance =
-        halfWidth / (Math.tan(THREE.MathUtils.degToRad(17.5)) * aspect * 1.7) +
-        halfDepth * direction.z;
-      titleCamera.position.copy(direction.multiplyScalar(distance));
-      titleCamera.lookAt(0, 0, 0);
-      titleCamera.updateMatrixWorld();
-      titleCamera.updateProjectionMatrix();
-      let topEdge = -Infinity;
-      for (const x of [worldBounds.min.x, worldBounds.max.x])
-        for (const y of [worldBounds.min.y, worldBounds.max.y])
-          for (const z of [worldBounds.min.z, worldBounds.max.z])
-            topEdge = Math.max(topEdge, new THREE.Vector3(x, y, z).project(titleCamera).y);
-      titleCamera.projectionMatrix.premultiply(
-        new THREE.Matrix4().makeTranslation(0, 0.86 - topEdge, 0),
-      );
-      applyBoardViewport(titleCamera, frame, screenWidth, screenHeight);
-      boardPass.camera = titleCamera;
-    } else {
+    if (title && !portrait) placeTitleCamera(worldBounds, aspect, frame, screenWidth, screenHeight);
+    else {
       applyBoardViewport(camera, frame, screenWidth, screenHeight);
       boardPass.camera = camera;
     }
@@ -206,6 +180,34 @@ export async function createStage(host: HTMLElement, boardFrame: HTMLElement) {
     );
   }
 
+  function placeTitleCamera(
+    worldBounds: THREE.Box3,
+    aspect: number,
+    frame: DOMRect,
+    screenWidth: number,
+    screenHeight: number,
+  ) {
+    // A lower viewing angle makes the home-screen board read as a laid-back table.
+    // Extend the near edge beyond the viewport so the board fills both lower corners.
+    titleCamera.aspect = aspect;
+    const direction = new THREE.Vector3(0, 0.55, 0.835).normalize();
+    const halfWidth = (worldBounds.max.x - worldBounds.min.x) / 2;
+    const halfDepth = (worldBounds.max.z - worldBounds.min.z) / 2;
+    const distance =
+      halfWidth / (Math.tan(THREE.MathUtils.degToRad(17.5)) * aspect * 1.7) +
+      halfDepth * direction.z;
+    titleCamera.position.copy(direction.multiplyScalar(distance));
+    titleCamera.lookAt(0, 0, 0);
+    titleCamera.updateMatrixWorld();
+    titleCamera.updateProjectionMatrix();
+    const topEdge = projectCorners(worldBounds, (point) => point.project(titleCamera)).max.y;
+    titleCamera.projectionMatrix.premultiply(
+      new THREE.Matrix4().makeTranslation(0, 0.86 - topEdge, 0),
+    );
+    applyBoardViewport(titleCamera, frame, screenWidth, screenHeight);
+    boardPass.camera = titleCamera;
+  }
+
   return {
     root,
     center,
@@ -213,16 +215,15 @@ export async function createStage(host: HTMLElement, boardFrame: HTMLElement) {
     canvas: renderer.domElement,
     layout,
     attachHome(next: NonNullable<typeof home>) {
+      if (home) return;
       home = next;
       scene.add(next.group);
     },
     attachScatter(next: ScatterLayer) {
-      scatter = next;
-      composer.insertPass(next.pass, 2);
+      scatter = addOverlay(next);
     },
     attachWaiting(next: ScatterLayer) {
-      waitingScatter = next;
-      composer.insertPass(next.pass, 2);
+      waitingScatter = addOverlay(next);
     },
     /** Start framing. `onLayout` runs after the board scale changes and before the camera fit. */
     mount(layoutHook: () => void) {
@@ -234,10 +235,7 @@ export async function createStage(host: HTMLElement, boardFrame: HTMLElement) {
     render(elapsed: number, motion: boolean, texture: boolean, dt: number) {
       backdrop.uniforms.time.value = elapsed;
       retro.uniforms.time.value = elapsed;
-      const desktopHome =
-        document.body.classList.contains('on-title') &&
-        !document.body.classList.contains('is-waiting') &&
-        !matchMedia('(max-aspect-ratio: 1/1)').matches;
+      const { desktopHome } = screen();
       root.position.y = motion && !desktopHome ? Math.sin(elapsed * 0.65) * 0.035 : 0;
       home?.update(dt, desktopHome && motion);
       if (scatter?.pass.enabled) scatter.update?.(elapsed, motion);
@@ -249,6 +247,20 @@ export async function createStage(host: HTMLElement, boardFrame: HTMLElement) {
       renderer.setAnimationLoop(frame);
     },
   };
+
+  function addOverlay(layer: ScatterLayer) {
+    composer.insertPass(layer.pass, composer.passes.indexOf(output));
+    return layer;
+  }
+}
+
+function projectCorners(bounds: THREE.Box3, project: (point: THREE.Vector3) => THREE.Vector3) {
+  const projected = new THREE.Box3();
+  for (const x of [bounds.min.x, bounds.max.x])
+    for (const y of [bounds.min.y, bounds.max.y])
+      for (const z of [bounds.min.z, bounds.max.z])
+        projected.expandByPoint(project(new THREE.Vector3(x, y, z)));
+  return projected;
 }
 
 function contactShadow() {

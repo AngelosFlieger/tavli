@@ -81,11 +81,9 @@ export function initShell(next: Session) {
     multiplayerButton.classList.remove('mode-pressed'),
   );
 
-  document.querySelectorAll<HTMLButtonElement>('#waiting-cancel').forEach((button) =>
-    button.addEventListener('click', () => {
-      if (searching) session.onMultiplayer();
-    }),
-  );
+  document.querySelector('#waiting-cancel')!.addEventListener('click', () => {
+    if (searching) session.onMultiplayer();
+  });
   document.addEventListener('keydown', (event) => {
     if (event.key === 'Escape' && searching && !dialog.open) session.onMultiplayer();
   });

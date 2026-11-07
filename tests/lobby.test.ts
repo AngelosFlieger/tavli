@@ -55,6 +55,17 @@ test('a move is checked on the server and undo restores it for the same player',
   assert.equal(undone?.update.canUndo, false);
 });
 
+test('cancelling a search that already paired frees both seats', () => {
+  const lobby = createLobby(() => 1);
+  lobby.join('ada');
+  assert.equal(lobby.cancel('ada'), null);
+  lobby.join('ada');
+  lobby.join('basil');
+  assert.equal(lobby.cancel('basil'), 'ada');
+  assert.equal(lobby.act('ada', { type: 'roll' }), null);
+  assert.equal(lobby.join('ada')?.type, 'waiting');
+});
+
 test('leaving a match tells the opponent, and a restart clears the dice', () => {
   const lobby = createLobby(() => 3);
   lobby.join('ada');

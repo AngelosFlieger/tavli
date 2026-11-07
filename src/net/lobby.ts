@@ -31,10 +31,13 @@ export function createLobby(rollDie: () => number) {
     return { type: 'waiting' };
   }
 
+  /** Leaves the queue, or the match if pairing already happened. */
   function cancel(id: PlayerId) {
-    if (waiting !== id) return false;
-    waiting = null;
-    return true;
+    if (waiting === id) {
+      waiting = null;
+      return null;
+    }
+    return leave(id);
   }
 
   function leave(id: PlayerId): PlayerId | null {

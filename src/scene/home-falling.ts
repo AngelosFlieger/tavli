@@ -58,15 +58,19 @@ export function createHomeFalling(models: THREE.Group[], center: THREE.Vector3, 
     group.add(art);
     pieces.push({ art, body, age: 0, materials });
   }
+  let resting = true;
   return {
     group,
     update(dt: number, active: boolean) {
       group.visible = active;
       if (!active) {
+        if (resting) return;
         while (pieces.length) remove(pieces.length - 1);
         countdown = 0.6;
+        resting = true;
         return;
       }
+      resting = false;
       countdown -= dt;
       if (countdown <= 0) {
         // A small group enters at different heights, rather than isolated drops.
@@ -74,7 +78,7 @@ export function createHomeFalling(models: THREE.Group[], center: THREE.Vector3, 
         for (let i = 0; i < count; i++) spawn();
         countdown = 3.5 + Math.random() * 1.5;
       }
-      physics.world.step(1 / 120, Math.min(dt, 0.05), 6);
+      if (pieces.length) physics.world.step(1 / 120, Math.min(dt, 0.05), 6);
       for (let i = pieces.length - 1; i >= 0; i--) {
         const piece = pieces[i];
         piece.age += dt;

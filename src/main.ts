@@ -52,9 +52,10 @@ async function start() {
   stage.attachWaiting(
     createWaitingScatter(gameplay.checkerArtwork, (await loadModel('Die')).scene),
   );
+  const wideStage = matchMedia('(min-aspect-ratio: 1/1)');
   let homeLoading = false;
   const loadHome = () => {
-    if (homeLoading || matchMedia('(max-aspect-ratio: 1/1)').matches) return;
+    if (homeLoading || !wideStage.matches) return;
     homeLoading = true;
     void import('./scene/home-falling')
       .then(({ createHomeFalling }) => {
@@ -62,13 +63,13 @@ async function start() {
           createHomeFalling(gameplay.checkerArtwork, stage.center, stage.root.scale.x),
         );
       })
-      .catch((error) => {
+      .catch((error: unknown) => {
         homeLoading = false;
         console.warn('Home decoration unavailable', error);
       });
   };
+  wideStage.addEventListener('change', loadHome);
   loadHome();
-  window.addEventListener('resize', loadHome);
   let dice: Awaited<ReturnType<typeof createDice>> | undefined;
   stage.mount(() => {
     gameplay.resize();
@@ -148,7 +149,7 @@ async function start() {
     }
     searching = true;
     setSearching(true);
-    showNote('Waiting for the first person who is also searching.');
+    showNote(null);
     table.find();
   };
 

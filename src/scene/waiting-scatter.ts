@@ -11,7 +11,13 @@ export function createWaitingScatter(checkers: THREE.Group[], die: THREE.Group) 
   const key = new THREE.DirectionalLight(0xffd5ad, 2.8);
   key.position.set(-3, 5, 7);
   scene.add(key);
-  const items = [
+  const items: {
+    model: THREE.Object3D;
+    x: number;
+    y: number;
+    size: number;
+    rotation: [number, number, number];
+  }[] = [
     { model: checkers[1], x: -0.88, y: 0.46, size: 6.5, rotation: [1.1, 0.1, -0.5] },
     { model: checkers[0], x: 0.91, y: 0.43, size: 7.5, rotation: [1.25, 0.15, 0.6] },
     { model: checkers[0], x: -0.98, y: -0.2, size: 12, rotation: [1.08, 0.25, -0.35] },
@@ -26,7 +32,7 @@ export function createWaitingScatter(checkers: THREE.Group[], die: THREE.Group) 
     art.position.sub(new THREE.Box3().setFromObject(art).getCenter(new THREE.Vector3()));
     const object = new THREE.Group();
     object.add(art);
-    object.rotation.set(...(item.rotation as [number, number, number]));
+    object.rotation.set(...item.rotation);
     scene.add(object);
     return object;
   });
@@ -45,7 +51,7 @@ export function createWaitingScatter(checkers: THREE.Group[], die: THREE.Group) 
       camera.updateProjectionMatrix();
       objects.forEach((object, index) => {
         const item = items[index];
-        object.rotation.set(...(item.rotation as [number, number, number]));
+        object.rotation.set(...item.rotation);
         object.scale.setScalar(item.size * (portrait ? 0.63 : 1));
         const y = portrait && item.y > 0.2 ? 0.78 + index * 0.025 : item.y;
         object.position.set(item.x * aspect, y, 0);

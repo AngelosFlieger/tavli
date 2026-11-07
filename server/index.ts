@@ -62,7 +62,8 @@ wss.on('connection', (socket) => {
       return;
     }
     if (message.type === 'cancel') {
-      lobby.cancel(id);
+      const opponent = lobby.cancel(id);
+      if (opponent) send(opponent, { type: 'left' });
       return;
     }
     const result = lobby.act(id, message);
