@@ -1,0 +1,6 @@
+node_modules/
+dist/
+public/
+assets/
+docs/media/
+package-lock.json

@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#0b1427" />
+    <title>Plakoto — The Art of the Pin</title>
+  </head>
+  <body class="on-title">
+    <div id="ambient"></div>
+    <main id="scene" aria-label="Plakoto 3D board"></main>
+    <div id="board-frame" aria-hidden="true"></div>
+    <aside class="sidebar">
+      <header class="logo">
+        <h1>PLAKOTO</h1>
+        <p>THE ART OF THE PIN</p>
+      </header>
+      <div class="players" aria-label="Players">
+        <section class="player red">
+          <div class="portrait" id="portrait1"></div>
+          <span class="player-number">01</span>
+          <h2>PLAYER 1</h2>
+          <p><i></i> CRIMSON</p>
+        </section>
+        <div class="versus"><span></span>VS<span></span></div>
+        <section class="player ivory">
+          <div class="portrait" id="portrait2"></div>
+          <span class="player-number">02</span>
+          <h2>PLAYER 2</h2>
+          <p><i></i> IVORY</p>
+        </section>
+      </div>
+    </aside>
+    <section id="start-screen" aria-label="Plakoto start menu">
+      <div class="start-menu">
+        <button id="start-multiplayer" class="mode-button online-mode">
+          <span class="mode-star" aria-hidden="true">✦</span><span>Multiplayer</span
+          ><span class="mode-star" aria-hidden="true">✦</span></button
+        ><button id="start-local" class="mode-button local-mode" disabled>
+          <span class="mode-star" aria-hidden="true">✦</span><span>Local Game</span
+          ><span class="mode-star" aria-hidden="true">✦</span>
+        </button>
+        <div class="start-options">
+          <button data-open="help">
+            <svg
+              class="rules-icon"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.6"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M12 5v15M3 4c3-1 6-1 9 1 3-2 6-2 9-1v15c-3-1-6-1-9 1-3-2-6-2-9-1V4Z" />
+              <path d="M6 8h3M6 11h3M15 8h3M15 11h3" />
+            </svg>
+            Rules</button
+          ><button data-open="settings">
+            <svg
+              class="settings-icon"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.8"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <path
+                d="M9.5 2.5h5l.6 2.3 2 .9 2.2-.7 2.5 4.3-1.6 1.6v2.2l1.6 1.6-2.5 4.3-2.2-.7-2 .9-.6 2.3h-5l-.6-2.3-2-.9-2.2.7-2.5-4.3 1.6-1.6v-2.2L2.2 9.3 4.7 5l2.2.7 2-.9.6-2.3Z"
+              />
+              <circle cx="12" cy="12" r="3.1" />
+            </svg>
+            Settings
+          </button>
+        </div>
+      </div>
+    </section>
+    <nav class="top-actions" aria-label="Game options">
+      <button data-open="settings" aria-label="Settings">
+        <svg
+          class="settings-icon"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.8"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
+        >
+          <path
+            d="M9.5 2.5h5l.6 2.3 2 .9 2.2-.7 2.5 4.3-1.6 1.6v2.2l1.6 1.6-2.5 4.3-2.2-.7-2 .9-.6 2.3h-5l-.6-2.3-2-.9-2.2.7-2.5-4.3 1.6-1.6v-2.2L2.2 9.3 4.7 5l2.2.7 2-.9.6-2.3Z"
+          />
+          <circle cx="12" cy="12" r="3.1" />
+        </svg>
+      </button>
+    </nav>
+    <output id="dice-result" class="dice-announcement" aria-live="polite" aria-atomic="true"
+      >— · —</output
+    >
+    <footer>
+      <button disabled class="secondary">↶ &nbsp; UNDO</button
+      ><button id="roll" disabled>ROLL <span>↗</span></button
+      ><button disabled class="secondary">END TURN &nbsp; →</button>
+    </footer>
+    <p id="status" role="status">Setting the table…</p>
+    <dialog id="overlay">
+      <div id="overlay-content"></div>
+      <button class="close" aria-label="Close overlay">×</button>
+    </dialog>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
