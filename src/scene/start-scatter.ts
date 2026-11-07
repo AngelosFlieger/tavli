@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { createBreathing } from './breathing';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 
 /** Decorative copies of the original checkers, separate from the playable position. */
@@ -28,19 +29,24 @@ export function createStartScatter(models: THREE.Group[]) {
     scene.add(piece);
     return piece;
   });
+  const breathing = createBreathing(pieces);
   const pass = new RenderPass(scene, camera);
   pass.clear = false;
   pass.enabled = false;
   return {
     pass,
+    update: breathing.update,
     resize(width: number, height: number, visible: boolean) {
       const aspect = width / height;
       camera.left = -aspect;
       camera.right = aspect;
       camera.updateProjectionMatrix();
-      pieces.forEach((piece, index) =>
-        piece.position.set(placements[index].x * aspect, placements[index].y, 0),
-      );
+      pieces.forEach((piece, index) => {
+        const placement = placements[index];
+        piece.position.set(placement.x * aspect, placement.y, 0);
+        piece.rotation.set(placement.tilt, 0.15, placement.turn);
+      });
+      breathing.capture();
       pass.enabled = visible;
     },
   };

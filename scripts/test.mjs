@@ -10,6 +10,7 @@ try {
     entryPoints: ['tests/game.test.ts'],
     bundle: true,
     platform: 'node',
+    mainFields: ['module', 'main'],
     format: 'esm',
     outfile: target,
   });

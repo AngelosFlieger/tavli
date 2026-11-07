@@ -13,6 +13,7 @@
     "format:check": "prettier --check src server tests scripts index.html vite.config.ts tsconfig.json package.json"
   },
   "dependencies": {
+    "cannon-es": "0.20.0",
     "three": "0.180.0",
     "ws": "^8.22.1"
   },

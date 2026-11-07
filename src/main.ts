@@ -1,5 +1,6 @@
 import './style.css';
 import './responsive.css';
+import './waiting.css';
 import { preferences } from './ui/preferences';
 import {
   enablePlay,
@@ -15,6 +16,8 @@ import { connectTable } from './net/client';
 import { createDice } from './scene/dice';
 import { createGameplay } from './scene/checkers';
 import { createStartScatter } from './scene/start-scatter';
+import { createWaitingScatter } from './scene/waiting-scatter';
+import { loadModel } from './scene/assets';
 import { createStage } from './scene/stage';
 
 const host = document.querySelector<HTMLElement>('#scene')!;
@@ -46,6 +49,26 @@ async function start() {
   session.canNewGame = () => gameplay.canRestart();
 
   stage.attachScatter(createStartScatter(gameplay.checkerArtwork));
+  stage.attachWaiting(
+    createWaitingScatter(gameplay.checkerArtwork, (await loadModel('Die')).scene),
+  );
+  let homeLoading = false;
+  const loadHome = () => {
+    if (homeLoading || matchMedia('(max-aspect-ratio: 1/1)').matches) return;
+    homeLoading = true;
+    void import('./scene/home-falling')
+      .then(({ createHomeFalling }) => {
+        stage.attachHome(
+          createHomeFalling(gameplay.checkerArtwork, stage.center, stage.root.scale.x),
+        );
+      })
+      .catch((error) => {
+        homeLoading = false;
+        console.warn('Home decoration unavailable', error);
+      });
+  };
+  loadHome();
+  window.addEventListener('resize', loadHome);
   let dice: Awaited<ReturnType<typeof createDice>> | undefined;
   stage.mount(() => {
     gameplay.resize();
@@ -63,6 +86,10 @@ async function start() {
   const table = connectTable({
     onWaiting() {},
     onMatched(you, state) {
+      if (!searching) {
+        table.cancel();
+        return;
+      }
       searching = false;
       setSearching(false);
       showNote(null);
@@ -143,7 +170,7 @@ async function start() {
     last = now;
     if (document.hidden) return;
     if (!reducedMotion.matches && preferences.motion) elapsed += dt;
-    stage.render(elapsed, !reducedMotion.matches && preferences.motion, preferences.texture);
+    stage.render(elapsed, !reducedMotion.matches && preferences.motion, preferences.texture, dt);
     dice!.update(dt);
     gameplay.update(dt);
   });

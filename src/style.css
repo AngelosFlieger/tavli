@@ -993,3 +993,31 @@ dialog {
     font-size: 10vh;
   }
 }
+
+/* A small, staggered lift preserves the cards' original tilted poses. */
+.on-title:not(.is-waiting) .player {
+  animation: card-breath 7s ease-in-out infinite;
+}
+.on-title:not(.is-waiting) .player.ivory {
+  animation-delay: -3.5s;
+  animation-duration: 8s;
+}
+@keyframes card-breath {
+  0%,
+  100% {
+    translate: 0 0;
+    rotate: -0.35deg;
+  }
+  50% {
+    translate: 0 -6px;
+    rotate: 0.35deg;
+  }
+}
+.still.on-title .player {
+  animation: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .on-title .player {
+    animation: none;
+  }
+}

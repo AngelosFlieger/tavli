@@ -1,3 +1,4 @@
+import './home-physics.test.ts';
 import './lobby.test.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';

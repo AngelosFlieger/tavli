@@ -9,6 +9,7 @@ import { loadModel } from './assets';
 
 export type ScatterLayer = {
   pass: RenderPass;
+  update?(elapsed: number, motion: boolean): void;
   resize(width: number, height: number, visible: boolean): void;
 };
 
@@ -33,6 +34,7 @@ export async function createStage(host: HTMLElement, boardFrame: HTMLElement) {
   camera.position.set(0, 12, 8.3);
   camera.lookAt(0, 0, 0);
   camera.updateMatrixWorld();
+  const titleCamera = new THREE.PerspectiveCamera(35, 1, 0.1, 100);
 
   const backdrop = new THREE.ShaderMaterial({
     depthWrite: false,
@@ -110,7 +112,9 @@ export async function createStage(host: HTMLElement, boardFrame: HTMLElement) {
   scene.add(shadow);
 
   const layout: BoardLayout = { depth: 1, stackSlots: 5 };
+  let home: { group: THREE.Group; update(dt: number, active: boolean): void } | undefined;
   let scatter: ScatterLayer | undefined;
+  let waitingScatter: ScatterLayer | undefined;
   let onLayout: (() => void) | undefined;
 
   function resize() {
@@ -121,7 +125,8 @@ export async function createStage(host: HTMLElement, boardFrame: HTMLElement) {
     const title = document.body.classList.contains('on-title');
     const portrait = matchMedia('(max-aspect-ratio: 1/1)').matches;
     Object.assign(layout, boardLayout(portrait, title, aspect));
-    const showBoard = !(title && portrait);
+    const waiting = document.body.classList.contains('is-waiting');
+    const showBoard = !waiting && !(title && portrait);
     board.visible = showBoard;
     shadow.visible = showBoard;
     board.scale.z = layout.depth;
@@ -156,8 +161,41 @@ export async function createStage(host: HTMLElement, boardFrame: HTMLElement) {
 
     const screenWidth = host.clientWidth;
     const screenHeight = host.clientHeight;
-    scatter?.resize(screenWidth, screenHeight, title && portrait);
-    applyBoardViewport(camera, frame, screenWidth, screenHeight);
+    scatter?.resize(screenWidth, screenHeight, title && portrait && !waiting);
+    waitingScatter?.resize(screenWidth, screenHeight, waiting);
+    if (waiting)
+      renderer.domElement.setAttribute(
+        'aria-label',
+        'Decorative original Plakoto dice and checkers',
+      );
+    if (title && !portrait) {
+      // A lower viewing angle makes the home-screen board read as a laid-back table.
+      // Extend the near edge beyond the viewport so the board fills both lower corners.
+      titleCamera.aspect = aspect;
+      const direction = new THREE.Vector3(0, 0.55, 0.835).normalize();
+      const halfWidth = (worldBounds.max.x - worldBounds.min.x) / 2;
+      const halfDepth = (worldBounds.max.z - worldBounds.min.z) / 2;
+      const distance =
+        halfWidth / (Math.tan(THREE.MathUtils.degToRad(17.5)) * aspect * 1.7) +
+        halfDepth * direction.z;
+      titleCamera.position.copy(direction.multiplyScalar(distance));
+      titleCamera.lookAt(0, 0, 0);
+      titleCamera.updateMatrixWorld();
+      titleCamera.updateProjectionMatrix();
+      let topEdge = -Infinity;
+      for (const x of [worldBounds.min.x, worldBounds.max.x])
+        for (const y of [worldBounds.min.y, worldBounds.max.y])
+          for (const z of [worldBounds.min.z, worldBounds.max.z])
+            topEdge = Math.max(topEdge, new THREE.Vector3(x, y, z).project(titleCamera).y);
+      titleCamera.projectionMatrix.premultiply(
+        new THREE.Matrix4().makeTranslation(0, 0.86 - topEdge, 0),
+      );
+      applyBoardViewport(titleCamera, frame, screenWidth, screenHeight);
+      boardPass.camera = titleCamera;
+    } else {
+      applyBoardViewport(camera, frame, screenWidth, screenHeight);
+      boardPass.camera = camera;
+    }
     renderer.setSize(screenWidth, screenHeight);
     composer.setSize(screenWidth, screenHeight);
     backdrop.uniforms.aspect.value = screenWidth / screenHeight;
@@ -174,8 +212,16 @@ export async function createStage(host: HTMLElement, boardFrame: HTMLElement) {
     camera,
     canvas: renderer.domElement,
     layout,
+    attachHome(next: NonNullable<typeof home>) {
+      home = next;
+      scene.add(next.group);
+    },
     attachScatter(next: ScatterLayer) {
       scatter = next;
+      composer.insertPass(next.pass, 2);
+    },
+    attachWaiting(next: ScatterLayer) {
+      waitingScatter = next;
       composer.insertPass(next.pass, 2);
     },
     /** Start framing. `onLayout` runs after the board scale changes and before the camera fit. */
@@ -185,10 +231,17 @@ export async function createStage(host: HTMLElement, boardFrame: HTMLElement) {
       new ResizeObserver(resize).observe(boardFrame);
       resize();
     },
-    render(elapsed: number, motion: boolean, texture: boolean) {
+    render(elapsed: number, motion: boolean, texture: boolean, dt: number) {
       backdrop.uniforms.time.value = elapsed;
       retro.uniforms.time.value = elapsed;
-      root.position.y = motion ? Math.sin(elapsed * 0.65) * 0.035 : 0;
+      const desktopHome =
+        document.body.classList.contains('on-title') &&
+        !document.body.classList.contains('is-waiting') &&
+        !matchMedia('(max-aspect-ratio: 1/1)').matches;
+      root.position.y = motion && !desktopHome ? Math.sin(elapsed * 0.65) * 0.035 : 0;
+      home?.update(dt, desktopHome && motion);
+      if (scatter?.pass.enabled) scatter.update?.(elapsed, motion);
+      if (waitingScatter?.pass.enabled) waitingScatter.update?.(elapsed, motion);
       retro.enabled = texture;
       composer.render();
     },

@@ -1,0 +1,224 @@
+/* Matchmaking reuses the main logo, portrait art and mode-button styles. */
+#waiting-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+}
+#waiting-screen[hidden] {
+  display: none;
+}
+.waiting-content {
+  position: absolute;
+  top: 32%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(720px, 76vw);
+  text-align: center;
+  pointer-events: auto;
+}
+.waiting-matchup {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 90px minmax(0, 1fr);
+  gap: 28px;
+  align-items: center;
+  justify-items: center;
+}
+.waiting-card {
+  width: 100%;
+  max-width: 230px;
+  min-height: 260px;
+  padding: 12px 12px 18px;
+  background: #111d31ee;
+  border: 2px solid #d9bb82;
+  border-radius: 8px;
+  box-shadow: 6px 9px #060d1dcc;
+}
+.waiting-you {
+  border-color: #efcf91;
+  transform: rotate(-3deg);
+}
+.waiting-opponent {
+  transform: rotate(3deg);
+  border-color: #9f8c70;
+}
+.waiting-portrait {
+  height: 190px;
+  overflow: hidden;
+  border: 1px solid #b69967;
+  background: #78243b;
+}
+.waiting-portrait svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+.waiting-card h2 {
+  font-size: 23px;
+  font-style: italic;
+  margin: 12px 0 0;
+  color: #efddb5;
+}
+.waiting-opponent h2 {
+  font-size: 19px;
+  line-height: 1.3;
+  margin-top: 6px;
+  color: #cbb99b;
+}
+.opponent-outline {
+  display: block;
+  width: 100%;
+  height: 177px;
+  color: #a7957d;
+  opacity: 0.6;
+}
+.waiting-versus {
+  font-size: 45px;
+  font-weight: bold;
+  font-style: italic;
+  color: #efd4a1;
+  text-shadow: 3px 4px #6b243c;
+}
+.waiting-status {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 13px;
+  font: 15px/1.5 monospace;
+  color: #d9c7a6;
+  margin: 30px 0 24px;
+}
+.waiting-spinner {
+  width: 22px;
+  height: 22px;
+  border: 2px solid #ddc38b44;
+  border-top-color: #efd6a6;
+  border-radius: 50%;
+  animation: waitingSpin 1.1s linear infinite;
+  flex-shrink: 0;
+}
+#waiting-cancel {
+  width: 300px;
+  height: 66px;
+  min-height: 0;
+  margin: 0 auto;
+  font-size: 29px;
+}
+.is-waiting .logo {
+  top: 6%;
+  width: 65%;
+  z-index: 4;
+}
+.is-waiting .logo h1 {
+  font-size: clamp(64px, 7vw, 110px);
+}
+.is-waiting .players {
+  display: none;
+}
+.is-waiting .top-actions {
+  display: flex;
+  z-index: 4;
+  top: 28px;
+  right: 28px;
+}
+.is-waiting #ambient {
+  opacity: 0.98;
+  filter: blur(44px);
+}
+@keyframes waitingSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (max-aspect-ratio: 1/1) {
+  .is-waiting .logo {
+    top: 7%;
+    width: 88%;
+  }
+  .is-waiting .logo h1 {
+    font-size: clamp(38px, 12vw, 72px);
+  }
+  .is-waiting .logo p {
+    font-size: 7px;
+    letter-spacing: 0.2em;
+    margin-top: 14px;
+  }
+  .is-waiting .top-actions {
+    top: 14px;
+    right: 14px;
+  }
+  .waiting-content {
+    top: 29%;
+    width: 88vw;
+  }
+  .waiting-matchup {
+    grid-template-columns: minmax(0, 1fr) 30px minmax(0, 1fr);
+    gap: 9px;
+  }
+  .waiting-card {
+    min-height: 194px;
+    padding: 7px 7px 13px;
+    border-radius: 7px;
+  }
+  .waiting-portrait {
+    height: 130px;
+  }
+  .waiting-card h2 {
+    font-size: 20px;
+    margin-top: 12px;
+  }
+  .opponent-outline {
+    height: 127px;
+  }
+  .waiting-opponent h2 {
+    font-size: 15px;
+    line-height: 1.25;
+    margin-top: 6px;
+  }
+  .waiting-versus {
+    font-size: 24px;
+  }
+  .waiting-status {
+    font-size: 12px;
+    gap: 9px;
+    margin: 28px 0 23px;
+    white-space: nowrap;
+  }
+  .waiting-spinner {
+    width: 19px;
+    height: 19px;
+  }
+  #waiting-cancel {
+    width: 86%;
+    height: 64px;
+    font-size: 27px;
+  }
+}
+@media (max-height: 650px) and (min-aspect-ratio: 1/1) {
+  .is-waiting .logo {
+    top: 3%;
+  }
+  .is-waiting .logo h1 {
+    font-size: 13vh;
+  }
+  .waiting-content {
+    top: 29%;
+  }
+  .waiting-card {
+    min-height: 190px;
+    max-width: 190px;
+  }
+  .waiting-portrait {
+    height: 120px;
+  }
+  .opponent-outline {
+    height: 116px;
+  }
+  .waiting-status {
+    margin: 19px 0 16px;
+  }
+  #waiting-cancel {
+    height: 56px;
+    font-size: 25px;
+  }
+}

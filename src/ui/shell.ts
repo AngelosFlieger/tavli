@@ -33,6 +33,7 @@ export function initShell(next: Session) {
   });
   document.querySelector('#portrait1')!.innerHTML = portrait(false);
   document.querySelector('#portrait2')!.innerHTML = portrait(true);
+  document.querySelector('#waiting-portrait')!.innerHTML = portrait(false);
 
   const dialog = document.querySelector<HTMLDialogElement>('#overlay')!;
   const content = document.querySelector<HTMLElement>('#overlay-content')!;
@@ -80,6 +81,15 @@ export function initShell(next: Session) {
     multiplayerButton.classList.remove('mode-pressed'),
   );
 
+  document.querySelectorAll<HTMLButtonElement>('#waiting-cancel').forEach((button) =>
+    button.addEventListener('click', () => {
+      if (searching) session.onMultiplayer();
+    }),
+  );
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && searching && !dialog.open) session.onMultiplayer();
+  });
+
   document.querySelector<HTMLButtonElement>('#roll')!.addEventListener('click', () => {
     const roll = document.querySelector<HTMLButtonElement>('#roll')!;
     roll.classList.remove('bounce');
@@ -97,7 +107,8 @@ let playEnabled = false;
 let searching = false;
 
 export function enterTable() {
-  document.body.classList.remove('on-title');
+  document.body.classList.remove('on-title', 'is-waiting');
+  document.querySelector<HTMLElement>('#waiting-screen')!.hidden = true;
   startScreen.hidden = true;
   window.dispatchEvent(new Event('resize'));
   document.querySelector<HTMLButtonElement>('#roll')!.focus();
@@ -106,6 +117,8 @@ export function enterTable() {
 
 export function showTitle() {
   document.body.classList.add('on-title');
+  document.body.classList.remove('is-waiting');
+  document.querySelector<HTMLElement>('#waiting-screen')!.hidden = true;
   startScreen.hidden = false;
   window.dispatchEvent(new Event('resize'));
   followScene('title');
@@ -113,6 +126,12 @@ export function showTitle() {
 
 export function setSearching(on: boolean) {
   searching = on;
+  document.body.classList.toggle('is-waiting', on);
+  document.querySelector<HTMLElement>('#waiting-screen')!.hidden = !on;
+  startScreen.hidden = on || !document.body.classList.contains('on-title');
+  window.dispatchEvent(new Event('resize'));
+  if (on) document.querySelector<HTMLButtonElement>('#waiting-cancel')!.focus();
+  else if (document.body.classList.contains('on-title')) multiplayerButton.focus();
   matchLabel.textContent = on ? 'Searching…' : 'Multiplayer';
   multiplayerButton.setAttribute('aria-pressed', String(on));
   localButton.disabled = on || !playEnabled;
@@ -131,7 +150,7 @@ export function enablePlay() {
 
 export function syncShell() {
   const restart = document.querySelector<HTMLButtonElement>('#new-game');
-  if (restart) restart.disabled = !session.canNewGame();
+  if (restart) restart.disabled = searching || !session.canNewGame();
 }
 
 const helpMarkup = `<p class="eyebrow">THE ART OF THE PIN</p><h2>How to play</h2><p>Plakoto is a backgammon variant for two players, with 15 checkers each. Players travel in opposite directions toward their home boards, then bear off. First to bear off all 15 wins.</p><p>A lone opposing checker can be pinned beneath yours. It stays pinned until your checker leaves. Points occupied by two opposing checkers, or an opposing checker pinning yours, are blocked.</p><p>To start, Player 1 rolls both dice, then Player 2. The higher total starts; ties repeat. The starter rolls again for their first turn.</p><p>Use both dice where possible; doubles give four moves. Click a checker, then a highlighted destination. You may combine dice if an intermediate landing is legal. Undo reverts a move until End Turn.</p><p>Bear off only when all remaining checkers are home and none are pinned. Pinning the last checker on the opponent’s starting point wins when your own starting checkers have left. Two pinned mothers mean a draw.</p>`;
@@ -154,9 +173,9 @@ function wireSettings(root: HTMLElement, dialog: HTMLDialogElement) {
     });
   });
   const restart = root.querySelector<HTMLButtonElement>('#new-game')!;
-  restart.disabled = !session.canNewGame();
+  restart.disabled = searching || !session.canNewGame();
   restart.addEventListener('click', () => {
-    if (!session.canNewGame()) return;
+    if (searching || !session.canNewGame()) return;
     session.onNewGame();
     dialog.close();
   });

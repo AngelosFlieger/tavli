@@ -79,6 +79,38 @@
         <p id="match-note" class="match-note" hidden></p>
       </div>
     </section>
+    <section id="waiting-screen" aria-label="Multiplayer matchmaking" hidden>
+      <div class="waiting-content">
+        <div class="waiting-matchup">
+          <section class="waiting-card waiting-you" aria-label="You">
+            <div id="waiting-portrait" class="waiting-portrait"></div>
+            <h2>You</h2>
+          </section>
+          <span class="waiting-versus" aria-hidden="true">VS</span>
+          <section class="waiting-card waiting-opponent" aria-label="Waiting for opponent">
+            <svg
+              class="opponent-outline"
+              viewBox="0 0 160 140"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="3"
+              aria-hidden="true"
+            >
+              <circle cx="80" cy="44" r="26" />
+              <path d="M29 129v-13c0-25 23-40 51-40s51 15 51 40v13" />
+            </svg>
+            <h2>Waiting for<br />opponent</h2>
+          </section>
+        </div>
+        <p class="waiting-status" role="status" aria-live="polite">
+          <span class="waiting-spinner" aria-hidden="true"></span>Searching for an opponent…
+        </p>
+        <button id="waiting-cancel" class="mode-button local-mode">
+          <span class="mode-star" aria-hidden="true">✦</span><span>Cancel</span
+          ><span class="mode-star" aria-hidden="true">✦</span>
+        </button>
+      </div>
+    </section>
     <nav class="top-actions" aria-label="Game options">
       <button data-open="settings" aria-label="Settings">
         <svg
