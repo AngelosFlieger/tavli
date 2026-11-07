@@ -3,7 +3,7 @@ export type PreferenceKey = 'motion' | 'texture' | 'sound';
 export const preferences: Record<PreferenceKey, boolean> = {
   motion: true,
   texture: true,
-  sound: false,
+  sound: true,
 };
 
 const storageKey = 'plakoto-preferences';

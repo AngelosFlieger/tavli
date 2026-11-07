@@ -24,6 +24,7 @@ const types: Record<string, string> = {
   '.svg': 'image/svg+xml',
   '.webp': 'image/webp',
   '.woff2': 'font/woff2',
+  '.mp3': 'audio/mpeg',
 };
 
 const http = createServer((request, response) => {

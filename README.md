@@ -52,4 +52,4 @@ Local Game is two players on one device. Rules and Settings open from the menu; 
 
 Each player rolls two dice. The higher total starts, ties are replayed, and the starter rolls again for the first turn. Click a highlighted checker, then a destination. A combined move is one action when every step along the way is legal. Doubles allow up to four steps. Undo takes back the last action. End Turn is available once every required move has been played, and a roll with no legal move passes on its own.
 
-The game is kept in memory. Motion, grain, and button-sound choices are saved on this device.
+The game is kept in memory. Motion, grain, and sound choices are saved on this device.

@@ -1,3 +1,4 @@
+import { followScene, initMusic, nudgeMusic, playClick, primeMusic, syncMusic } from './music';
 import { portrait } from './portraits';
 import { loadPreferences, preferences, savePreferences, type PreferenceKey } from './preferences';
 
@@ -16,6 +17,20 @@ export function initShell(next: Session) {
   session = next;
   loadPreferences();
   applyMotionClass();
+  initMusic();
+  window.addEventListener('pointerdown', () => primeMusic(), { capture: true });
+  window.addEventListener('pointerup', () => nudgeMusic(), { capture: true });
+  window.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter' || event.key === ' ') primeMusic();
+  });
+  window.addEventListener('keyup', (event) => {
+    if (event.key === 'Enter' || event.key === ' ') nudgeMusic();
+  });
+  document.addEventListener('click', (event) => {
+    const target = event.target;
+    if (!(target instanceof Element) || !target.closest('button')) return;
+    playClick();
+  });
   document.querySelector('#portrait1')!.innerHTML = portrait(false);
   document.querySelector('#portrait2')!.innerHTML = portrait(true);
 
@@ -65,26 +80,11 @@ export function initShell(next: Session) {
     multiplayerButton.classList.remove('mode-pressed'),
   );
 
-  let audio: AudioContext | undefined;
   document.querySelector<HTMLButtonElement>('#roll')!.addEventListener('click', () => {
     const roll = document.querySelector<HTMLButtonElement>('#roll')!;
     roll.classList.remove('bounce');
     void roll.offsetWidth;
     roll.classList.add('bounce');
-    if (!preferences.sound) return;
-    audio ??= new AudioContext();
-    void audio.resume();
-    const oscillator = audio.createOscillator();
-    const gain = audio.createGain();
-    oscillator.type = 'triangle';
-    oscillator.frequency.setValueAtTime(180, audio.currentTime);
-    oscillator.frequency.exponentialRampToValueAtTime(85, audio.currentTime + 0.08);
-    gain.gain.setValueAtTime(0.05, audio.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, audio.currentTime + 0.1);
-    oscillator.connect(gain);
-    gain.connect(audio.destination);
-    oscillator.start();
-    oscillator.stop(audio.currentTime + 0.11);
   });
 }
 
@@ -101,12 +101,14 @@ export function enterTable() {
   startScreen.hidden = true;
   window.dispatchEvent(new Event('resize'));
   document.querySelector<HTMLButtonElement>('#roll')!.focus();
+  followScene('game');
 }
 
 export function showTitle() {
   document.body.classList.add('on-title');
   startScreen.hidden = false;
   window.dispatchEvent(new Event('resize'));
+  followScene('title');
 }
 
 export function setSearching(on: boolean) {
@@ -134,7 +136,7 @@ export function syncShell() {
 
 const helpMarkup = `<p class="eyebrow">THE ART OF THE PIN</p><h2>How to play</h2><p>Plakoto is a backgammon variant for two players, with 15 checkers each. Players travel in opposite directions toward their home boards, then bear off. First to bear off all 15 wins.</p><p>A lone opposing checker can be pinned beneath yours. It stays pinned until your checker leaves. Points occupied by two opposing checkers, or an opposing checker pinning yours, are blocked.</p><p>To start, Player 1 rolls both dice, then Player 2. The higher total starts; ties repeat. The starter rolls again for their first turn.</p><p>Use both dice where possible; doubles give four moves. Click a checker, then a highlighted destination. You may combine dice if an intermediate landing is legal. Undo reverts a move until End Turn.</p><p>Bear off only when all remaining checkers are home and none are pinned. Pinning the last checker on the opponent’s starting point wins when your own starting checkers have left. Two pinned mothers mean a draw.</p>`;
 
-const settingsMarkup = `<p class="eyebrow">MAKE YOURSELF AT HOME</p><h2>Settings</h2><label>Ambient motion <input type="checkbox" data-pref="motion"></label><label>Retro grain & scanlines <input type="checkbox" data-pref="texture"></label><label>Button sound <input type="checkbox" data-pref="sound"></label><p class="note">Preferences are saved on this device. Motion also respects your system’s reduced-motion preference.</p><div class="match-controls"><button type="button" id="new-game">New game</button></div>`;
+const settingsMarkup = `<p class="eyebrow">MAKE YOURSELF AT HOME</p><h2>Settings</h2><label>Ambient motion <input type="checkbox" data-pref="motion"></label><label>Retro grain & scanlines <input type="checkbox" data-pref="texture"></label><label>Sound <input type="checkbox" data-pref="sound"></label><p class="note">Sound covers the music and button clicks. Preferences are saved on this device. Motion also respects your system’s reduced-motion preference.</p><div class="match-controls"><button type="button" id="new-game">New game</button></div>`;
 
 function applyMotionClass() {
   document.body.classList.toggle('still', !preferences.motion);
@@ -148,6 +150,7 @@ function wireSettings(root: HTMLElement, dialog: HTMLDialogElement) {
       preferences[key] = input.checked;
       savePreferences();
       if (key === 'motion') applyMotionClass();
+      if (key === 'sound') syncMusic();
     });
   });
   const restart = root.querySelector<HTMLButtonElement>('#new-game')!;
