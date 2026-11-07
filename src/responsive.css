@@ -38,9 +38,6 @@
   footer #roll[aria-label*='opening'] {
     font-size: 29px;
   }
-  #dice-result {
-    bottom: calc(3.5% + 88px);
-  }
   .on-title .player {
     width: clamp(160px, 18vw, 260px);
   }
@@ -204,11 +201,6 @@
     font-size: 25px;
     margin-left: 18px;
   }
-  #dice-result {
-    bottom: calc(var(--safe-bottom) + 112px);
-    font-size: 16px;
-    padding: 8px 18px;
-  }
   .game-hud {
     left: 15%;
     right: 15%;
@@ -323,9 +315,6 @@
   footer {
     bottom: calc(var(--safe-bottom) + 18px);
   }
-  #dice-result {
-    bottom: calc(var(--safe-bottom) + 106px);
-  }
 }
 /* Full-screen background, independently framed board, and larger controls. */
 #scene {
@@ -339,17 +328,6 @@
 }
 .on-title #scene {
   pointer-events: none;
-}
-.dice-announcement {
-  position: absolute !important;
-  width: 1px !important;
-  height: 1px !important;
-  padding: 0 !important;
-  border: 0 !important;
-  overflow: hidden !important;
-  clip-path: inset(50%) !important;
-  white-space: nowrap !important;
-  pointer-events: none !important;
 }
 .settings-icon {
   display: inline-block;

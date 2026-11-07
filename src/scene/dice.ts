@@ -1,6 +1,6 @@
 import type { BoardLayout } from './layout';
 import * as THREE from 'three';
-import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { loadModel } from './assets';
 
 // Die.glb's modeled pips: Blender Z becomes glTF Y; Blender Y becomes glTF -Z.
 export const faces = [
@@ -45,11 +45,11 @@ export async function createDice(
   button.disabled = true;
   let model: THREE.Group;
   try {
-    model = (await new GLTFLoader().loadAsync(`${import.meta.env.BASE_URL}models/Die.glb`)).scene;
+    model = (await loadModel('Die')).scene;
   } catch (error) {
     output.textContent = 'Dice unavailable · reload to retry';
     console.error(error);
-    return { update: (_dt: number) => {}, resize: () => {} };
+    return { update: (_dt: number) => {}, resize: () => {}, reset() {} };
   }
   const bounds = new THREE.Box3().setFromObject(model),
     center = bounds.getCenter(new THREE.Vector3());
@@ -110,19 +110,18 @@ export async function createDice(
       'aria-label',
       `Dice result: ${values[0]} and ${values[1]}${values[0] === values[1] ? ' — doubles' : ''}`,
     );
-    output.classList.toggle('doubles', values[0] === values[1]);
-    output.dataset.values = values.join(',');
   }
   updateShadows();
   button.disabled = false;
-  window.addEventListener('plakoto-reset', () => {
+  function reset() {
+    rolling = false;
+    timer = 0;
+    button.removeAttribute('aria-busy');
     dice.forEach((die) => (die.visible = false));
     shadows.forEach((shadow) => (shadow.visible = false));
     output.textContent = '— · —';
     output.setAttribute('aria-label', 'No dice rolled yet');
-    output.classList.remove('doubles');
-    delete output.dataset.values;
-  });
+  }
   const duration = 1.5;
   button.addEventListener('click', () => {
     if (rolling || !callbacks.canRoll()) return;
@@ -132,7 +131,6 @@ export async function createDice(
     button.setAttribute('aria-busy', 'true');
     output.textContent = 'Rolling…';
     output.setAttribute('aria-label', 'Rolling two dice');
-    delete output.dataset.values;
     tosses = dice.map((die, i) => {
       die.visible = true;
       const end = new THREE.Vector3(
@@ -158,6 +156,7 @@ export async function createDice(
   });
   let previousDepth = layout.depth;
   return {
+    reset,
     resize() {
       const ratio = layout.depth / previousDepth;
       dice.forEach((die) => (die.position.z *= ratio));

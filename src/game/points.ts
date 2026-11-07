@@ -11,4 +11,3 @@ export function pointPosition(point: number) {
     z: point < 12 ? -0.184 : 0.184,
   };
 }
-export const pointName = (point: number) => `${point < 12 ? 'T' : 'B'}${(point % 12) + 1}`;

@@ -1,8 +1,13 @@
 import type { BoardLayout } from './layout';
 import * as THREE from 'three';
-import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { Game, owner, moveSequences, type Move, type Position } from '../game/engine';
 import { pointPosition } from '../game/points';
+import { loadModel } from './assets';
+
+export type GameplayHooks = {
+  onReset: () => void;
+  onChange: () => void;
+};
 
 export async function createGameplay(
   root: THREE.Group,
@@ -11,43 +16,19 @@ export async function createGameplay(
   canvas: HTMLCanvasElement,
   reducedMotion: MediaQueryList,
   layout: BoardLayout,
+  hooks: GameplayHooks,
 ) {
   const game = new Game();
   const roll = document.querySelector<HTMLButtonElement>('#roll')!;
-  const undo = document.querySelector<HTMLButtonElement>('footer .secondary')!;
-  const end = document.querySelector<HTMLButtonElement>('footer .secondary:last-child')!;
-  undo.textContent = '↶ UNDO';
-  undo.setAttribute('aria-label', 'Undo');
-  end.textContent = 'END TURN →';
-  end.setAttribute('aria-label', 'End Turn');
-  const hud = document.createElement('section');
-  hud.className = 'game-hud';
-  hud.innerHTML =
-    '<p id="game-message" role="status" aria-live="polite"></p><div id="move-choices"></div><button id="next-game" hidden>Next game →</button>';
-  document.body.append(hud);
-  const message = hud.querySelector<HTMLElement>('#game-message')!,
-    choices = hud.querySelector<HTMLElement>('#move-choices')!;
-  const next = hud.querySelector<HTMLButtonElement>('#next-game')!;
+  const undo = document.querySelector<HTMLButtonElement>('#undo')!;
+  const end = document.querySelector<HTMLButtonElement>('#end-turn')!;
+  const message = document.querySelector<HTMLElement>('#game-message')!;
+  const choices = document.querySelector<HTMLElement>('#move-choices')!;
+  const next = document.querySelector<HTMLButtonElement>('#next-game')!;
   const panels = [
     document.querySelector<HTMLElement>('.player.red')!,
     document.querySelector<HTMLElement>('.player.ivory')!,
   ];
-  const controls = document.createElement('div');
-  controls.className = 'match-controls';
-  controls.innerHTML = '<button id="new-game">New game</button>';
-  const overlayContent = document.querySelector('#overlay-content')!;
-  new MutationObserver(() => {
-    if (overlayContent.querySelector('[data-pref]') && !overlayContent.contains(controls))
-      overlayContent.append(controls);
-  }).observe(overlayContent, { childList: true });
-  controls.querySelector('button')!.addEventListener('click', () => {
-    if (game.state.phase === 'ROLLING' || game.state.phase === 'ANIMATING_MOVE') return;
-    game.reset();
-    selected = null;
-    window.dispatchEvent(new Event('plakoto-reset'));
-    refresh();
-    document.querySelector<HTMLDialogElement>('#overlay')!.close();
-  });
   let selected: number | null = null,
     animationTime = 0;
   let animations: {
@@ -56,11 +37,7 @@ export async function createGameplay(
     end: THREE.Vector3;
     moving: boolean;
   }[] = [];
-  const assets = await Promise.all(
-    ['Checker_Red', 'Checker_Ivory'].map((name) =>
-      new GLTFLoader().loadAsync(`${import.meta.env.BASE_URL}models/${name}.glb`),
-    ),
-  );
+  const assets = await Promise.all(['Checker_Red', 'Checker_Ivory'].map((name) => loadModel(name)));
   const checkers: THREE.Group[] = [];
   const heights: number[] = [];
   assets.forEach((asset, player) => {
@@ -84,11 +61,14 @@ export async function createGameplay(
   function updatePresentation() {
     const title = document.body.classList.contains('on-title');
     checkers.forEach((checker) => (checker.visible = !title));
+    const portrait = matchMedia('(max-aspect-ratio: 1/1)').matches;
     canvas.setAttribute(
       'aria-label',
-      title
-        ? 'Original Plakoto board without checkers'
-        : 'Plakoto board with red and ivory checkers',
+      title && portrait
+        ? 'Scattered original Plakoto checkers'
+        : title
+          ? 'Original Plakoto board without checkers'
+          : 'Plakoto board with red and ivory checkers',
     );
   }
   updatePresentation();
@@ -221,15 +201,11 @@ export async function createGameplay(
     end.disabled = state.phase !== 'TURN_COMPLETE';
     message.textContent = state.message;
     message.hidden = state.phase !== 'GAME_OVER';
-    roll.innerHTML = 'ROLL <span>↗</span>';
     roll.setAttribute(
       'aria-label',
       state.opening ? `Player ${state.active! + 1} opening roll` : 'Roll',
     );
-    controls.querySelector<HTMLButtonElement>('button')!.disabled = [
-      'ROLLING',
-      'ANIMATING_MOVE',
-    ].includes(state.phase);
+    hooks.onChange();
     if (selected !== null && !moves.some((move) => move.from === selected)) selected = null;
     panels.forEach((panel, player) => {
       panel.classList.toggle('inactive', state.active !== null && state.active !== player);
@@ -262,9 +238,7 @@ export async function createGameplay(
         choices.append(button);
       }
     }
-    const finished = state.phase === 'GAME_OVER';
-    next.hidden = !finished;
-    next.textContent = 'New game →';
+    next.hidden = state.phase !== 'GAME_OVER';
     canvas.dataset.phase = state.phase;
     canvas.dataset.active = String(state.active);
   }
@@ -325,14 +299,21 @@ export async function createGameplay(
       refresh();
     }
   });
-  next.addEventListener('click', () => {
+  function restart() {
+    if (!canRestart()) return;
     game.reset();
     selected = null;
-    window.dispatchEvent(new Event('plakoto-reset'));
+    hooks.onReset();
     refresh();
-  });
+  }
+  function canRestart() {
+    return game.state.phase !== 'ROLLING' && game.state.phase !== 'ANIMATING_MOVE';
+  }
+  next.addEventListener('click', restart);
   refresh();
   return {
+    restart,
+    canRestart,
     checkerArtwork: assets.map((asset) => asset.scene),
     refresh,
     resize() {

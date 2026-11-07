@@ -23,7 +23,7 @@ export type GameState = Position & {
 };
 export const owner = (id: number): Player => (id < 15 ? 0 : 1);
 export const other = (player: Player): Player => (player === 0 ? 1 : 0);
-export const copy = <T>(value: T): T => structuredClone(value);
+const copy = <T>(value: T): T => structuredClone(value);
 export function initialPosition(): Position {
   const board: number[][] = Array.from({ length: 24 }, () => []);
   board[0] = Array.from({ length: 15 }, (_, i) => i);

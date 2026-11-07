@@ -99,10 +99,15 @@
     <output id="dice-result" class="dice-announcement" aria-live="polite" aria-atomic="true"
       >— · —</output
     >
+    <section class="game-hud">
+      <p id="game-message" role="status" aria-live="polite" hidden></p>
+      <div id="move-choices"></div>
+      <button id="next-game" hidden>New game →</button>
+    </section>
     <footer>
-      <button disabled class="secondary">↶ &nbsp; UNDO</button
-      ><button id="roll" disabled>ROLL <span>↗</span></button
-      ><button disabled class="secondary">END TURN &nbsp; →</button>
+      <button id="undo" class="secondary" disabled aria-label="Undo">↶ UNDO</button>
+      <button id="roll" disabled>ROLL <span>↗</span></button>
+      <button id="end-turn" class="secondary" disabled aria-label="End turn">END TURN →</button>
     </footer>
     <p id="status" role="status">Setting the table…</p>
     <dialog id="overlay">
