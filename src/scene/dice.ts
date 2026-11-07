@@ -38,7 +38,12 @@ export async function createDice(
   boardCenter: THREE.Vector3,
   reducedMotion: MediaQueryList,
   layout: BoardLayout,
-  callbacks: { canRoll: () => boolean; settled: (values: number[]) => void },
+  callbacks: {
+    canRoll: () => boolean;
+    settled: (values: number[]) => void;
+    scripted: () => boolean;
+    presented: () => void;
+  },
 ) {
   const button = document.querySelector<HTMLButtonElement>('#roll')!;
   const output = document.querySelector<HTMLOutputElement>('#dice-result')!;
@@ -49,7 +54,7 @@ export async function createDice(
   } catch (error) {
     output.textContent = 'Dice unavailable · reload to retry';
     console.error(error);
-    return { update: (_dt: number) => {}, resize: () => {}, reset() {} };
+    return { update: (_dt: number) => {}, resize: () => {}, reset() {}, play() {} };
   }
   const bounds = new THREE.Box3().setFromObject(model),
     center = bounds.getCenter(new THREE.Vector3());
@@ -123,8 +128,7 @@ export async function createDice(
     output.setAttribute('aria-label', 'No dice rolled yet');
   }
   const duration = 1.5;
-  button.addEventListener('click', () => {
-    if (rolling || !callbacks.canRoll()) return;
+  function startToss(forced?: [number, number]) {
     rolling = true;
     timer = 0;
     button.disabled = true;
@@ -145,7 +149,7 @@ export async function createDice(
           (0.13 - boardCenter.z) * layout.depth,
         ),
         end,
-        target: landingRotation(randomFace(), Math.random() * Math.PI * 2),
+        target: landingRotation(forced?.[i] ?? randomFace(), Math.random() * Math.PI * 2),
         spin: new THREE.Vector3(
           (3 + i) * Math.PI * 2,
           (2 + i) * Math.PI * 2,
@@ -153,9 +157,23 @@ export async function createDice(
         ),
       };
     });
+  }
+  button.addEventListener('click', () => {
+    if (rolling || !callbacks.canRoll()) return;
+    if (callbacks.scripted()) {
+      button.disabled = true;
+      button.setAttribute('aria-busy', 'true');
+      output.textContent = 'Rolling…';
+      output.setAttribute('aria-label', 'Rolling two dice');
+      return;
+    }
+    startToss();
   });
   let previousDepth = layout.depth;
   return {
+    play(values: [number, number]) {
+      if (!rolling) startToss(values);
+    },
     reset,
     resize() {
       const ratio = layout.depth / previousDepth;
@@ -207,7 +225,8 @@ export async function createDice(
         const values = dice.map((die) => upwardFace(die.quaternion));
         show(values);
         button.removeAttribute('aria-busy');
-        callbacks.settled(values);
+        if (callbacks.scripted()) callbacks.presented();
+        else callbacks.settled(values);
       }
     },
   };

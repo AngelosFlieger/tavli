@@ -33,8 +33,9 @@
     </aside>
     <section id="start-screen" aria-label="Plakoto start menu">
       <div class="start-menu">
-        <button id="start-multiplayer" class="mode-button online-mode">
-          <span class="mode-star" aria-hidden="true">✦</span><span>Multiplayer</span
+        <button id="start-multiplayer" class="mode-button online-mode" disabled>
+          <span class="mode-star" aria-hidden="true">✦</span
+          ><span id="multiplayer-label">Multiplayer</span
           ><span class="mode-star" aria-hidden="true">✦</span></button
         ><button id="start-local" class="mode-button local-mode" disabled>
           <span class="mode-star" aria-hidden="true">✦</span><span>Local Game</span
@@ -75,6 +76,7 @@
             Settings
           </button>
         </div>
+        <p id="match-note" class="match-note" hidden></p>
       </div>
     </section>
     <nav class="top-actions" aria-label="Game options">

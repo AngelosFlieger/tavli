@@ -1,6 +1,16 @@
 import type { BoardLayout } from './layout';
 import * as THREE from 'three';
-import { Game, owner, moveSequences, type Move, type Position } from '../game/engine';
+import {
+  Game,
+  applyMove,
+  owner,
+  moveSequences,
+  type GameState,
+  type Move,
+  type Player,
+  type Position,
+} from '../game/engine';
+import type { Command } from '../net/messages';
 import { pointPosition } from '../game/points';
 import { loadModel } from './assets';
 
@@ -29,8 +39,18 @@ export async function createGameplay(
     document.querySelector<HTMLElement>('.player.red')!,
     document.querySelector<HTMLElement>('.player.ivory')!,
   ];
+  let online: { you: Player; send: (command: Command) => void } | null = null;
+  let remoteCanUndo = false;
+  let rollBusy = false;
+  let moveBusy = false;
+  let remoteAnimation = false;
+  let epoch = 0;
+  let pendingRoll: { epoch: number; state: GameState; canUndo: boolean } | null = null;
+  let remoteResult: { epoch: number; state: GameState; canUndo: boolean } | null = null;
   let selected: number | null = null,
     animationTime = 0;
+  const mine = () => !online || online.you === game.state.active;
+  const locked = () => rollBusy || moveBusy || remoteAnimation;
   let animations: {
     object: THREE.Group;
     start: THREE.Vector3;
@@ -162,6 +182,14 @@ export async function createGameplay(
     }));
   }
   function execute(sequence: Move[]) {
+    if (online) {
+      if (!mine() || locked() || game.state.phase !== 'WAITING_FOR_MOVE') return;
+      moveBusy = true;
+      online.send({ type: 'move', sequence });
+      selected = null;
+      refresh(false);
+      return;
+    }
     movingChecker = game.state.board[sequence[0].from].at(-1)!;
     const stages = game.moveSequence(sequence);
     if (!stages) return;
@@ -193,12 +221,16 @@ export async function createGameplay(
   }
   function refresh(updatePositions = true) {
     if (updatePositions) sync();
-    const state = game.state,
-      moves = game.moves();
-    roll.disabled = !['OPENING_ROLL', 'WAITING_FOR_ROLL'].includes(state.phase);
+    const state = game.state;
+    const moves = mine() && !locked() ? game.moves() : [];
+    roll.disabled =
+      locked() || !mine() || !['OPENING_ROLL', 'WAITING_FOR_ROLL'].includes(state.phase);
     undo.disabled =
-      !game.history.length || !['WAITING_FOR_MOVE', 'TURN_COMPLETE'].includes(state.phase);
-    end.disabled = state.phase !== 'TURN_COMPLETE';
+      locked() ||
+      !mine() ||
+      !['WAITING_FOR_MOVE', 'TURN_COMPLETE'].includes(state.phase) ||
+      (online ? !remoteCanUndo : !game.history.length);
+    end.disabled = locked() || !mine() || state.phase !== 'TURN_COMPLETE';
     message.textContent = state.message;
     message.hidden = state.phase !== 'GAME_OVER';
     roll.setAttribute(
@@ -210,9 +242,10 @@ export async function createGameplay(
     panels.forEach((panel, player) => {
       panel.classList.toggle('inactive', state.active !== null && state.active !== player);
       panel.classList.toggle('active', state.active === player && state.phase !== 'GAME_OVER');
+      panel.classList.toggle('you', online?.you === player);
       panel.setAttribute(
         'aria-label',
-        `Player ${player + 1}${state.active === player ? ', active' : ''}`,
+        `Player ${player + 1}${state.active === player ? ', active' : ''}${online?.you === player ? ', you' : ''}`,
       );
     });
     markers.forEach((marker, point) => {
@@ -257,7 +290,7 @@ export async function createGameplay(
       | undefined;
   }
   canvas.addEventListener('pointerdown', (event) => {
-    if (game.state.phase !== 'WAITING_FOR_MOVE') return;
+    if (locked() || !mine() || game.state.phase !== 'WAITING_FOR_MOVE') return;
     const point = hit(event);
     if (point === undefined) {
       selected = null;
@@ -277,7 +310,8 @@ export async function createGameplay(
   });
   let hovered: number | undefined;
   canvas.addEventListener('pointermove', (event) => {
-    const point = game.state.phase === 'WAITING_FOR_MOVE' ? hit(event) : undefined;
+    const point =
+      game.state.phase === 'WAITING_FOR_MOVE' && mine() && !locked() ? hit(event) : undefined;
     const legal =
       point !== undefined &&
       (game.moves().some((move) => move.from === point) ||
@@ -288,12 +322,20 @@ export async function createGameplay(
     if (hovered !== undefined) markers[hovered].scale.setScalar(1.16);
   });
   undo.addEventListener('click', () => {
+    if (online) {
+      if (mine() && !locked()) online.send({ type: 'undo' });
+      return;
+    }
     if (game.undo()) {
       selected = null;
       refresh();
     }
   });
   end.addEventListener('click', () => {
+    if (online) {
+      if (mine() && !locked()) online.send({ type: 'end' });
+      return;
+    }
     if (game.endTurn()) {
       selected = null;
       refresh();
@@ -301,13 +343,17 @@ export async function createGameplay(
   });
   function restart() {
     if (!canRestart()) return;
+    if (online) {
+      online.send({ type: 'restart' });
+      return;
+    }
     game.reset();
     selected = null;
     hooks.onReset();
     refresh();
   }
   function canRestart() {
-    return game.state.phase !== 'ROLLING' && game.state.phase !== 'ANIMATING_MOVE';
+    return !locked() && game.state.phase !== 'ROLLING' && game.state.phase !== 'ANIMATING_MOVE';
   }
   next.addEventListener('click', restart);
   refresh();
@@ -322,7 +368,14 @@ export async function createGameplay(
         hit.scale.y = layout.depth;
         markers[point].position.z = (pointPosition(point).z - center.z) * layout.depth;
       });
-      if (game.state.phase === 'ANIMATING_MOVE') {
+      if (remoteResult && remoteResult.epoch === epoch) {
+        const result = remoteResult;
+        remoteResult = null;
+        remoteAnimation = false;
+        animationStages = [];
+        animations = [];
+        adopt(result.state, result.canUndo);
+      } else if (game.state.phase === 'ANIMATING_MOVE') {
         animationStages = [];
         animations = [];
         game.finishAnimation();
@@ -330,6 +383,14 @@ export async function createGameplay(
       refresh();
     },
     beginRoll() {
+      if (online) {
+        if (locked() || !mine()) return false;
+        if (!['OPENING_ROLL', 'WAITING_FOR_ROLL'].includes(game.state.phase)) return false;
+        rollBusy = true;
+        online.send({ type: 'roll' });
+        refresh(false);
+        return true;
+      }
       const ok = game.beginRoll();
       if (ok) refresh(false);
       return ok;
@@ -340,7 +401,7 @@ export async function createGameplay(
       refresh();
     },
     update(dt: number) {
-      if (game.state.phase !== 'ANIMATING_MOVE') return;
+      if (game.state.phase !== 'ANIMATING_MOVE' && !remoteAnimation) return;
       animationTime += dt;
       const t = Math.min(animationTime / (reducedMotion.matches ? 0.02 : 0.32), 1),
         ease = t * t * (3 - 2 * t);
@@ -350,11 +411,80 @@ export async function createGameplay(
       }
       if (t === 1) {
         if (animationStages.length) animateStage(animationStages.shift()!);
+        else if (remoteAnimation) finishRemote();
         else {
           game.finishAnimation();
           refresh();
         }
       }
     },
+    scripted: () => online !== null,
+    presented() {
+      const result = pendingRoll;
+      pendingRoll = null;
+      if (!result || result.epoch !== epoch) return;
+      adopt(result.state, result.canUndo);
+    },
+    queueRoll(state: GameState, canUndo: boolean) {
+      pendingRoll = { epoch, state, canUndo };
+    },
+    animateMove(sequence: Move[], state: GameState, canUndo: boolean) {
+      moveBusy = false;
+      const checker = game.state.board[sequence[0]?.from]?.at(-1);
+      if (checker === undefined) {
+        adopt(state, canUndo);
+        return;
+      }
+      movingChecker = checker;
+      let position: Position = { board: game.state.board, off: game.state.off };
+      const stages: Position[] = [];
+      for (const move of sequence) {
+        position = applyMove(position, game.state.active!, move);
+        stages.push(position);
+      }
+      remoteResult = { epoch, state, canUndo };
+      remoteAnimation = true;
+      selected = null;
+      animationStages = stages;
+      animateStage(animationStages.shift()!);
+      refresh(false);
+    },
+    applyRemote: adopt,
+    join(you: Player, send: (command: Command) => void) {
+      online = { you, send };
+      remoteCanUndo = false;
+    },
+    leaveOnline() {
+      online = null;
+      adopt(new Game().state, false, true);
+    },
   };
+
+  function finishRemote() {
+    const result = remoteResult;
+    remoteResult = null;
+    remoteAnimation = false;
+    animationStages = [];
+    animations = [];
+    if (!result || result.epoch !== epoch) return;
+    adopt(result.state, result.canUndo);
+  }
+
+  function adopt(state: GameState, canUndo: boolean, resetDice = false) {
+    epoch++;
+    pendingRoll = null;
+    remoteResult = null;
+    remoteAnimation = false;
+    rollBusy = false;
+    moveBusy = false;
+    animationStages = [];
+    animations = [];
+    remoteCanUndo = canUndo;
+    game.history = [];
+    game.state = structuredClone(state);
+    selected = null;
+    sequenceCacheKey = '';
+    if (resetDice) hooks.onReset();
+    refresh();
+  }
 }

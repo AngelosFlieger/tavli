@@ -6,6 +6,8 @@ export type Session = {
   onReset: () => void;
   onNewGame: () => void;
   canNewGame: () => boolean;
+  onLocal: () => void;
+  onMultiplayer: () => void;
 };
 
 let session: Session;
@@ -43,21 +45,25 @@ export function initShell(next: Session) {
   });
   dialog.addEventListener('close', () => opener?.focus());
 
-  const local = document.querySelector<HTMLButtonElement>('#start-local')!;
-  const multiplayer = document.querySelector<HTMLButtonElement>('#start-multiplayer')!;
-  const screen = document.querySelector<HTMLElement>('#start-screen')!;
-  local.addEventListener('click', () => {
-    document.body.classList.remove('on-title');
-    screen.hidden = true;
-    window.dispatchEvent(new Event('resize'));
-    document.querySelector<HTMLButtonElement>('#roll')!.focus();
+  localButton = document.querySelector<HTMLButtonElement>('#start-local')!;
+  multiplayerButton = document.querySelector<HTMLButtonElement>('#start-multiplayer')!;
+  matchLabel = document.querySelector<HTMLElement>('#multiplayer-label')!;
+  matchNote = document.querySelector<HTMLElement>('#match-note')!;
+  startScreen = document.querySelector<HTMLElement>('#start-screen')!;
+  localButton.addEventListener('click', () => {
+    showNote(null);
+    session.onLocal();
+    enterTable();
   });
-  multiplayer.addEventListener('click', () => {
-    multiplayer.classList.remove('mode-pressed');
-    void multiplayer.offsetWidth;
-    multiplayer.classList.add('mode-pressed');
+  multiplayerButton.addEventListener('click', () => {
+    multiplayerButton.classList.remove('mode-pressed');
+    void multiplayerButton.offsetWidth;
+    multiplayerButton.classList.add('mode-pressed');
+    session.onMultiplayer();
   });
-  multiplayer.addEventListener('animationend', () => multiplayer.classList.remove('mode-pressed'));
+  multiplayerButton.addEventListener('animationend', () =>
+    multiplayerButton.classList.remove('mode-pressed'),
+  );
 
   let audio: AudioContext | undefined;
   document.querySelector<HTMLButtonElement>('#roll')!.addEventListener('click', () => {
@@ -82,8 +88,43 @@ export function initShell(next: Session) {
   });
 }
 
+let localButton: HTMLButtonElement;
+let multiplayerButton: HTMLButtonElement;
+let matchLabel: HTMLElement;
+let matchNote: HTMLElement;
+let startScreen: HTMLElement;
+let playEnabled = false;
+let searching = false;
+
+export function enterTable() {
+  document.body.classList.remove('on-title');
+  startScreen.hidden = true;
+  window.dispatchEvent(new Event('resize'));
+  document.querySelector<HTMLButtonElement>('#roll')!.focus();
+}
+
+export function showTitle() {
+  document.body.classList.add('on-title');
+  startScreen.hidden = false;
+  window.dispatchEvent(new Event('resize'));
+}
+
+export function setSearching(on: boolean) {
+  searching = on;
+  matchLabel.textContent = on ? 'Searching…' : 'Multiplayer';
+  multiplayerButton.setAttribute('aria-pressed', String(on));
+  localButton.disabled = on || !playEnabled;
+}
+
+export function showNote(text: string | null) {
+  matchNote.hidden = !text;
+  matchNote.textContent = text ?? '';
+}
+
 export function enablePlay() {
-  document.querySelector<HTMLButtonElement>('#start-local')!.disabled = false;
+  playEnabled = true;
+  if (!searching) localButton.disabled = false;
+  multiplayerButton.disabled = false;
 }
 
 export function syncShell() {

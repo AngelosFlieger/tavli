@@ -536,6 +536,9 @@ footer #roll {
   filter: grayscale(0.8);
   pointer-events: none;
 }
+.player.you h2::after {
+  content: ' · you';
+}
 .player.active {
   border-color: #ffe1a0;
   box-shadow:
@@ -689,6 +692,12 @@ footer #roll {
   justify-content: center;
   gap: 18px;
   margin-top: 30px;
+}
+.match-note {
+  margin: 22px 0 0;
+  text-align: center;
+  color: #f1dfb3;
+  font: 14px/1.45 monospace;
 }
 .start-options button {
   font-size: 18px;

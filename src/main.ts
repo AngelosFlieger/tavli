@@ -1,7 +1,17 @@
 import './style.css';
 import './responsive.css';
 import { preferences } from './ui/preferences';
-import { enablePlay, initShell, syncShell, type Session } from './ui/shell';
+import {
+  enablePlay,
+  enterTable,
+  initShell,
+  setSearching,
+  showNote,
+  showTitle,
+  syncShell,
+  type Session,
+} from './ui/shell';
+import { connectTable } from './net/client';
 import { createDice } from './scene/dice';
 import { createGameplay } from './scene/checkers';
 import { createStartScatter } from './scene/start-scatter';
@@ -16,6 +26,8 @@ const session: Session = {
   onReset() {},
   onNewGame() {},
   canNewGame: () => false,
+  onLocal() {},
+  onMultiplayer() {},
 };
 initShell(session);
 
@@ -42,8 +54,76 @@ async function start() {
   dice = await createDice(stage.root, stage.center, reducedMotion, stage.layout, {
     canRoll: () => gameplay.beginRoll(),
     settled: (values) => gameplay.receiveRoll(values),
+    scripted: () => gameplay.scripted(),
+    presented: () => gameplay.presented(),
   });
   session.onReset = () => dice!.reset();
+
+  let searching = false;
+  const table = connectTable({
+    onWaiting() {},
+    onMatched(you, state) {
+      searching = false;
+      setSearching(false);
+      showNote(null);
+      gameplay.join(you, (command) => table.send(command));
+      gameplay.applyRemote(state, false);
+      dice!.reset();
+      enterTable();
+    },
+    onUpdate(update) {
+      if (update.resetDice) {
+        gameplay.applyRemote(update.state, update.canUndo, true);
+        return;
+      }
+      if (update.dice) {
+        gameplay.queueRoll(update.state, update.canUndo);
+        dice!.play(update.dice);
+        return;
+      }
+      if (update.sequence) {
+        gameplay.animateMove(update.sequence, update.state, update.canUndo);
+        return;
+      }
+      gameplay.applyRemote(update.state, update.canUndo);
+    },
+    onLeft() {
+      searching = false;
+      setSearching(false);
+      gameplay.leaveOnline();
+      showTitle();
+      showNote('Opponent left. Search again to play.');
+    },
+    onClose() {
+      const playing = gameplay.scripted();
+      searching = false;
+      setSearching(false);
+      if (playing) {
+        gameplay.leaveOnline();
+        showTitle();
+      }
+      showNote('Can’t reach the game server.');
+    },
+  });
+  session.onLocal = () => {
+    if (!searching) return;
+    searching = false;
+    setSearching(false);
+    table.cancel();
+  };
+  session.onMultiplayer = () => {
+    if (searching) {
+      searching = false;
+      setSearching(false);
+      table.cancel();
+      showNote(null);
+      return;
+    }
+    searching = true;
+    setSearching(true);
+    showNote('Waiting for the first person who is also searching.');
+    table.find();
+  };
 
   enablePlay();
   gameplay.refresh();
