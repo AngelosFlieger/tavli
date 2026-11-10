@@ -243,7 +243,8 @@ export class Game {
     this.state.remaining = values[0] === values[1] ? Array(4).fill(values[0]) : [...values];
     this.state.phase = 'WAITING_FOR_MOVE';
     if (!this.moves().length) {
-      this.pass();
+      this.state.phase = 'TURN_COMPLETE';
+      this.state.message = 'No legal moves · End your turn.';
       return;
     }
     this.state.message = 'Select a highlighted checker, then a destination.';

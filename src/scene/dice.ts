@@ -40,6 +40,7 @@ export async function createDice(
   layout: BoardLayout,
   callbacks: {
     canRoll: () => boolean;
+    player: () => 0 | 1;
     settled: (values: number[]) => void;
     scripted: () => boolean;
     presented: () => void;
@@ -135,18 +136,19 @@ export async function createDice(
     button.setAttribute('aria-busy', 'true');
     output.textContent = 'Rolling…';
     output.setAttribute('aria-label', 'Rolling two dice');
+    const side = callbacks.player() === 0 ? -1 : 1;
     tosses = dice.map((die, i) => {
       die.visible = true;
       const end = new THREE.Vector3(
-        0.085 + i * 0.074 + (Math.random() - 0.5) * 0.014 - boardCenter.x,
+        side * (0.085 + i * 0.074 + (Math.random() - 0.5) * 0.014) - boardCenter.x,
         restingY,
         ((Math.random() - 0.5) * 0.065 - boardCenter.z) * layout.depth,
       );
       return {
         start: new THREE.Vector3(
-          0.23 + i * 0.035 - boardCenter.x,
+          side * (0.23 + i * 0.035) - boardCenter.x,
           restingY + 0.1,
-          (0.13 - boardCenter.z) * layout.depth,
+          (side * 0.22 - boardCenter.z) * layout.depth,
         ),
         end,
         target: landingRotation(forced?.[i] ?? randomFace(), Math.random() * Math.PI * 2),

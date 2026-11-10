@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { createTableLights, faceTableLights } from './table-lights';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
@@ -60,15 +61,8 @@ export async function createStage(host: HTMLElement, boardFrame: HTMLElement) {
   const backgroundCamera = new THREE.Camera();
 
   scene.add(new THREE.HemisphereLight(0xffefd2, 0x242139, 2.2));
-  const key = new THREE.DirectionalLight(0xffedce, 3.2);
-  key.position.set(-3, 9, 5);
-  scene.add(key);
-  const rim = new THREE.DirectionalLight(0x789ffe, 1.1);
-  rim.position.set(4, 4, -4);
-  scene.add(rim);
-  const red = new THREE.PointLight(0xff334b, 14, 20, 2);
-  red.position.set(-5, 2, 2);
-  scene.add(red);
+  const lights = createTableLights();
+  scene.add(lights);
 
   const composer = new EffectComposer(renderer);
   composer.addPass(new RenderPass(background, backgroundCamera));
@@ -240,6 +234,8 @@ export async function createStage(host: HTMLElement, boardFrame: HTMLElement) {
       home?.update(dt, desktopHome && motion);
       if (scatter?.pass.enabled) scatter.update?.(elapsed, motion);
       if (waitingScatter?.pass.enabled) waitingScatter.update?.(elapsed, motion);
+      // Follow the camera actually used by this pass, including seat changes and home.
+      faceTableLights(lights, boardPass.camera);
       retro.enabled = texture;
       composer.render();
     },

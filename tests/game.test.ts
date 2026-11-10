@@ -1,3 +1,5 @@
+import { trayPosition } from '../src/scene/tray';
+import './table-lights.test.ts';
 import './home-physics.test.ts';
 import './lobby.test.ts';
 import test from 'node:test';
@@ -218,7 +220,7 @@ test('turns lock rolling, animate moves, enable end only after compulsory moves'
   assert.equal(g.state.phase, 'WAITING_FOR_ROLL');
   assert.equal(g.history.length, 0);
 });
-test('no legal moves automatically passes', () => {
+test('no legal moves waits for the player to end the turn', () => {
   const g = new Game();
   g.state = { ...g.state, ...empty(), active: 0, opening: false, phase: 'WAITING_FOR_ROLL' };
   g.state.board[1] = [0];
@@ -226,6 +228,10 @@ test('no legal moves automatically passes', () => {
   g.state.board[3] = [17, 18];
   g.beginRoll();
   g.receiveRoll([1, 2]);
+  assert.equal(g.state.active, 0);
+  assert.equal(g.state.phase, 'TURN_COMPLETE');
+  assert.equal(g.beginRoll(), false);
+  assert.equal(g.endTurn(), true);
   assert.equal(g.state.active, 1);
   assert.equal(g.state.phase, 'WAITING_FOR_ROLL');
 });
@@ -411,4 +417,22 @@ test('board framing maps to the UI rectangle while keeping picking aligned', asy
   ray.setFromCamera(new Vector2(expectedX, expectedY), camera);
   const hit = ray.ray.intersectPlane(new Plane(new Vector3(0, 0, 1), 0), new Vector3())!;
   assert.ok(hit.distanceTo(new Vector3()) < 1e-8);
+});
+
+test('setup and bear-off trays sit beside the corresponding path endpoints', () => {
+  for (const player of [0, 1]) {
+    for (const stage of ['start', 'finish'] as const) {
+      const point = stage === 'start' ? PATHS[player][0] : PATHS[player].at(-1)!;
+      const adjacent = pointPosition(point);
+      for (const depth of [1, 2.6]) {
+        for (let index = 0; index < 15; index++) {
+          const tray = trayPosition(player, index, 0.008, depth, stage);
+          assert.equal(Math.sign(tray.x), Math.sign(adjacent.x));
+          assert.equal(Math.sign(tray.z), Math.sign(adjacent.z));
+          assert.ok(Math.abs(tray.z / depth) < 0.213);
+          assert.ok(Math.abs(tray.z / depth) > 0.05);
+        }
+      }
+    }
+  }
 });

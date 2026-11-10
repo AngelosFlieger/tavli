@@ -77,6 +77,7 @@ async function start() {
   });
   dice = await createDice(stage.root, stage.center, reducedMotion, stage.layout, {
     canRoll: () => gameplay.beginRoll(),
+    player: () => gameplay.throwingPlayer(),
     settled: (values) => gameplay.receiveRoll(values),
     scripted: () => gameplay.scripted(),
     presented: () => gameplay.presented(),
@@ -98,6 +99,7 @@ async function start() {
       gameplay.applyRemote(state, false);
       dice!.reset();
       enterTable();
+      gameplay.startSetup();
     },
     onUpdate(update) {
       if (update.resetDice) {
@@ -134,6 +136,7 @@ async function start() {
     },
   });
   session.onLocal = () => {
+    gameplay.startSetup();
     if (!searching) return;
     searching = false;
     setSearching(false);

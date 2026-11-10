@@ -1,4 +1,6 @@
 import type { BoardLayout } from './layout';
+import { destinationGlow, selectedGlow } from './move-glow';
+import { trayPosition } from './tray';
 import * as THREE from 'three';
 import {
   Game,
@@ -29,9 +31,9 @@ export async function createGameplay(
   hooks: GameplayHooks,
 ) {
   const game = new Game();
+  const seatCamera = camera.position.clone();
   const roll = document.querySelector<HTMLButtonElement>('#roll')!;
   const undo = document.querySelector<HTMLButtonElement>('#undo')!;
-  const end = document.querySelector<HTMLButtonElement>('#end-turn')!;
   const message = document.querySelector<HTMLElement>('#game-message')!;
   const choices = document.querySelector<HTMLElement>('#move-choices')!;
   const next = document.querySelector<HTMLButtonElement>('#next-game')!;
@@ -50,12 +52,15 @@ export async function createGameplay(
   let selected: number | null = null,
     animationTime = 0;
   const mine = () => !online || online.you === game.state.active;
-  const locked = () => rollBusy || moveBusy || remoteAnimation;
+  let setupTime: number | null = null;
+  const locked = () => setupTime !== null || rollBusy || moveBusy || remoteAnimation;
   let animations: {
     object: THREE.Group;
     start: THREE.Vector3;
     end: THREE.Vector3;
     moving: boolean;
+    fromRotation: THREE.Quaternion;
+    toRotation: THREE.Quaternion;
   }[] = [];
   const assets = await Promise.all(['Checker_Red', 'Checker_Ivory'].map((name) => loadModel(name)));
   const checkers: THREE.Group[] = [];
@@ -98,6 +103,7 @@ export async function createGameplay(
   window.addEventListener('resize', updatePresentation);
   const hitTargets: THREE.Mesh[] = [];
   const markers: THREE.Mesh[] = [];
+  const columns: THREE.Mesh<THREE.PlaneGeometry, THREE.ShaderMaterial>[] = [];
   const mat = new THREE.MeshBasicMaterial({
     color: 0xeac678,
     transparent: true,
@@ -107,7 +113,7 @@ export async function createGameplay(
   for (let point = 0; point < 24; point++) {
     const { x, z } = pointPosition(point);
     const hit = new THREE.Mesh(
-      new THREE.PlaneGeometry(0.034, 0.157),
+      new THREE.PlaneGeometry(0.035, 0.245),
       new THREE.MeshBasicMaterial({
         transparent: true,
         opacity: 0,
@@ -127,8 +133,19 @@ export async function createGameplay(
     const marker = new THREE.Mesh(new THREE.RingGeometry(0.0163, 0.018, 40), mat.clone());
     marker.rotation.x = -Math.PI / 2;
     marker.position.set(x - center.x, 0.028 - center.y, z - center.z);
+    marker.add(selectedGlow());
     root.add(marker);
     markers.push(marker);
+    const column = new THREE.Mesh(new THREE.PlaneGeometry(0.047, 0.19), destinationGlow());
+    column.rotation.set(-Math.PI / 2, 0, point < 12 ? Math.PI : 0);
+    column.position.set(
+      x - center.x,
+      0.0282 - center.y,
+      (point < 12 ? -0.1265 : 0.1265) - center.z,
+    );
+    column.visible = false;
+    root.add(column);
+    columns.push(column);
   }
   function positions(position: Position = game.state) {
     const targets = new Map<number, THREE.Vector3>();
@@ -151,27 +168,29 @@ export async function createGameplay(
               (point < 12 ? 1 : -1) * (slot % layout.stackSlots) * 0.0305,
           ),
         );
+        checkers[id].userData.off = false;
         checkers[id].userData.pinned = mixed && index === 0;
         checkers[id].scale.setScalar(mixed && index === 0 ? 1.06 : 1);
       });
     });
     position.off.forEach((ids, player) =>
-      ids.forEach((id, index) =>
+      ids.forEach((id, index) => {
+        const tray = trayPosition(player, index, heights[player] - 0.0004, layout.depth);
         targets.set(
           id,
-          new THREE.Vector3(
-            0.282 - center.x,
-            0.028 + Math.floor(index / 5) * heights[player] - center.y,
-            ((player === 0 ? 0.18 : -0.18) - center.z) * layout.depth +
-              (player === 0 ? -1 : 1) * (index % 5) * 0.028,
-          ),
-        ),
-      ),
+          new THREE.Vector3(tray.x - center.x, tray.y - center.y, tray.z - center.z * layout.depth),
+        );
+        checkers[id].userData.off = true;
+        checkers[id].scale.setScalar(1);
+      }),
     );
     return targets;
   }
   function sync() {
-    for (const [id, pos] of positions()) checkers[id].position.copy(pos);
+    for (const [id, pos] of positions()) {
+      checkers[id].position.copy(pos);
+      checkers[id].rotation.set(checkers[id].userData.off ? Math.PI / 2 : 0, 0, 0);
+    }
   }
   let animationStages: Position[] = [];
   let movingChecker = -1;
@@ -182,6 +201,10 @@ export async function createGameplay(
       start: checkers[id].position.clone(),
       end,
       moving: id === movingChecker,
+      fromRotation: checkers[id].quaternion.clone(),
+      toRotation: new THREE.Quaternion().setFromEuler(
+        new THREE.Euler(checkers[id].userData.off ? Math.PI / 2 : 0, 0, 0),
+      ),
     }));
   }
   function execute(sequence: Move[]) {
@@ -223,22 +246,27 @@ export async function createGameplay(
     return cachedSequences;
   }
   function refresh(updatePositions = true) {
-    if (updatePositions) sync();
+    if (updatePositions && setupTime === null) sync();
     const state = game.state;
     const moves = mine() && !locked() ? game.moves() : [];
     roll.disabled =
-      locked() || !mine() || !['OPENING_ROLL', 'WAITING_FOR_ROLL'].includes(state.phase);
+      locked() ||
+      !mine() ||
+      !['OPENING_ROLL', 'WAITING_FOR_ROLL', 'TURN_COMPLETE'].includes(state.phase);
     undo.disabled =
       locked() ||
       !mine() ||
       !['WAITING_FOR_MOVE', 'TURN_COMPLETE'].includes(state.phase) ||
       (online ? !remoteCanUndo : !game.history.length);
-    end.disabled = locked() || !mine() || state.phase !== 'TURN_COMPLETE';
+    const ending = state.phase === 'TURN_COMPLETE';
+    roll.classList.toggle('end-action', ending);
+    roll.dataset.action = ending ? 'end' : 'roll';
+    roll.innerHTML = ending ? 'END <span>→</span>' : 'ROLL <span>↗</span>';
     message.textContent = state.message;
     message.hidden = state.phase !== 'GAME_OVER';
     roll.setAttribute(
       'aria-label',
-      state.opening ? `Player ${state.active! + 1} opening roll` : 'Roll',
+      ending ? 'End turn' : state.opening ? `Player ${state.active! + 1} opening roll` : 'Roll',
     );
     hooks.onChange();
     if (selected !== null && !moves.some((move) => move.from === selected)) selected = null;
@@ -254,12 +282,23 @@ export async function createGameplay(
     markers.forEach((marker, point) => {
       const source = moves.some((move) => move.from === point),
         destination = selectedSequences().some((sequence) => sequence.at(-1)!.to === point);
-      marker.visible = source || destination;
+      marker.visible = selected === null ? source : selected === point;
+      const sequences = selectedSequences().filter((sequence) => sequence.at(-1)!.to === point);
+      const combined = sequences.length > 0 && sequences.every((sequence) => sequence.length > 1);
+      const column = columns[point];
+      column.visible = destination;
+      const color = combined ? 0xffb52e : 0x29e1cd;
+      column.material.uniforms.color.value.setHex(color);
+      marker.children[0].visible = selected === point;
       (marker.material as THREE.MeshBasicMaterial).color.set(
-        destination ? 0x71e0b1 : selected === point ? 0xffffff : 0xeac678,
+        selected === point ? 0xffd46b : 0xeac678,
       );
       const stack = state.board[point],
         top = stack.at(-1);
+      marker.position.z =
+        top !== undefined
+          ? checkers[top].position.z
+          : (pointPosition(point).z - center.z) * layout.depth;
       marker.position.y =
         top !== undefined
           ? checkers[top].position.y + heights[owner(top)] + 0.001
@@ -300,6 +339,11 @@ export async function createGameplay(
       refresh(false);
       return;
     }
+    if (selected === point) {
+      selected = null;
+      refresh(false);
+      return;
+    }
     const moves = game.moves();
     const destinations = selectedSequences().filter((sequence) => sequence.at(-1)!.to === point);
     if (destinations.length) {
@@ -334,7 +378,11 @@ export async function createGameplay(
       refresh();
     }
   });
-  end.addEventListener('click', () => {
+  roll.addEventListener('click', (event) => {
+    if (game.state.phase !== 'TURN_COMPLETE') return;
+    // Ending must not fall through to the dice handler after refresh switches the label.
+    event.stopImmediatePropagation();
+    if (locked() || !mine()) return;
     if (online) {
       if (mine() && !locked()) online.send({ type: 'end' });
       return;
@@ -352,6 +400,7 @@ export async function createGameplay(
     }
     game.reset();
     selected = null;
+    startSetup();
     hooks.onReset();
     refresh();
   }
@@ -362,13 +411,17 @@ export async function createGameplay(
   refresh();
   return {
     restart,
+    startSetup,
     canRestart,
     checkerArtwork: assets.map((asset) => asset.scene),
     refresh,
     resize() {
+      faceSeat();
       hitTargets.forEach((hit, point) => {
         hit.position.z = ((point < 12 ? -0.126 : 0.126) - center.z) * layout.depth;
         hit.scale.y = layout.depth;
+        columns[point].position.z = ((point < 12 ? -0.1265 : 0.1265) - center.z) * layout.depth;
+        columns[point].scale.y = layout.depth;
         markers[point].position.z = (pointPosition(point).z - center.z) * layout.depth;
       });
       if (remoteResult && remoteResult.epoch === epoch) {
@@ -386,6 +439,7 @@ export async function createGameplay(
       refresh();
     },
     beginRoll() {
+      if (locked()) return false;
       if (online) {
         if (locked() || !mine()) return false;
         if (!['OPENING_ROLL', 'WAITING_FOR_ROLL'].includes(game.state.phase)) return false;
@@ -404,12 +458,42 @@ export async function createGameplay(
       refresh();
     },
     update(dt: number) {
+      if (setupTime !== null) {
+        setupTime += dt;
+        const targets = positions();
+        checkers.forEach((checker, id) => {
+          const player = owner(id),
+            index = id % 15;
+          const tray = trayPosition(player, index, heights[player] - 0.0004, layout.depth, 'start');
+          const t = Math.min(1, Math.max(0, (setupTime! - 0.25 - index * 0.045) / 0.82));
+          const ease = t * t * (3 - 2 * t);
+          checker.position
+            .set(tray.x - center.x, tray.y - center.y, tray.z - center.z * layout.depth)
+            .lerp(targets.get(id)!, ease);
+          checker.position.y += Math.sin(t * Math.PI) * 0.07;
+          checker.rotation.set(
+            ((1 - ease) * Math.PI) / 2,
+            Math.sin(t * Math.PI) * (player ? -0.16 : 0.16),
+            0,
+          );
+        });
+        if (setupTime > 1.75) {
+          setupTime = null;
+          refresh();
+        }
+        return;
+      }
       if (game.state.phase !== 'ANIMATING_MOVE' && !remoteAnimation) return;
       animationTime += dt;
       const t = Math.min(animationTime / (reducedMotion.matches ? 0.02 : 0.32), 1),
         ease = t * t * (3 - 2 * t);
       for (const animation of animations) {
         animation.object.position.lerpVectors(animation.start, animation.end, ease);
+        animation.object.quaternion.slerpQuaternions(
+          animation.fromRotation,
+          animation.toRotation,
+          ease,
+        );
         if (animation.moving) animation.object.position.y += Math.sin(t * Math.PI) * 0.045;
       }
       if (t === 1) {
@@ -421,6 +505,7 @@ export async function createGameplay(
         }
       }
     },
+    throwingPlayer: () => (game.state.active ?? 0) as Player,
     scripted: () => online !== null,
     presented() {
       const result = pendingRoll;
@@ -456,12 +541,52 @@ export async function createGameplay(
     join(you: Player, send: (command: Command) => void) {
       online = { you, send };
       remoteCanUndo = false;
+      faceSeat();
     },
     leaveOnline() {
       online = null;
+      faceSeat();
       adopt(new Game().state, false, true);
     },
   };
+
+  function startSetup() {
+    if (game.state.phase !== 'OPENING_ROLL' || game.state.openingRolls.some(Boolean)) return;
+    if (reducedMotion.matches) {
+      setupTime = null;
+      refresh();
+      return;
+    }
+    setupTime = 0;
+    selected = null;
+    refresh(false);
+  }
+
+  /** Look from the same side as our starting stack, so it sits on the near edge. */
+  function faceSeat() {
+    camera.position.copy(seatCamera);
+    camera.up.set(0, 1, 0);
+    camera.lookAt(0, 0, 0);
+    camera.updateMatrixWorld();
+    root.updateMatrixWorld(true);
+    let flipped = false;
+    if (online) {
+      const screenY = (point: number) => {
+        const { x, z } = pointPosition(point);
+        return new THREE.Vector3(x - center.x, 0, (z - center.z) * layout.depth)
+          .applyMatrix4(root.matrixWorld)
+          .project(camera).y;
+      };
+      const own = online.you === 0 ? 0 : 12;
+      const theirs = own === 0 ? 12 : 0;
+      flipped = screenY(own) > screenY(theirs);
+      if (flipped) {
+        camera.position.z *= -1;
+        camera.lookAt(0, 0, 0);
+        camera.updateMatrixWorld();
+      }
+    }
+  }
 
   function finishRemote() {
     const result = remoteResult;
@@ -489,5 +614,6 @@ export async function createGameplay(
     sequenceCacheKey = '';
     if (resetDice) hooks.onReset();
     refresh();
+    if (resetDice && !document.body.classList.contains('on-title')) startSetup();
   }
 }
