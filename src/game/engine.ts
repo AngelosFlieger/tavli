@@ -243,8 +243,7 @@ export class Game {
     this.state.remaining = values[0] === values[1] ? Array(4).fill(values[0]) : [...values];
     this.state.phase = 'WAITING_FOR_MOVE';
     if (!this.moves().length) {
-      this.state.phase = 'TURN_COMPLETE';
-      this.state.message = 'No legal moves · End your turn.';
+      this.holdTurn('No legal moves · End your turn.');
       return;
     }
     this.state.message = 'Select a highlighted checker, then a destination.';
@@ -298,16 +297,18 @@ export class Game {
       return;
     }
     this.state.phase = 'WAITING_FOR_MOVE';
-    if (!this.moves().length) {
-      this.state.phase = 'TURN_COMPLETE';
-      this.state.message = 'Moves complete · End Turn, or Undo to reconsider.';
-    } else this.state.message = 'Select a highlighted checker, then a destination.';
+    if (!this.moves().length) this.holdTurn('Moves complete · End Turn, or Undo to reconsider.');
+    else this.state.message = 'Select a highlighted checker, then a destination.';
   }
   undo() {
     if (!['WAITING_FOR_MOVE', 'TURN_COMPLETE'].includes(this.state.phase) || !this.history.length)
       return false;
     this.state = this.history.pop()!;
     return true;
+  }
+  private holdTurn(message: string) {
+    this.state.phase = 'TURN_COMPLETE';
+    this.state.message = message;
   }
   private pass() {
     const player = this.state.active!;

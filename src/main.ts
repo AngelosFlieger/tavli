@@ -77,6 +77,7 @@ async function start() {
   });
   dice = await createDice(stage.root, stage.center, reducedMotion, stage.layout, {
     canRoll: () => gameplay.beginRoll(),
+    finish: () => gameplay.finishTurn(),
     player: () => gameplay.throwingPlayer(),
     settled: (values) => gameplay.receiveRoll(values),
     scripted: () => gameplay.scripted(),

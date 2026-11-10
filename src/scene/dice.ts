@@ -40,6 +40,8 @@ export async function createDice(
   layout: BoardLayout,
   callbacks: {
     canRoll: () => boolean;
+    /** Handles the shared button while it means "end turn". True consumes the click. */
+    finish: () => boolean;
     player: () => 0 | 1;
     settled: (values: number[]) => void;
     scripted: () => boolean;
@@ -137,20 +139,17 @@ export async function createDice(
     output.textContent = 'Rolling…';
     output.setAttribute('aria-label', 'Rolling two dice');
     const side = callbacks.player() === 0 ? -1 : 1;
+    const place = (x: number, z: number, y: number) =>
+      new THREE.Vector3(side * x - boardCenter.x, y, (z - boardCenter.z) * layout.depth);
     tosses = dice.map((die, i) => {
       die.visible = true;
-      const end = new THREE.Vector3(
-        side * (0.085 + i * 0.074 + (Math.random() - 0.5) * 0.014) - boardCenter.x,
-        restingY,
-        ((Math.random() - 0.5) * 0.065 - boardCenter.z) * layout.depth,
-      );
       return {
-        start: new THREE.Vector3(
-          side * (0.23 + i * 0.035) - boardCenter.x,
-          restingY + 0.1,
-          (side * 0.22 - boardCenter.z) * layout.depth,
+        start: place(0.23 + i * 0.035, side * 0.22, restingY + 0.1),
+        end: place(
+          0.085 + i * 0.074 + (Math.random() - 0.5) * 0.014,
+          (Math.random() - 0.5) * 0.065,
+          restingY,
         ),
-        end,
         target: landingRotation(forced?.[i] ?? randomFace(), Math.random() * Math.PI * 2),
         spin: new THREE.Vector3(
           (3 + i) * Math.PI * 2,
@@ -161,7 +160,7 @@ export async function createDice(
     });
   }
   button.addEventListener('click', () => {
-    if (rolling || !callbacks.canRoll()) return;
+    if (callbacks.finish() || rolling || !callbacks.canRoll()) return;
     if (callbacks.scripted()) {
       button.disabled = true;
       button.setAttribute('aria-busy', 'true');

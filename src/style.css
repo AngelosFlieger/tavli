@@ -54,19 +54,10 @@ canvas {
 .logo {
   text-align: center;
 }
-.logo h1 {
-  letter-spacing: -0.07em;
-  line-height: 1;
-  margin: 0;
-  color: #f7e7be;
-  text-shadow:
-    2px 3px #9c2942,
-    4px 6px #070e20;
-  -webkit-text-stroke: 1px #f6ddb0;
-}
-.logo p {
-  font: 700 clamp(7px, 0.67vw, 13px) monospace;
-  margin-top: 14px;
+.logo img {
+  display: block;
+  width: 100%;
+  height: auto;
 }
 .player {
   position: relative;
@@ -340,14 +331,6 @@ footer button {
   width: 170px;
   transform: rotate(-4deg);
 }
-.logo h1 {
-  font-size: 34px;
-}
-.logo p {
-  font-size: 7px;
-  margin: 8px 0 0;
-  letter-spacing: 0.13em;
-}
 .players {
   width: 100%;
   margin: 0;
@@ -420,9 +403,6 @@ footer #roll {
     width: 140px;
     top: 22px;
   }
-  .logo h1 {
-    font-size: 28px;
-  }
 }
 @media (max-aspect-ratio: 1/1) {
   #board-frame {
@@ -459,12 +439,6 @@ footer #roll {
   }
   .logo {
     width: 120px;
-  }
-  .logo h1 {
-    font-size: 25px;
-  }
-  .logo p {
-    font-size: 5px;
   }
   .top-actions {
     top: 24px;
@@ -729,22 +703,9 @@ footer #roll {
 .on-title .logo {
   left: 50%;
   right: auto;
-  width: 65%;
+  width: min(540px, 36vh);
   transform: translateX(-50%) rotate(-3deg);
   text-align: center;
-}
-.on-title .logo h1 {
-  letter-spacing: -0.055em;
-  line-height: 0.95;
-  text-shadow:
-    3px 4px #a22640,
-    6px 9px #050c1e;
-  -webkit-text-stroke: 1px #f7e5ba;
-}
-.on-title .logo p {
-  font: 700 clamp(8px, 1vw, 15px) monospace;
-  letter-spacing: 0.34em;
-  margin-top: 20px;
 }
 .on-title .players {
   width: auto;
@@ -831,11 +792,7 @@ dialog {
 }
 @media (max-aspect-ratio: 1/1) {
   .on-title .logo {
-    width: 90%;
-  }
-  .on-title .logo p {
-    font-size: 7px;
-    letter-spacing: 0.23em;
+    width: min(340px, 78vw);
   }
   .start-menu {
     width: 70vw;
@@ -886,9 +843,6 @@ dialog {
   }
 }
 @media (max-height: 600px) and (min-aspect-ratio: 1/1) {
-  .on-title .logo p {
-    margin-top: 10px;
-  }
   .mode-button {
     height: 16vh;
     font-size: 5vh;
@@ -949,9 +903,6 @@ dialog {
     top: 68%;
   }
 }
-.on-title .logo h1 {
-  font-size: clamp(46px, 6.7vw, 104px);
-}
 .on-title .player h2,
 .on-title .player p,
 .on-title .player-number {
@@ -975,9 +926,6 @@ dialog {
   color: #e9cd91;
 }
 @media (max-aspect-ratio: 1/1) {
-  .on-title .logo h1 {
-    font-size: 10vw;
-  }
   .on-title .player {
     padding-bottom: 4px;
   }
@@ -989,12 +937,6 @@ dialog {
     height: 21px;
   }
 }
-@media (max-height: 600px) and (min-aspect-ratio: 1/1) {
-  .on-title .logo h1 {
-    font-size: 10vh;
-  }
-}
-
 /* A small, staggered lift preserves the cards' original tilted poses. */
 .on-title:not(.is-waiting) .player {
   animation: card-breath 7s ease-in-out infinite;

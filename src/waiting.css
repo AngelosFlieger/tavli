@@ -106,11 +106,8 @@
 }
 .is-waiting .logo {
   top: 6%;
-  width: 65%;
+  width: min(540px, 36vh);
   z-index: 4;
-}
-.is-waiting .logo h1 {
-  font-size: clamp(64px, 7vw, 110px);
 }
 .is-waiting .players {
   display: none;
@@ -133,15 +130,7 @@
 @media (max-aspect-ratio: 1/1) {
   .is-waiting .logo {
     top: 7%;
-    width: 88%;
-  }
-  .is-waiting .logo h1 {
-    font-size: clamp(38px, 12vw, 72px);
-  }
-  .is-waiting .logo p {
-    font-size: 7px;
-    letter-spacing: 0.2em;
-    margin-top: 14px;
+    width: min(340px, 78vw);
   }
   .is-waiting .top-actions {
     top: 14px;
@@ -197,9 +186,6 @@
 @media (max-height: 650px) and (min-aspect-ratio: 1/1) {
   .is-waiting .logo {
     top: 3%;
-  }
-  .is-waiting .logo h1 {
-    font-size: 13vh;
   }
   .waiting-content {
     top: 29%;
