@@ -10,15 +10,19 @@
     "preview": "vite preview",
     "test": "node scripts/test.mjs",
     "test:browser": "node scripts/browser-smoke.mjs",
+    "ios:sync": "npm run build && cap sync ios",
     "format": "prettier --write src server tests scripts index.html vite.config.ts tsconfig.json package.json",
     "format:check": "prettier --check src server tests scripts index.html vite.config.ts tsconfig.json package.json"
   },
   "dependencies": {
+    "@capacitor/core": "^8.6.2",
+    "@capacitor/ios": "^8.6.2",
     "cannon-es": "0.20.0",
     "three": "0.180.0",
     "ws": "^8.22.1"
   },
   "devDependencies": {
+    "@capacitor/cli": "^8.6.2",
     "@types/node": "^26.6.6",
     "@types/three": "0.180.0",
     "@types/ws": "^8.18.2",
