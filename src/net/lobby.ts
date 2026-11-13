@@ -1,4 +1,7 @@
-import { Game, type GameState, type Player } from '../game/engine';
+import type { Player } from '../game/rules/position';
+import { initialPresentedSession, sessionMessage } from '../game/session/messages';
+import type { GameState, Session } from '../game/session/state';
+import { transitionSession, type SessionCommand } from '../game/session/transition';
 import { isCommand, type Command, type Update } from './messages';
 
 export type PlayerId = string;
@@ -61,7 +64,7 @@ export function createLobby(rollDie: () => number) {
 
 class Match {
   readonly ids: [PlayerId, PlayerId];
-  private game = new Game();
+  private session: Session;
 
   constructor(
     first: PlayerId,
@@ -69,36 +72,57 @@ class Match {
     private rollDie: () => number,
   ) {
     this.ids = [first, second];
+    this.session = initialPresentedSession();
   }
 
   view(): Update {
-    return { state: structuredClone(this.game.state), canUndo: this.game.history.length > 0 };
+    return {
+      state: structuredClone(this.session.state),
+      canUndo: this.session.history.length > 0,
+    };
+  }
+
+  private resolve(command: SessionCommand, input = this.session): Session | null {
+    const result = transitionSession(input, command);
+    if (!result.ok) return null;
+    const message = sessionMessage(result.session.state, result.events);
+    if (message !== null) result.session.state.message = message;
+    return result.session;
+  }
+
+  private apply(command: SessionCommand): boolean {
+    const next = this.resolve(command);
+    if (!next) return false;
+    this.session = next;
+    return true;
   }
 
   act(player: Player, command: Command, sender: PlayerId): ActResult {
     const everyone = () => ({ to: [...this.ids], update: this.view() });
     const rejected = () => ({ to: [sender], update: this.view() });
     if (command.type === 'restart') {
-      this.game.reset();
+      this.apply({ type: 'restart' });
       return { to: [...this.ids], update: { ...this.view(), resetDice: true } };
     }
-    if (player !== this.game.state.active) return rejected();
+    if (player !== this.session.state.active) return rejected();
     if (command.type === 'roll') {
-      if (!this.game.beginRoll()) return rejected();
+      const started = this.resolve({ type: 'beginRoll' });
+      if (!started) return rejected();
       const dice: [number, number] = [this.rollDie(), this.rollDie()];
-      this.game.receiveRoll(dice);
+      const rolled = this.resolve({ type: 'receiveRoll', values: dice }, started);
+      if (!rolled) return rejected();
+      this.session = rolled;
       return { to: [...this.ids], update: { ...this.view(), dice } };
     }
     if (command.type === 'move') {
-      if (!this.game.moveSequence(command.sequence)) return rejected();
-      this.game.finishAnimation();
+      if (!this.apply({ type: 'move', sequence: command.sequence })) return rejected();
       return { to: [...this.ids], update: { ...this.view(), sequence: command.sequence } };
     }
     if (command.type === 'undo') {
-      if (!this.game.undo()) return rejected();
+      if (!this.apply({ type: 'undo' })) return rejected();
       return everyone();
     }
-    if (!this.game.endTurn()) return rejected();
+    if (!this.apply({ type: 'endTurn' })) return rejected();
     return everyone();
   }
 }

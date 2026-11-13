@@ -4,7 +4,6 @@ import { loadPreferences, preferences, savePreferences, type PreferenceKey } fro
 
 /** Callbacks filled in once the board and dice exist. */
 export type Session = {
-  onReset: () => void;
   onNewGame: () => void;
   canNewGame: () => boolean;
   onLocal: () => void;
@@ -151,7 +150,7 @@ export function syncShell() {
   if (restart) restart.disabled = searching || !session.canNewGame();
 }
 
-const helpMarkup = `<p class="eyebrow">THE ART OF THE PIN</p><h2>How to play</h2><p>Plakoto is a backgammon variant for two players, with 15 checkers each. Players travel in opposite directions toward their home boards, then bear off. First to bear off all 15 wins.</p><p>A lone opposing checker can be pinned beneath yours. It stays pinned until your checker leaves. Points occupied by two opposing checkers, or an opposing checker pinning yours, are blocked.</p><p>To start, Player 1 rolls both dice, then Player 2. The higher total starts; ties repeat. The starter rolls again for their first turn.</p><p>Use both dice where possible; doubles give four moves. Click a checker, then a highlighted destination. You may combine dice if an intermediate landing is legal. Undo reverts a move until End Turn.</p><p>Bear off only when all remaining checkers are home and none are pinned. Pinning the last checker on the opponent’s starting point wins when your own starting checkers have left. Two pinned mothers mean a draw.</p>`;
+const helpMarkup = `<p class="eyebrow">THE ART OF THE PIN</p><h2>How to play</h2><p>Plakoto is a backgammon variant for two players, with 15 checkers each. Players travel in opposite directions toward their home boards, then bear off. First to bear off all 15 wins.</p><p>A lone opposing checker can be pinned beneath yours. It stays pinned until your checker leaves. Points occupied by two opposing checkers, or an opposing checker pinning yours, are blocked.</p><p>To start, Player 1 rolls both dice, then Player 2. The higher total starts; ties repeat. The starter rolls again for their first turn.</p><p>Use both dice where possible; doubles give four moves. Click highlighted checkers to pick up several, then place them in pickup order. Each picked checker must have a legal move with the remaining dice. The held checkers follow your pointer, and a ghost shows the next landing. Use Put back last or Escape to release a pickup. Shift-click a source if it is also a destination. You may combine dice if intermediate landings are legal and later pickups remain placeable. Undo reverts a placement until End Turn.</p><p>Bear off only when all remaining checkers are home and none are pinned. Pinning the last checker on the opponent’s starting point wins when your own starting checkers have left. Two pinned mothers mean a draw.</p>`;
 
 const settingsMarkup = `<p class="eyebrow">MAKE YOURSELF AT HOME</p><h2>Settings</h2><label>Ambient motion <input type="checkbox" data-pref="motion"></label><label>Retro grain & scanlines <input type="checkbox" data-pref="texture"></label><label>Sound <input type="checkbox" data-pref="sound"></label><p class="note">Sound covers the music and button clicks. Preferences are saved on this device. Motion also respects your system’s reduced-motion preference.</p><div class="match-controls"><button type="button" id="new-game">New game</button></div>`;
 

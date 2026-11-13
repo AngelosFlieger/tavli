@@ -31,24 +31,3 @@ export function destinationGlow() {
     polygonOffsetUnits: -2,
   });
 }
-
-export function selectedGlow() {
-  const material = new THREE.ShaderMaterial({
-    vertexShader,
-    fragmentShader: `varying vec2 vUv;
-    void main(){
-      vec2 p=(vUv-.5)*2.; float r=length(p); float d=abs(r-.66);
-      float halo=exp(-d*14.)*.7;
-      float core=1.-smoothstep(.012,.045,d);
-      float rays=pow(abs(cos(atan(p.y,p.x)*4.)),36.)*exp(-d*10.)*.35;
-      gl_FragColor=vec4(mix(vec3(1.,.53,.025),vec3(1.,1.,.72),core),clamp(halo+core+rays,0.,1.));
-    }`,
-    transparent: true,
-    depthWrite: false,
-    toneMapped: false,
-    blending: THREE.AdditiveBlending,
-  });
-  const glow = new THREE.Mesh(new THREE.PlaneGeometry(0.058, 0.058), material);
-  glow.position.z = 0.0001;
-  return glow;
-}

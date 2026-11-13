@@ -1,24 +1,21 @@
 import { trayPosition } from '../src/scene/tray';
-import './table-lights.test.ts';
-import './home-physics.test.ts';
-import './lobby.test.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { Game } from '../src/game/engine';
 import {
-  Game,
-  moveSequences,
-  initialPosition,
-  rawMoves,
-  legalMoves,
   applyMove,
   canBearOff,
+  initialPosition,
   pinned,
-  outcome,
   owner,
   type Position,
-} from '../src/game/engine';
+} from '../src/game/rules/position';
+import { moveSequences, rawMoves, legalMoves } from '../src/game/rules/moves';
+import { outcome } from '../src/game/rules/outcome';
 import { PATHS, pointPosition } from '../src/game/points';
+import { canPlaceQueue, queuedSequences } from '../src/game/pickup';
 import { faces, landingRotation, upwardFace } from '../src/scene/dice';
+import { prepareAnimationStages } from '../src/scene/move-animation';
 const empty = (): Position => ({ board: Array.from({ length: 24 }, () => []), off: [[], []] });
 const startTurn = (values: number[]) => {
   const g = new Game();
@@ -80,7 +77,6 @@ test('different dice allow independent steps and legal orderings', () => {
   assert.deepEqual(new Set(g.moves().map((m) => m.die)), new Set([3, 5]));
   const first = g.moves().find((m) => m.die === 3)!;
   g.move(first);
-  g.finishAnimation();
   assert.deepEqual(g.state.remaining, [5]);
   assert.ok(g.moves().some((m) => m.from === first.to && m.to === 8));
 });
@@ -144,6 +140,21 @@ test('landing on a singleton pins without hitting; pinned point blocks its owner
   );
   assert.equal(q.off[1].length, 0);
 });
+test('move presentation marks only a fresh enemy singleton landing as a pin', () => {
+  const p = empty();
+  p.board[1] = [0];
+  p.board[3] = [15];
+  p.board[5] = [1, 2];
+  const stages = prepareAnimationStages(p, 0, [
+    { from: 1, to: 3, die: 2 },
+    { from: 3, to: 5, die: 2 },
+  ]);
+  assert.deepEqual(
+    stages.map((stage) => stage.pinPoint),
+    [3, null],
+  );
+  assert.deepEqual(p.board[3], [15]);
+});
 test('multiple controllers maintain the pin until the last leaves', () => {
   const p = empty();
   p.board[3] = [15, 0, 1];
@@ -204,15 +215,12 @@ test('normal win awards one, Mars awards two', () => {
   p.off[1] = [];
   assert.equal(outcome(p)?.points, 2);
 });
-test('turns lock rolling, animate moves, enable end only after compulsory moves', () => {
+test('turns enable end only after compulsory moves', () => {
   const g = startTurn([1, 2]);
   assert.equal(g.beginRoll(), false);
   assert.equal(g.endTurn(), false);
   while (g.state.phase === 'WAITING_FOR_MOVE') {
     assert.ok(g.move(g.moves()[0]));
-    assert.equal(g.state.phase, 'ANIMATING_MOVE');
-    assert.equal(g.undo(), false);
-    g.finishAnimation();
   }
   assert.equal(g.state.phase, 'TURN_COMPLETE');
   assert.ok(g.endTurn());
@@ -245,7 +253,6 @@ test('undo restores board, pins, dice and legal moves for the current turn', () 
   const move = allowed.find((m) => m.to === 3)!;
   assert.ok(move);
   g.move(move);
-  g.finishAnimation();
   assert.ok(pinned(g.state, 1));
   assert.ok(g.undo());
   assert.deepEqual(g.state, before);
@@ -264,7 +271,6 @@ test('single game finishes without match scoring and can be restarted', () => {
   g.state.off[0] = Array.from({ length: 14 }, (_, i) => i);
   g.state.board[12] = [14];
   assert.ok(g.move({ from: 12, to: -1, die: 1 }));
-  g.finishAnimation();
   assert.equal(g.state.phase, 'GAME_OVER');
   assert.equal(g.state.outcome?.winner, 0);
   assert.equal('scores' in g.state, false);
@@ -299,7 +305,6 @@ test('long deterministic legal play conserves all 30 checkers and completes', ()
       const moves = g.moves();
       assert.ok(moves.length);
       g.move(moves[random() % moves.length]);
-      g.finishAnimation();
     } else if (g.state.phase === 'TURN_COMPLETE') g.endTurn();
     else throw Error(g.state.phase);
     const ids = [...g.state.board.flat(), ...g.state.off.flat()];
@@ -314,7 +319,6 @@ test('doubles exhaust all four available movements before ending', () => {
   let used = 0;
   while (g.state.phase === 'WAITING_FOR_MOVE') {
     g.move(g.moves()[0]);
-    g.finishAnimation();
     used++;
   }
   assert.equal(used, 4);
@@ -340,13 +344,38 @@ test('combined 4 + 2 move consumes both dice and undoes in one action', () => {
   )!;
   assert.ok(sequence);
   assert.equal(g.moveSequence(sequence)?.length, 2);
-  g.finishAnimation();
   assert.equal(g.state.board[6].length, 1);
   assert.equal(g.state.remaining.length, 0);
   assert.equal(g.state.phase, 'TURN_COMPLETE');
   assert.equal(g.history.length, 1);
   assert.ok(g.undo());
   assert.deepEqual(g.state, before);
+});
+test('two picked-up checkers can be placed one after the other with separate dice', () => {
+  const g = startTurn([3, 5]);
+  const queue = [14, 13];
+  assert.equal(canPlaceQueue(g.state, 0, g.state.remaining, queue), true);
+  assert.equal(canPlaceQueue(g.state, 0, g.state.remaining, [13, 14]), false);
+  assert.equal(canPlaceQueue(g.state, 0, g.state.remaining, [14, 13, 12]), false);
+  const first = queuedSequences(g.state, 0, g.state.remaining, queue);
+  assert.ok(first.length);
+  assert.ok(first.every((sequence) => sequence.length === 1));
+  assert.equal(g.moveSequence([first[0][0]])?.length, 1);
+  const second = queuedSequences(g.state, 0, g.state.remaining, [13]);
+  assert.ok(second.length);
+  assert.equal(g.moveSequence([second[0][0]])?.length, 1);
+  assert.equal(g.state.phase, 'TURN_COMPLETE');
+  assert.equal(g.state.remaining.length, 0);
+});
+
+test('doubles can queue four checkers but reserve a step for each placement', () => {
+  const g = startTurn([2, 2]);
+  const queue = [14, 13, 12, 11];
+  assert.equal(canPlaceQueue(g.state, 0, g.state.remaining, queue), true);
+  const first = queuedSequences(g.state, 0, g.state.remaining, queue);
+  assert.ok(first.length);
+  assert.ok(first.every((sequence) => sequence.length === 1));
+  assert.equal(canPlaceQueue(g.state, 0, g.state.remaining, [...queue, 10]), false);
 });
 test('combined moves use the alternate die order if its intermediate point is open', () => {
   const p = empty();

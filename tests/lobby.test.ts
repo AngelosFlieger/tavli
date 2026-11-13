@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createLobby } from '../src/net/lobby';
+import { Game } from '../src/game/engine';
 
 const die = (values: number[]) => {
   let index = 0;
@@ -55,6 +56,26 @@ test('a move is checked on the server and undo restores it for the same player',
   assert.equal(undone?.update.canUndo, false);
 });
 
+test('an out-of-range move is rejected without interrupting the online match', () => {
+  const lobby = createLobby(die([6, 1, 1, 1, 2, 1]));
+  lobby.join('ada');
+  lobby.join('basil');
+  lobby.act('ada', { type: 'roll' });
+  lobby.act('basil', { type: 'roll' });
+  const before = lobby.act('ada', { type: 'roll' })!.update.state;
+  const rejected = lobby.act('ada', {
+    type: 'move',
+    sequence: [{ from: 99, to: 2, die: 2 }],
+  });
+  assert.deepEqual(rejected?.to, ['ada']);
+  assert.deepEqual(rejected?.update.state, before);
+  const played = lobby.act('ada', {
+    type: 'move',
+    sequence: [{ from: 0, to: 2, die: 2 }],
+  });
+  assert.equal(played?.update.state.board[2].length, 1);
+});
+
 test('cancelling a search that already paired frees both seats', () => {
   const lobby = createLobby(() => 1);
   lobby.join('ada');
@@ -78,4 +99,47 @@ test('leaving a match tells the opponent, and a restart clears the dice', () => 
   assert.equal(restarted?.update.resetDice, true);
   assert.equal(restarted?.update.state.phase, 'OPENING_ROLL');
   assert.equal(restarted?.to.includes('ada'), true);
+});
+
+test('authoritative session transitions match the local facade through a turn', () => {
+  const rolls = [6, 1, 1, 1, 2, 1];
+  const lobby = createLobby(die(rolls));
+  const local = new Game();
+  lobby.join('ada');
+  lobby.join('basil');
+  for (const [id, values] of [
+    ['ada', [6, 1]],
+    ['basil', [1, 1]],
+    ['ada', [2, 1]],
+  ] as const) {
+    assert.equal(local.beginRoll(), true);
+    local.receiveRoll([...values]);
+    const result = lobby.act(id, { type: 'roll' });
+    assert.deepEqual(result?.update.state, local.state);
+    assert.equal(result?.update.canUndo, local.history.length > 0);
+  }
+  while (local.state.phase === 'WAITING_FOR_MOVE') {
+    const move = local.moves()[0];
+    assert.equal(local.move(move), true);
+    const result = lobby.act('ada', { type: 'move', sequence: [move] });
+    assert.deepEqual(result?.update.state, local.state);
+    assert.equal(result?.update.canUndo, local.history.length > 0);
+  }
+  assert.equal(local.state.phase, 'TURN_COMPLETE');
+  assert.equal(local.endTurn(), true);
+  const ended = lobby.act('ada', { type: 'end' });
+  assert.deepEqual(ended?.update.state, local.state);
+  assert.equal(ended?.update.canUndo, false);
+});
+
+test('a rejected server die leaves the match unchanged', () => {
+  const lobby = createLobby(() => 7);
+  lobby.join('ada');
+  const matched = lobby.join('basil');
+  assert.equal(matched?.type, 'matched');
+  if (matched?.type !== 'matched') return;
+  const rejected = lobby.act('ada', { type: 'roll' });
+  assert.deepEqual(rejected?.to, ['ada']);
+  assert.deepEqual(rejected?.update.state, matched.state);
+  assert.equal(rejected?.update.dice, undefined);
 });
