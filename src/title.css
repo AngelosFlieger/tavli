@@ -1,0 +1,352 @@
+/* Start menu and title presentation. */
+#start-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+}
+#start-screen[hidden] {
+  display: none;
+}
+.start-menu {
+  position: absolute;
+  top: 32%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(48vw, 640px);
+  pointer-events: auto;
+}
+.mode-button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  height: clamp(74px, 12vh, 118px);
+  padding: 0 27px;
+  font-size: clamp(23px, 3vw, 43px);
+  font-style: italic;
+  border: 3px solid #e6cb95;
+  border-radius: 14px;
+  letter-spacing: -0.02em;
+}
+.mode-star {
+  font-size: 28px;
+  color: #ac2946;
+}
+.online-mode {
+  color: #263046;
+  background: linear-gradient(125deg, #f5e3b8, #dac195);
+  box-shadow:
+    0 7px #a62d46,
+    0 12px #060d1e;
+  text-shadow: 0 1px #fff2ce;
+  margin-bottom: 23px;
+}
+.local-mode {
+  background: linear-gradient(120deg, #4c2439, #16243a);
+  box-shadow:
+    0 7px #531c33,
+    0 12px #060d1e;
+}
+.start-options {
+  display: flex;
+  justify-content: center;
+  gap: 18px;
+  margin-top: 30px;
+}
+.match-note {
+  margin: 22px 0 0;
+  text-align: center;
+  color: #f1dfb3;
+  font: 14px/1.45 monospace;
+}
+.start-options button {
+  font-size: 18px;
+  font-style: italic;
+  min-width: 145px;
+  padding: 12px 22px;
+  background: #111c30;
+}
+.start-options span {
+  font-size: 23px;
+  vertical-align: middle;
+  margin-right: 9px;
+  color: #e9cd91;
+}
+.on-title #board-frame {
+  top: 60%;
+  bottom: -45%;
+  left: 0;
+  right: 0;
+  pointer-events: none;
+  opacity: 0.95;
+  mask-image: linear-gradient(to bottom, transparent, #000 12%);
+}
+.on-title .sidebar {
+  z-index: 4;
+  pointer-events: none;
+}
+.on-title .logo {
+  left: 50%;
+  right: auto;
+  width: min(540px, 36vh);
+  transform: translateX(-50%) rotate(-3deg);
+  text-align: center;
+}
+.on-title .players {
+  width: auto;
+  margin: 0;
+}
+.on-title .player {
+  position: fixed;
+  top: 33%;
+  width: clamp(115px, 15vw, 225px);
+  padding: 8px 8px 16px;
+  opacity: 1;
+  filter: none;
+  box-shadow: 6px 9px #050c1e;
+  border: 3px solid #e3c78e;
+  pointer-events: none;
+}
+.on-title .player.red {
+  left: 5%;
+  transform: rotate(-12deg);
+}
+.on-title .player.ivory {
+  right: 5%;
+  left: auto;
+  transform: rotate(12deg);
+}
+.on-title .portrait {
+  height: clamp(100px, 23vh, 230px);
+}
+.on-title .player h2 {
+  font-size: clamp(12px, 1.4vw, 22px);
+  margin-top: 14px;
+}
+.on-title .player p {
+  font-size: 9px;
+  margin-top: 9px;
+}
+.on-title .player-number {
+  font-size: 13px;
+  padding: 7px;
+  left: -16px;
+  top: 18px;
+}
+.on-title .versus,
+.on-title footer,
+.on-title .top-actions,
+.on-title #dice-result,
+.on-title .game-hud {
+  display: none;
+}
+.on-title #ambient {
+  opacity: 0.85;
+}
+.on-title #status {
+  z-index: 7;
+  left: 50%;
+  top: 92%;
+  font-size: 12px;
+  padding: 8px;
+}
+.mode-button:active {
+  transform: translateY(6px);
+  box-shadow:
+    0 1px #641e35,
+    0 4px #060d1e;
+}
+.mode-pressed {
+  animation: modePress 0.28s ease-out;
+}
+@keyframes modePress {
+  0% {
+    transform: translateY(6px);
+  }
+  60% {
+    transform: translateY(-3px);
+  }
+  100% {
+    transform: translateY(0);
+  }
+}
+dialog {
+  max-height: 85vh;
+  overflow: auto;
+  z-index: 20;
+}
+@media (max-aspect-ratio: 1/1) {
+  .on-title .logo {
+    width: min(340px, 78vw);
+  }
+  .start-menu {
+    width: 70vw;
+  }
+  .mode-button {
+    height: 75px;
+    padding: 0 17px;
+    font-size: 24px;
+  }
+  .mode-star {
+    font-size: 18px;
+  }
+  .online-mode {
+    margin-bottom: 20px;
+  }
+  .start-options {
+    gap: 12px;
+    margin-top: 25px;
+  }
+  .start-options button {
+    min-width: 0;
+    padding: 9px 18px;
+    font-size: 16px;
+  }
+  .on-title .player {
+    top: 24%;
+    width: 76px;
+    padding: 4px 4px 7px;
+  }
+  .on-title .player.red {
+    left: 5%;
+  }
+  .on-title .player.ivory {
+    right: 5%;
+  }
+  .on-title .portrait {
+    height: 66px;
+  }
+  .on-title .player h2 {
+    font-size: 8px;
+    margin: 6px 0;
+  }
+  .on-title .player p {
+    display: none;
+  }
+  .on-title .player-number {
+    display: none;
+  }
+}
+@media (max-height: 600px) and (min-aspect-ratio: 1/1) {
+  .mode-button {
+    height: 16vh;
+    font-size: 5vh;
+  }
+  .online-mode {
+    margin-bottom: 16px;
+  }
+  .start-options {
+    margin-top: 20px;
+  }
+  .start-options button {
+    padding: 8px 18px;
+  }
+  .on-title .portrait {
+    height: 25vh;
+  }
+  .on-title .player {
+    top: 29%;
+  }
+}
+@media (max-aspect-ratio: 1/1) {
+  .mode-button {
+    gap: 7px;
+  }
+}
+.on-title .logo {
+  top: 10%;
+}
+@media (min-aspect-ratio: 1/1) {
+  .start-menu {
+    top: 32%;
+  }
+  .on-title #board-frame {
+    top: 66%;
+    bottom: -35%;
+  }
+}
+@media (max-aspect-ratio: 1/1) {
+  .on-title .logo {
+    top: 10%;
+  }
+  .start-menu {
+    top: 34%;
+  }
+  .on-title #board-frame {
+    top: 59%;
+    bottom: -14%;
+  }
+}
+@media (max-height: 600px) and (min-aspect-ratio: 1/1) {
+  .on-title .logo {
+    top: 7%;
+  }
+  .start-menu {
+    top: 29%;
+  }
+  .on-title #board-frame {
+    top: 68%;
+  }
+}
+.on-title .player h2,
+.on-title .player p,
+.on-title .player-number {
+  display: none;
+}
+.on-title .player {
+  padding-bottom: 8px;
+}
+.mode-button > .mode-star {
+  display: block;
+  width: 35px;
+  flex-shrink: 0;
+  text-align: center;
+}
+.rules-icon {
+  display: inline-block;
+  width: 24px;
+  height: 24px;
+  vertical-align: middle;
+  margin-right: 8px;
+  color: #e9cd91;
+}
+@media (max-aspect-ratio: 1/1) {
+  .on-title .player {
+    padding-bottom: 4px;
+  }
+  .mode-button > .mode-star {
+    width: 19px;
+  }
+  .rules-icon {
+    width: 21px;
+    height: 21px;
+  }
+}
+/* A small, staggered lift preserves the cards' original tilted poses. */
+.on-title:not(.is-waiting) .player {
+  animation: card-breath 7s ease-in-out infinite;
+}
+.on-title:not(.is-waiting) .player.ivory {
+  animation-delay: -3.5s;
+  animation-duration: 8s;
+}
+@keyframes card-breath {
+  0%,
+  100% {
+    translate: 0 0;
+    rotate: -0.35deg;
+  }
+  50% {
+    translate: 0 -6px;
+    rotate: 0.35deg;
+  }
+}
+.still.on-title .player {
+  animation: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .on-title .player {
+    animation: none;
+  }
+}

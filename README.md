@@ -2,6 +2,8 @@
 
 Two-player [Plakoto](https://en.wikipedia.org/wiki/Plakoto). Three.js, TypeScript, and Vite.
 
+The current release implements the core Plakoto game. Random events, powerups, and abilities are planned but have no rules or code yet. See the [game specification](docs/game-spec.md), [architecture map](docs/architecture.md), [refactor plan](docs/refactor-plan.md), and [agent guidelines](AGENTS.md) for the current behavior and development conventions.
+
 ## Run
 
 Node.js 20.19+ or 22.12+.
@@ -15,16 +17,19 @@ Open http://localhost:3000. Vite also prints a Network address: anyone on the sa
 
 ```sh
 npm test
+npm run test:browser # local and two-seat online smoke test; requires Chrome or Chromium
 npm run build
 npm start          # serve dist/ and the game server on port 3000
 npm run format:check
 ```
 
+The browser smoke test finds Chrome in the common Linux locations. Set `PLAKOTO_CHROME_PATH` when using another compatible executable.
+
 Stop `npm run dev` before `npm start`. Both want port 3000.
 
 ## Multiplayer
 
-Click Multiplayer to wait. The next person who does the same joins you. The first person plays crimson and opens. The server rolls the dice and checks every move; the browsers only show the result. Click Multiplayer again to stop searching.
+Click Multiplayer to wait. The next person who does the same joins you. The first person plays crimson and takes the first opening roll; the higher opening total decides who takes the first turn. The server rolls the dice and checks every move; the browsers show the result. Use Cancel to stop searching.
 
 `npm start` is one Node process, so a free host that runs it is enough for people outside your network. Set `PORT` if the host assigns one.
 
@@ -50,6 +55,6 @@ Send the `https://….trycloudflare.com` address it prints. This Mac has to stay
 
 Local Game is two players on one device. Rules and Settings open from the menu; New game is in Settings.
 
-Each player rolls two dice. The higher total starts, ties are replayed, and the starter rolls again for the first turn. Click a highlighted checker, then a destination. A combined move is one action when every step along the way is legal. Doubles allow up to four steps. Undo takes back the last action. End Turn is available once every required move has been played, and a roll with no legal move passes on its own.
+Each player rolls two dice. The higher total starts, ties are replayed, and the starter rolls again for the first turn. Click highlighted checkers to pick up one or more, then place them in pickup order. A regular roll can hold up to two and doubles up to four, provided each can still make a legal move. A ghost shows the next landing position while you hover over a legal point. Use **Put back last** or Escape to release a pickup; Shift-click a source when it is also a destination. A combined move is one action when every step along the way is legal and still leaves queued checkers placeable. Undo takes back the last action. End Turn is available once every required move has been played, including when a roll has no legal move.
 
 The game is kept in memory. Motion, grain, and sound choices are saved on this device.

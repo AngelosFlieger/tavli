@@ -1,4 +1,6 @@
 import './style.css';
+import './gameplay-hud.css';
+import './title.css';
 import './responsive.css';
 import './waiting.css';
 import { preferences } from './ui/preferences';
@@ -19,6 +21,10 @@ import { createStartScatter } from './scene/start-scatter';
 import { createWaitingScatter } from './scene/waiting-scatter';
 import { loadModel } from './scene/assets';
 import { createStage } from './scene/stage';
+import { GameController } from './app/game-controller';
+import { createGameplayActions } from './app/gameplay-actions';
+import { createOnlineGameFlow } from './app/online-game-flow';
+import { createMatchSession } from './app/match-session';
 
 const host = document.querySelector<HTMLElement>('#scene')!;
 const boardFrame = document.querySelector<HTMLElement>('#board-frame')!;
@@ -26,7 +32,6 @@ const status = document.querySelector<HTMLElement>('#status')!;
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
 
 const session: Session = {
-  onReset() {},
   onNewGame() {},
   canNewGame: () => false,
   onLocal() {},
@@ -36,6 +41,9 @@ initShell(session);
 
 async function start() {
   const stage = await createStage(host, boardFrame);
+  const controller = new GameController();
+  let actions: ReturnType<typeof createGameplayActions>;
+  let dice: Awaited<ReturnType<typeof createDice>> | undefined;
   const gameplay = await createGameplay(
     stage.root,
     stage.center,
@@ -43,10 +51,17 @@ async function start() {
     stage.canvas,
     reducedMotion,
     stage.layout,
-    { onReset: () => session.onReset(), onChange: syncShell },
+    controller,
+    {
+      onChange: syncShell,
+      onMove: (sequence) => actions.move(sequence),
+      onUndo: () => actions.undo(),
+      onRestart: () => actions.restart(),
+    },
   );
-  session.onNewGame = () => gameplay.restart();
-  session.canNewGame = () => gameplay.canRestart();
+  actions = createGameplayActions(controller, gameplay, { reset: () => dice?.reset() });
+  session.onNewGame = () => actions.restart();
+  session.canNewGame = () => actions.canRestart();
 
   stage.attachScatter(createStartScatter(gameplay.checkerArtwork));
   stage.attachWaiting(
@@ -70,92 +85,32 @@ async function start() {
   };
   wideStage.addEventListener('change', loadHome);
   loadHome();
-  let dice: Awaited<ReturnType<typeof createDice>> | undefined;
+  let onlineFlow: ReturnType<typeof createOnlineGameFlow> | undefined;
   stage.mount(() => {
     gameplay.resize();
+    if (controller.hasRemoteMove) onlineFlow?.finishRemoteMove();
+    else actions.finishInterruptedMove();
     dice?.resize();
   });
   dice = await createDice(stage.root, stage.center, reducedMotion, stage.layout, {
-    canRoll: () => gameplay.beginRoll(),
-    finish: () => gameplay.finishTurn(),
-    player: () => gameplay.throwingPlayer(),
-    settled: (values) => gameplay.receiveRoll(values),
-    scripted: () => gameplay.scripted(),
-    presented: () => gameplay.presented(),
+    canRoll: () => actions.beginRoll(),
+    finish: () => actions.finishTurn(),
+    player: () => controller.throwingPlayer,
+    settled: (values) => actions.receiveRoll(values),
+    scripted: () => controller.scripted,
+    presented: () => onlineFlow?.presentedRoll(),
   });
-  session.onReset = () => dice!.reset();
+  onlineFlow = createOnlineGameFlow(controller, gameplay, dice);
 
-  let searching = false;
-  const table = connectTable({
-    onWaiting() {},
-    onMatched(you, state) {
-      if (!searching) {
-        table.cancel();
-        return;
-      }
-      searching = false;
-      setSearching(false);
-      showNote(null);
-      gameplay.join(you, (command) => table.send(command));
-      gameplay.applyRemote(state, false);
-      dice!.reset();
-      enterTable();
-      gameplay.startSetup();
-    },
-    onUpdate(update) {
-      if (update.resetDice) {
-        gameplay.applyRemote(update.state, update.canUndo, true);
-        return;
-      }
-      if (update.dice) {
-        gameplay.queueRoll(update.state, update.canUndo);
-        dice!.play(update.dice);
-        return;
-      }
-      if (update.sequence) {
-        gameplay.animateMove(update.sequence, update.state, update.canUndo);
-        return;
-      }
-      gameplay.applyRemote(update.state, update.canUndo);
-    },
-    onLeft() {
-      searching = false;
-      setSearching(false);
-      gameplay.leaveOnline();
-      showTitle();
-      showNote('Opponent left. Search again to play.');
-    },
-    onClose() {
-      const playing = gameplay.scripted();
-      searching = false;
-      setSearching(false);
-      if (playing) {
-        gameplay.leaveOnline();
-        showTitle();
-      }
-      showNote('Can’t reach the game server.');
-    },
-  });
-  session.onLocal = () => {
-    gameplay.startSetup();
-    if (!searching) return;
-    searching = false;
-    setSearching(false);
-    table.cancel();
-  };
-  session.onMultiplayer = () => {
-    if (searching) {
-      searching = false;
-      setSearching(false);
-      table.cancel();
-      showNote(null);
-      return;
-    }
-    searching = true;
-    setSearching(true);
-    showNote(null);
-    table.find();
-  };
+  const match = createMatchSession(
+    controller,
+    onlineFlow,
+    gameplay,
+    { setSearching, showNote, showTitle, enterTable },
+    connectTable,
+  );
+  session.onLocal = match.startLocal;
+  session.onMultiplayer = match.toggleSearch;
 
   enablePlay();
   gameplay.refresh();
