@@ -18,8 +18,11 @@ export type Update = {
 };
 
 export type ServerMessage =
+  | { type: 'ready'; name: string }
+  | { type: 'rejected' }
   | { type: 'waiting' }
   | { type: 'matched'; you: Player; state: GameState }
+  | { type: 'resume'; you: Player; state: GameState; canUndo: boolean }
   | ({ type: 'update' } & Update)
   | { type: 'left' };
 

@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { access } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
+import { MongoClient } from 'mongodb';
+import { MongoMemoryServer } from 'mongodb-memory-server';
 import { chromium } from 'playwright-core';
 
 const host = '127.0.0.1';
@@ -63,10 +66,14 @@ async function chromePath() {
 
 function watchErrors(page, label, errors) {
   page.on('pageerror', (error) => errors.push(`${label}: ${error.message}`));
-  page.on('requestfailed', (request) =>
-    errors.push(`${label}: ${request.method()} ${request.url()} ${request.failure()?.errorText}`),
-  );
+  page.on('requestfailed', (request) => {
+    const reason = request.failure()?.errorText;
+    if (reason === 'net::ERR_ABORTED' && request.url().includes('/audio/')) return;
+    errors.push(`${label}: ${request.method()} ${request.url()} ${reason}`);
+  });
   page.on('response', (response) => {
+    const path = new URL(response.url()).pathname;
+    if (response.status() === 401 && path === '/auth/me') return;
     if (response.status() >= 400)
       errors.push(
         `${label}: ${response.status()} ${response.request().method()} ${response.url()}`,
@@ -85,10 +92,19 @@ async function openReadyPage(browser, label, errors) {
   });
   watchErrors(page, label, errors);
   await page.goto(url, { waitUntil: 'domcontentloaded' });
+  await page.locator('#auth-screen:not([hidden])').waitFor();
+  return page;
+}
+
+async function signUp(page, username) {
+  await page.locator('#auth-form [name="email"]').fill(`${username.toLowerCase()}@plakoto.test`);
+  await page.locator('#auth-form [name="username"]').fill(username);
+  await page.locator('#auth-form [name="password"]').fill('password1');
+  await page.locator('#auth-submit').click();
+  await page.waitForFunction(() => document.querySelector('#auth-screen')?.hasAttribute('hidden'));
   await page.waitForFunction(
     () => !document.querySelector('#start-local')?.hasAttribute('disabled'),
   );
-  return page;
 }
 
 async function waitForRoll(page) {
@@ -106,6 +122,12 @@ async function boardState(page) {
 
 async function localSmoke(browser, errors) {
   const page = await openReadyPage(browser, 'local', errors);
+  await signUp(page, 'Local');
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => document.querySelector('#auth-screen')?.hasAttribute('hidden'));
+  await page.waitForFunction(
+    () => !document.querySelector('#start-local')?.hasAttribute('disabled'),
+  );
   assert.equal(await page.locator('#start-screen').getAttribute('hidden'), null);
   await page.locator('#start-local').click();
   await page.waitForFunction(() => !document.body.classList.contains('on-title'));
@@ -153,11 +175,17 @@ async function localSmoke(browser, errors) {
   await page.close();
 }
 
+async function signIn(page, name) {
+  await signUp(page, name);
+}
+
 async function onlineSmoke(browser, errors) {
   const [first, second] = await Promise.all([
     openReadyPage(browser, 'online player 1', errors),
     openReadyPage(browser, 'online player 2', errors),
   ]);
+  await signIn(first, 'Ada');
+  await signIn(second, 'Basil');
   await first.locator('#start-multiplayer').click();
   await first.locator('#waiting-screen:not([hidden])').waitFor();
   await second.locator('#start-multiplayer').click();
@@ -213,10 +241,18 @@ async function onlineSmoke(browser, errors) {
 let browser;
 let webServer;
 let gameServer;
+const databaseName = `plakoto-smoke-${randomUUID()}`;
+const mongo = await MongoMemoryServer.create();
+const mongoUrl = mongo.getUri();
 try {
   await run(process.execPath, ['scripts/bundle-server.mjs']);
   gameServer = start(process.execPath, ['dist-server/index.mjs'], {
-    env: { ...process.env, PORT: String(gamePort) },
+    env: {
+      ...process.env,
+      PORT: String(gamePort),
+      PLAKOTO_MONGO_URL: mongoUrl,
+      PLAKOTO_DB_NAME: databaseName,
+    },
   });
   webServer = start(
     process.execPath,
@@ -243,4 +279,12 @@ try {
   await browser?.close();
   webServer?.child.kill('SIGTERM');
   gameServer?.child.kill('SIGTERM');
+  const client = new MongoClient(mongoUrl);
+  try {
+    await client.connect();
+    await client.db(databaseName).dropDatabase();
+  } finally {
+    await client.close();
+  }
+  await mongo.stop();
 }

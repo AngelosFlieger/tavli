@@ -50,9 +50,9 @@ The result stores a winner (`null` for a draw), points, and a reason string. The
 ## Local and online behavior
 
 - Local play is two people sharing one device. Dice values are sampled in the browser with `crypto.getRandomValues`; the visible die orientation is read back as the result.
-- Online play pairs the oldest waiting socket with the next. The first joined player gets crimson and the first opening roll. The server chooses dice with `node:crypto.randomInt`, validates commands and move sequences, and sends the resulting state to both browsers. A browser can act only for its assigned player on that player's turn.
-- Either online player can request a restart. Leaving or disconnecting ends the current match for both players; there is no reconnection or saved game.
-- Only motion, texture, and sound preferences persist in local storage. Game state lives in memory.
+- Online play requires an account. The oldest waiting account is paired with the next. The first joined player gets crimson and the first opening roll. The server chooses dice with `node:crypto.randomInt`, validates commands and move sequences, and sends the resulting state to both clients. A client can act only for its assigned player on that player's turn.
+- Either online player can request a restart. Signing out or cancelling ends the match for both players and keeps it, with the player who stayed recorded as the winner. A dropped connection keeps the seat for 45 seconds; after that the same record is kept. A game played to a result keeps its final position and winner. Next game starts a new match.
+- Motion, texture, and sound preferences persist in local storage. The account session is an HttpOnly cookie. Email and username are unique. Local games are not saved.
 
 ## Planned variant decisions
 

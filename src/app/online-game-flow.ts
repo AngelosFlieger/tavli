@@ -31,9 +31,9 @@ export function createOnlineGameFlow(
   }
 
   return {
-    join(you: Player, send: (command: Command) => void, state: GameState) {
+    join(you: Player, send: (command: Command) => void, state: GameState, canUndo = false) {
       controller.join(you, send);
-      controller.adopt(state, false);
+      controller.adopt(state, canUndo);
       scene.faceSeat();
       scene.presentState();
       dice.reset();

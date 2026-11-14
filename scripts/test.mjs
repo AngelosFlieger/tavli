@@ -1,9 +1,13 @@
+import { spawn } from 'node:child_process';
 import { build } from 'esbuild';
-import { mkdtemp, readdir, rm } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { mkdir, readdir, rm } from 'node:fs/promises';
 import { join } from 'node:path';
-import { pathToFileURL } from 'node:url';
-const directory = await mkdtemp(join(tmpdir(), 'plakoto-tests-'));
+import { MongoMemoryServer } from 'mongodb-memory-server';
+
+const mongo = await MongoMemoryServer.create();
+process.env.PLAKOTO_MONGO_URL = mongo.getUri();
+const directory = join(process.cwd(), 'node_modules', '.cache', 'plakoto-tests');
+await mkdir(directory, { recursive: true });
 try {
   const target = join(directory, 'tests.mjs');
   const testFiles = (await readdir('tests')).filter((name) => name.endsWith('.test.ts')).sort();
@@ -17,11 +21,19 @@ try {
     },
     bundle: true,
     platform: 'node',
+    external: ['mongodb'],
     mainFields: ['module', 'main'],
     format: 'esm',
     outfile: target,
   });
-  await import(pathToFileURL(target).href);
+  const code = await new Promise((resolve) => {
+    spawn(process.execPath, ['--test', target], {
+      stdio: 'inherit',
+      env: { ...process.env, PLAKOTO_MONGO_URL: mongo.getUri() },
+    }).on('exit', resolve);
+  });
+  if (code !== 0) process.exitCode = code ?? 1;
 } finally {
+  await mongo.stop();
   await rm(directory, { recursive: true, force: true });
 }

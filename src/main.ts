@@ -14,7 +14,9 @@ import {
   syncShell,
   type Session,
 } from './ui/shell';
+import { logout, sameOrigin } from './net/account';
 import { connectTable } from './net/client';
+import { initAuthScreen, restoreSession, showAuth } from './ui/auth-screen';
 import { createDice } from './scene/dice';
 import { createGameplay } from './scene/checkers';
 import { createStartScatter } from './scene/start-scatter';
@@ -36,8 +38,18 @@ const session: Session = {
   canNewGame: () => false,
   onLocal() {},
   onMultiplayer() {},
+  onSignOut() {},
 };
+let reconnect = () => {};
 initShell(session);
+initAuthScreen({
+  onSignedIn() {
+    reconnect();
+  },
+});
+void restoreSession().then((signedIn) => {
+  if (signedIn) reconnect();
+});
 
 async function start() {
   const stage = await createStage(host, boardFrame);
@@ -106,13 +118,34 @@ async function start() {
     controller,
     onlineFlow,
     gameplay,
-    { setSearching, showNote, showTitle, enterTable },
+    {
+      setSearching,
+      showNote,
+      showTitle,
+      enterTable,
+      signedOut() {
+        void logout();
+        showAuth();
+      },
+    },
     connectTable,
   );
   session.onLocal = match.startLocal;
   session.onMultiplayer = match.toggleSearch;
+  session.onSignOut = () => {
+    match.signOut();
+    void logout();
+    showAuth();
+  };
+  reconnect = () => match.reconnect();
 
   enablePlay();
+  if (
+    sameOrigin() &&
+    !document.body.classList.contains('signed-out') &&
+    !document.body.classList.contains('auth-pending')
+  )
+    match.reconnect();
   gameplay.refresh();
   syncShell();
   status.hidden = true;

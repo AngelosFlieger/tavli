@@ -256,6 +256,68 @@ input {
   height: 21px;
   accent-color: #bb354e;
 }
+dialog input[type='text'],
+dialog input[type='email'],
+dialog input[type='password'],
+dialog input[type='url'],
+#auth-screen input {
+  width: min(280px, 52vw);
+  height: auto;
+  padding: 8px 10px;
+  color: #f1dfb3;
+  background: #0c1728;
+  border: 1px solid #cab17d;
+  border-radius: 6px;
+  font: inherit;
+}
+#auth-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: #070d18ee;
+}
+#auth-screen[hidden] {
+  display: none;
+}
+#auth-form {
+  width: min(420px, 100%);
+  padding: 28px 26px;
+  color: #f1dfb3;
+  background: #10192b;
+  border: 1px solid #cab17d;
+  border-radius: 16px;
+}
+#auth-form label {
+  display: grid;
+  justify-content: stretch;
+  gap: 6px;
+  margin: 14px 0;
+}
+#auth-form label[hidden] {
+  display: none;
+}
+body.auth-pending .sidebar,
+body.signed-out .sidebar,
+body.auth-pending .top-actions,
+body.signed-out .top-actions,
+body.auth-pending footer,
+body.signed-out footer {
+  visibility: hidden;
+}
+.account-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 8px;
+}
+.account-error {
+  min-height: 1.4em;
+  margin: 8px 0;
+  color: #e7a0a8;
+}
 .still #ambient {
   animation: none;
 }

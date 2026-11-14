@@ -6,45 +6,19 @@ import { isCommand, type Command, type Update } from './messages';
 
 export type PlayerId = string;
 
-export type JoinResult =
-  | { type: 'waiting' }
-  | { type: 'matched'; ids: [PlayerId, PlayerId]; state: GameState };
-
 export type ActResult = { to: PlayerId[]; update: Update };
+
+export type SeatView = { you: Player; state: GameState; canUndo: boolean };
+
+export type MatchSnapshot = { id: string; ids: [PlayerId, PlayerId]; session: Session };
 
 type Seat = { match: Match; player: Player };
 
-/** Pairs the oldest waiting player with the next one, then runs one authoritative game. */
+/** Runs the authoritative game for players this process has seated. Pairing lives in MongoDB. */
 export function createLobby(rollDie: () => number) {
-  let waiting: PlayerId | null = null;
   const seats = new Map<PlayerId, Seat>();
 
-  function join(id: PlayerId): JoinResult | null {
-    if (seats.has(id)) return null;
-    if (waiting === id) return { type: 'waiting' };
-    if (waiting) {
-      const first = waiting;
-      waiting = null;
-      const match = new Match(first, id, rollDie);
-      seats.set(first, { match, player: 0 });
-      seats.set(id, { match, player: 1 });
-      return { type: 'matched', ids: [first, id], state: match.view().state };
-    }
-    waiting = id;
-    return { type: 'waiting' };
-  }
-
-  /** Leaves the queue, or the match if pairing already happened. */
-  function cancel(id: PlayerId) {
-    if (waiting === id) {
-      waiting = null;
-      return null;
-    }
-    return leave(id);
-  }
-
   function leave(id: PlayerId): PlayerId | null {
-    if (waiting === id) waiting = null;
     const seat = seats.get(id);
     if (!seat) return null;
     const opponent = seat.match.ids[seat.player === 0 ? 1 : 0];
@@ -59,7 +33,28 @@ export function createLobby(rollDie: () => number) {
     return seat.match.act(seat.player, command, id);
   }
 
-  return { join, cancel, leave, act };
+  function seat(id: PlayerId): SeatView | null {
+    const found = seats.get(id);
+    if (!found) return null;
+    const update = found.match.view();
+    return { you: found.player, state: update.state, canUndo: update.canUndo };
+  }
+
+  function snapshot(id: PlayerId): MatchSnapshot | null {
+    const found = seats.get(id);
+    if (!found) return null;
+    return { id: found.match.id, ids: [...found.match.ids], session: found.match.exportSession() };
+  }
+
+  function restore(first: PlayerId, second: PlayerId, session: Session, id: string) {
+    if (seats.has(first) || seats.has(second)) return false;
+    const match = new Match(first, second, rollDie, session, id);
+    seats.set(first, { match, player: 0 });
+    seats.set(second, { match, player: 1 });
+    return true;
+  }
+
+  return { leave, act, seat, snapshot, restore };
 }
 
 class Match {
@@ -70,9 +65,15 @@ class Match {
     first: PlayerId,
     second: PlayerId,
     private rollDie: () => number,
+    session: Session = initialPresentedSession(),
+    readonly id: string = crypto.randomUUID(),
   ) {
     this.ids = [first, second];
-    this.session = initialPresentedSession();
+    this.session = structuredClone(session);
+  }
+
+  exportSession(): Session {
+    return structuredClone(this.session);
   }
 
   view(): Update {

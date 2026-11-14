@@ -27,13 +27,15 @@ The browser smoke test finds Chrome in the common Linux locations. Set `PLAKOTO_
 
 Stop `npm run dev` before `npm start`. Both want port 3000.
 
+Accounts, login sessions, and live matches are stored in MongoDB. The game uses `mongodb://127.0.0.1:27017` and the `plakoto` database. In Compass, connect to that address and open `plakoto`. The collections are `users`, `sessions`, `matches`, `playing`, and `queue`. Start the local MongoDB server before `npm run dev`. More than one game process can share that database; give each a different `PORT`.
+
 ## Multiplayer
 
-Click Multiplayer to wait. The next person who does the same joins you. The first person plays crimson and takes the first opening roll; the higher opening total decides who takes the first turn. The server rolls the dice and checks every move; the browsers show the result. Use Cancel to stop searching.
+The page asks you to create an account or sign in before the menu. Email and username both have to be unique. The browser keeps an HttpOnly cookie for 30 days, so a later visit skips the form. Sign out is in Settings.
 
-`npm start` is one Node process, so a free host that runs it is enough for people outside your network. Set `PORT` if the host assigns one.
+Click Multiplayer to wait. The next person who does the same joins you. The first person plays crimson and takes the first opening roll; the higher opening total decides who takes the first turn. The server rolls the dice and checks every move; the clients show the result. Use Cancel to stop searching. A dropped connection can resume for 45 seconds. Finished games stay in the database with the final position and the winner.
 
-To share the game running on this Mac, leave `npm start` going and start a tunnel:
+To share the game running on this Mac, leave `npm run dev` or `npm start` going and start a tunnel:
 
 ```sh
 ~/.local/bin/cloudflared tunnel --url http://localhost:3000

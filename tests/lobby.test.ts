@@ -1,32 +1,21 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createLobby } from '../src/net/lobby';
 import { Game } from '../src/game/engine';
+import { initialPresentedSession } from '../src/game/session/messages';
+import { createLobby } from '../src/net/lobby';
+
+function seat(lobby: ReturnType<typeof createLobby>, first = 'ada', second = 'basil') {
+  assert.equal(lobby.restore(first, second, initialPresentedSession(), `${first}:${second}`), true);
+}
 
 const die = (values: number[]) => {
   let index = 0;
   return () => values[index++] ?? 1;
 };
 
-test('the first searching player is paired with the next one', () => {
-  const lobby = createLobby(() => 1);
-  assert.deepEqual(lobby.join('ada'), { type: 'waiting' });
-  assert.deepEqual(lobby.join('ada'), { type: 'waiting' });
-  const matched = lobby.join('basil');
-  assert.equal(matched?.type, 'matched');
-  if (matched?.type !== 'matched') return;
-  assert.deepEqual(matched.ids, ['ada', 'basil']);
-  assert.equal(matched.state.active, 0);
-  assert.equal(matched.state.phase, 'OPENING_ROLL');
-  const waiting = lobby.join('cleo');
-  assert.deepEqual(waiting, { type: 'waiting' });
-  assert.equal(lobby.leave('cleo'), null);
-});
-
 test('only the player to move can roll, and the server chooses the dice', () => {
   const lobby = createLobby(die([6, 1, 4, 4]));
-  lobby.join('ada');
-  lobby.join('basil');
+  seat(lobby);
   assert.equal(lobby.act('basil', { type: 'roll' })?.to.length, 1);
   const rolled = lobby.act('ada', { type: 'roll' });
   assert.deepEqual(rolled?.update.dice, [6, 1]);
@@ -40,8 +29,7 @@ test('only the player to move can roll, and the server chooses the dice', () => 
 
 test('a move is checked on the server and undo restores it for the same player', () => {
   const lobby = createLobby(die([6, 1, 1, 1, 2, 1]));
-  lobby.join('ada');
-  lobby.join('basil');
+  seat(lobby);
   lobby.act('ada', { type: 'roll' });
   lobby.act('basil', { type: 'roll' });
   const state = lobby.act('ada', { type: 'roll' })!.update.state;
@@ -58,8 +46,7 @@ test('a move is checked on the server and undo restores it for the same player',
 
 test('an out-of-range move is rejected without interrupting the online match', () => {
   const lobby = createLobby(die([6, 1, 1, 1, 2, 1]));
-  lobby.join('ada');
-  lobby.join('basil');
+  seat(lobby);
   lobby.act('ada', { type: 'roll' });
   lobby.act('basil', { type: 'roll' });
   const before = lobby.act('ada', { type: 'roll' })!.update.state;
@@ -76,25 +63,12 @@ test('an out-of-range move is rejected without interrupting the online match', (
   assert.equal(played?.update.state.board[2].length, 1);
 });
 
-test('cancelling a search that already paired frees both seats', () => {
-  const lobby = createLobby(() => 1);
-  lobby.join('ada');
-  assert.equal(lobby.cancel('ada'), null);
-  lobby.join('ada');
-  lobby.join('basil');
-  assert.equal(lobby.cancel('basil'), 'ada');
-  assert.equal(lobby.act('ada', { type: 'roll' }), null);
-  assert.equal(lobby.join('ada')?.type, 'waiting');
-});
-
 test('leaving a match tells the opponent, and a restart clears the dice', () => {
   const lobby = createLobby(() => 3);
-  lobby.join('ada');
-  lobby.join('basil');
+  seat(lobby);
   assert.equal(lobby.leave('ada'), 'basil');
   assert.equal(lobby.act('basil', { type: 'roll' }), null);
-  lobby.join('ada');
-  lobby.join('cleo');
+  seat(lobby, 'ada', 'cleo');
   const restarted = lobby.act('cleo', { type: 'restart' });
   assert.equal(restarted?.update.resetDice, true);
   assert.equal(restarted?.update.state.phase, 'OPENING_ROLL');
@@ -105,8 +79,7 @@ test('authoritative session transitions match the local facade through a turn', 
   const rolls = [6, 1, 1, 1, 2, 1];
   const lobby = createLobby(die(rolls));
   const local = new Game();
-  lobby.join('ada');
-  lobby.join('basil');
+  seat(lobby);
   for (const [id, values] of [
     ['ada', [6, 1]],
     ['basil', [1, 1]],
@@ -134,12 +107,22 @@ test('authoritative session transitions match the local facade through a turn', 
 
 test('a rejected server die leaves the match unchanged', () => {
   const lobby = createLobby(() => 7);
-  lobby.join('ada');
-  const matched = lobby.join('basil');
-  assert.equal(matched?.type, 'matched');
-  if (matched?.type !== 'matched') return;
+  seat(lobby);
+  const before = lobby.seat('ada')?.state;
   const rejected = lobby.act('ada', { type: 'roll' });
   assert.deepEqual(rejected?.to, ['ada']);
-  assert.deepEqual(rejected?.update.state, matched.state);
+  assert.deepEqual(rejected?.update.state, before);
   assert.equal(rejected?.update.dice, undefined);
+});
+
+test('a saved match can be restored for the same two accounts', () => {
+  const lobby = createLobby(() => 1);
+  seat(lobby);
+  const snap = lobby.snapshot('basil');
+  assert.ok(snap);
+  assert.equal(lobby.leave('ada'), 'basil');
+  assert.equal(lobby.restore(snap.ids[0], snap.ids[1], snap.session, snap.id), true);
+  assert.equal(lobby.seat('ada')?.you, 0);
+  assert.equal(lobby.seat('basil')?.state.phase, 'OPENING_ROLL');
+  assert.equal(lobby.restore(snap.ids[0], snap.ids[1], snap.session, snap.id), false);
 });

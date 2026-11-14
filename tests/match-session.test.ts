@@ -14,9 +14,11 @@ test('match session cancels searches and rejects a late pairing', () => {
   const calls: string[] = [];
   let events!: MatchEvents;
   const transport: MatchTransport = {
+    connect: () => {},
     find: () => calls.push('find'),
     cancel: () => calls.push('cancel'),
     send: () => {},
+    abandon: () => {},
   };
   const flow: MatchFlow = {
     join: () => calls.push('join'),
@@ -32,6 +34,7 @@ test('match session cancels searches and rejects a late pairing', () => {
       showNote: (note) => calls.push(`note-${note}`),
       enterTable: () => calls.push('enter'),
       showTitle: () => calls.push('title'),
+      signedOut: () => calls.push('signed-out'),
     },
     (next) => {
       events = next;
@@ -40,7 +43,9 @@ test('match session cancels searches and rejects a late pairing', () => {
   );
 
   match.toggleSearch();
-  assert.deepEqual(calls, ['search-true', 'note-null', 'find']);
+  assert.deepEqual(calls, ['note-null', 'find']);
+  events.onWaiting();
+  assert.equal(calls.at(-1), 'search-true');
   match.toggleSearch();
   assert.deepEqual(calls.slice(-3), ['search-false', 'cancel', 'note-null']);
   events.onMatched(0, controller.state);
@@ -77,13 +82,16 @@ test('match session joins, forwards updates, and leaves after disconnect', () =>
       showNote: (note) => calls.push(`note-${note}`),
       enterTable: () => calls.push('enter'),
       showTitle: () => calls.push('title'),
+      signedOut: () => calls.push('signed-out'),
     },
     (next) => {
       events = next;
       return {
+        connect: () => {},
         find: () => calls.push('find'),
         cancel: () => calls.push('cancel'),
         send: (command) => sent.push(command),
+        abandon: () => {},
       };
     },
   );

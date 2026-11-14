@@ -3,6 +3,10 @@ import type { Command, Update } from '../net/messages';
 import type { GameController } from './game-controller';
 
 export type MatchEvents = {
+  onReady: (name: string) => void;
+  onResume: (you: Player, state: GameState, canUndo: boolean) => void;
+  onRejected: () => void;
+  onReconnect: () => void;
   onWaiting: () => void;
   onMatched: (you: Player, state: GameState) => void;
   onUpdate: (update: Update) => void;
@@ -11,13 +15,20 @@ export type MatchEvents = {
 };
 
 export type MatchTransport = {
+  connect: () => void;
   find: () => void;
   cancel: () => void;
   send: (command: Command) => void;
+  abandon: () => void;
 };
 
 export type MatchFlow = {
-  join: (you: Player, send: (command: Command) => void, state: GameState) => void;
+  join: (
+    you: Player,
+    send: (command: Command) => void,
+    state: GameState,
+    canUndo?: boolean,
+  ) => void;
   receive: (update: Update) => void;
   leave: () => void;
 };
@@ -29,6 +40,7 @@ export type MatchUi = {
   showNote: (message: string | null) => void;
   enterTable: () => void;
   showTitle: () => void;
+  signedOut: () => void;
 };
 
 /** Owns search, match, and disconnect sequencing behind transport and UI ports. */
@@ -40,14 +52,50 @@ export function createMatchSession(
   connect: (events: MatchEvents) => MatchTransport,
 ) {
   let searching = false;
+  let playing = false;
   const table = connect({
-    onWaiting() {},
+    onReady() {
+      if (!playing) return;
+      playing = false;
+      flow.leave();
+      ui.showTitle();
+      ui.showNote('The match ended while you were disconnected.');
+    },
+    onResume(you, state, canUndo) {
+      searching = false;
+      playing = true;
+      ui.setSearching(false);
+      ui.showNote(null);
+      flow.join(you, (command) => table.send(command), state, canUndo);
+      ui.enterTable();
+      scene.startSetup();
+    },
+    onRejected() {
+      const wasPlaying = playing;
+      playing = false;
+      searching = false;
+      ui.setSearching(false);
+      ui.signedOut();
+      if (wasPlaying) {
+        flow.leave();
+        ui.showTitle();
+      }
+      ui.showNote('Sign in again to play online.');
+    },
+    onReconnect() {
+      if (searching || playing) ui.showNote('Reconnecting…');
+    },
+    onWaiting() {
+      if (!searching) return;
+      ui.setSearching(true);
+    },
     onMatched(you, state) {
       if (!searching) {
         table.cancel();
         return;
       }
       searching = false;
+      playing = true;
       ui.setSearching(false);
       ui.showNote(null);
       flow.join(you, (command) => table.send(command), state);
@@ -59,16 +107,18 @@ export function createMatchSession(
     },
     onLeft() {
       searching = false;
+      playing = false;
       ui.setSearching(false);
       flow.leave();
       ui.showTitle();
       ui.showNote('Opponent left. Search again to play.');
     },
     onClose() {
-      const playing = controller.scripted;
+      const wasPlaying = playing || controller.scripted;
       searching = false;
+      playing = false;
       ui.setSearching(false);
-      if (playing) {
+      if (wasPlaying) {
         flow.leave();
         ui.showTitle();
       }
@@ -77,6 +127,21 @@ export function createMatchSession(
   });
 
   return {
+    reconnect() {
+      if (playing || searching) return;
+      table.connect();
+    },
+    signOut() {
+      const wasPlaying = playing;
+      playing = false;
+      searching = false;
+      ui.setSearching(false);
+      table.abandon();
+      if (wasPlaying) {
+        flow.leave();
+        ui.showTitle();
+      }
+    },
     startLocal() {
       scene.startSetup();
       if (!searching) return;
@@ -93,7 +158,6 @@ export function createMatchSession(
         return;
       }
       searching = true;
-      ui.setSearching(true);
       ui.showNote(null);
       table.find();
     },

@@ -6,7 +6,7 @@
     <meta name="theme-color" content="#0b1427" />
     <title>Plakoto — The Art of the Pin</title>
   </head>
-  <body class="on-title">
+  <body class="on-title auth-pending">
     <div id="ambient"></div>
     <main id="scene" aria-label="Plakoto 3D board"></main>
     <div id="board-frame" aria-hidden="true"></div>
@@ -142,6 +142,32 @@
       <button id="roll" disabled>ROLL <span>↗</span></button>
     </footer>
     <p id="status" role="status">Setting the table…</p>
+    <section id="auth-screen" aria-label="Sign in" hidden>
+      <form id="auth-form">
+        <p class="eyebrow">PLAKOTO</p>
+        <h2 id="auth-title">Create account</h2>
+        <label id="auth-email-label"
+          >Email <input name="email" type="email" autocomplete="email" maxlength="254"
+        /></label>
+        <label id="auth-username-label"
+          >Username
+          <input name="username" autocomplete="username" maxlength="20" spellcheck="false"
+        /></label>
+        <label id="auth-identifier-label" hidden
+          >Email or username
+          <input name="identifier" autocomplete="username" maxlength="254" spellcheck="false"
+        /></label>
+        <label
+          >Password
+          <input name="password" type="password" minlength="8" autocomplete="new-password" required
+        /></label>
+        <p id="auth-error" class="account-error" role="alert"></p>
+        <div class="account-actions">
+          <button type="submit" id="auth-submit">Create account</button>
+          <button type="button" id="auth-switch">I have an account</button>
+        </div>
+      </form>
+    </section>
     <dialog id="overlay">
       <div id="overlay-content"></div>
       <button class="close" aria-label="Close overlay">×</button>

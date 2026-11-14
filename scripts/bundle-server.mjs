@@ -8,5 +8,5 @@ await build({
   platform: 'node',
   format: 'esm',
   outfile: 'dist-server/index.mjs',
-  external: ['ws'],
+  external: ['ws', 'mongodb'],
 });
