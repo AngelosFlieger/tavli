@@ -32,6 +32,17 @@
     </aside>
     <section id="start-screen" aria-label="Plakoto start menu">
       <div class="start-menu">
+        <fieldset id="ruleset-picker" class="ruleset-picker">
+          <legend>Ruleset</legend>
+          <label>
+            <input type="radio" name="ruleset" value="CLASSIC" checked />
+            <span><strong>Classic</strong><small>Pure Plakoto</small></span>
+          </label>
+          <label>
+            <input type="radio" name="ruleset" value="POWERUPS_V1" />
+            <span><strong>Powerups</strong><small>Draft every 3 rounds</small></span>
+          </label>
+        </fieldset>
         <button id="start-multiplayer" class="mode-button online-mode" disabled>
           <span class="mode-star" aria-hidden="true">✦</span
           ><span id="multiplayer-label">Multiplayer</span
@@ -104,6 +115,7 @@
         <p class="waiting-status" role="status" aria-live="polite">
           <span class="waiting-spinner" aria-hidden="true"></span>Searching for an opponent…
         </p>
+        <p id="waiting-ruleset" class="waiting-ruleset">Classic matchmaking</p>
         <button id="waiting-cancel" class="mode-button local-mode">
           <span class="mode-star" aria-hidden="true">✦</span><span>Cancel</span
           ><span class="mode-star" aria-hidden="true">✦</span>
@@ -129,6 +141,7 @@
         </svg>
       </button>
     </nav>
+    <p id="ruleset-badge" class="ruleset-badge" hidden></p>
     <output id="dice-result" class="dice-announcement" aria-live="polite" aria-atomic="true"
       >— · —</output
     >
@@ -136,6 +149,16 @@
       <p id="game-message" role="status" aria-live="polite" hidden></p>
       <div id="move-choices"></div>
       <button id="next-game" hidden>New game →</button>
+    </section>
+    <section id="draft-panel" role="dialog" aria-modal="true" aria-labelledby="draft-status" hidden>
+      <div class="draft-window">
+        <span class="draft-eyebrow">Round reward</span>
+        <div id="draft-contestants" aria-label="Draft order roll"></div>
+        <h2 id="draft-status">Choose an ability</h2>
+        <p id="draft-order"></p>
+        <div id="draft-cards"></div>
+        <div id="draft-replacement" aria-live="polite"></div>
+      </div>
     </section>
     <footer>
       <button id="undo" class="secondary" disabled aria-label="Undo">↶ UNDO</button>

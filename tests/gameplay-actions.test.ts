@@ -20,7 +20,10 @@ test('local actions sequence roll, move, animation completion, undo, and restart
       moveDone = done;
     },
   };
-  const actions = createGameplayActions(controller, scene, { reset: () => diceResets++ });
+  const actions = createGameplayActions(controller, scene, {
+    reset: () => diceResets++,
+    play() {},
+  });
   setup = true;
   assert.equal(actions.beginRoll(), false);
   setup = false;
@@ -62,7 +65,7 @@ test('interrupted local animation releases the move lock before a late callback'
       done = complete;
     },
   };
-  const actions = createGameplayActions(controller, scene, { reset() {} });
+  const actions = createGameplayActions(controller, scene, { reset() {}, play() {} });
   actions.beginRoll();
   actions.receiveRoll([6, 6]);
   actions.beginRoll();

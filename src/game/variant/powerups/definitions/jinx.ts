@@ -1,0 +1,60 @@
+import type { JinxConfig } from '../../types';
+import { defineAbility } from '../../abilities/define';
+import {
+  baseConfig,
+  boolean,
+  duration,
+  exactKeys,
+  integer,
+  oneOf,
+  record,
+} from '../../abilities/validation';
+
+export const jinx = defineAbility<'jinx', JinxConfig>({
+  id: 'jinx',
+  kind: 'POWERUP',
+  timing: 'WITH_END_TURN',
+  validateConfig(value) {
+    const input = record(value, 'jinx');
+    exactKeys(
+      input,
+      [
+        'enabled',
+        'offerWeight',
+        'duration',
+        'penalty',
+        'minimumToken',
+        'targetToken',
+        'affectDoubles',
+        'unaffectedDoubleConsumes',
+        'doubleHandling',
+      ],
+      'jinx',
+    );
+    const minimumToken = integer(input.minimumToken, 'jinx.minimumToken', 1);
+    if (minimumToken > 6) throw new Error('jinx.minimumToken must be <= 6');
+    return {
+      ...baseConfig(input, 'jinx'),
+      duration: duration(input.duration, 'jinx.duration', ['NEXT_DRAFT']),
+      penalty: integer(input.penalty, 'jinx.penalty', 1),
+      minimumToken,
+      targetToken: oneOf(input.targetToken, ['HIGHEST', 'LOWEST'], 'jinx.targetToken'),
+      affectDoubles: boolean(input.affectDoubles, 'jinx.affectDoubles'),
+      unaffectedDoubleConsumes: boolean(
+        input.unaffectedDoubleConsumes,
+        'jinx.unaffectedDoubleConsumes',
+      ),
+      doubleHandling: oneOf(
+        input.doubleHandling,
+        ['CHANGE_ONE_TOKEN', 'CHANGE_MATCHING_TOKENS'],
+        'jinx.doubleHandling',
+      ),
+    };
+  },
+  describe(config) {
+    return {
+      name: 'Jinx',
+      summary: `Reduce the opponent’s ${config.targetToken.toLowerCase()} die by ${config.penalty}.`,
+    };
+  },
+});

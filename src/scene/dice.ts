@@ -35,6 +35,8 @@ function randomFace() {
 }
 export async function createDice(
   root: THREE.Group,
+  camera: THREE.Camera,
+  canvas: HTMLCanvasElement,
   boardCenter: THREE.Vector3,
   reducedMotion: MediaQueryList,
   layout: BoardLayout,
@@ -45,7 +47,10 @@ export async function createDice(
     player: () => 0 | 1;
     settled: (values: number[]) => void;
     scripted: () => boolean;
+    forced: () => [number, number] | null;
     presented: () => void;
+    selectableDice: () => (0 | 1)[];
+    selectDie: (index: 0 | 1) => void;
   },
 ) {
   const button = document.querySelector<HTMLButtonElement>('#roll')!;
@@ -57,7 +62,12 @@ export async function createDice(
   } catch (error) {
     output.textContent = 'Dice unavailable · reload to retry';
     console.error(error);
-    return { update: (_dt: number) => {}, resize: () => {}, reset() {}, play() {} };
+    return {
+      update: (_dt: number) => {},
+      resize: () => {},
+      reset() {},
+      play(_values: [number, number], _rerolledDie?: 0 | 1) {},
+    };
   }
   const bounds = new THREE.Box3().setFromObject(model),
     center = bounds.getCenter(new THREE.Vector3());
@@ -96,22 +106,90 @@ export async function createDice(
     root.add(shadow);
     return shadow;
   });
+  const selectionRings = dice.map(() => {
+    const ring = new THREE.Mesh(
+      new THREE.RingGeometry(side * 0.78, side * 1.08, 40),
+      new THREE.MeshBasicMaterial({
+        color: 0xffd36b,
+        transparent: true,
+        opacity: 0.82,
+        depthWrite: false,
+        depthTest: false,
+      }),
+    );
+    ring.rotation.x = -Math.PI / 2;
+    ring.visible = false;
+    root.add(ring);
+    return ring;
+  });
+  let hoveredDie: 0 | 1 | null = null;
+  const dieTargets = dice.map((_die, index) => {
+    const target = document.createElement('button');
+    target.type = 'button';
+    target.className = 'die-target';
+    target.dataset.die = String(index);
+    target.setAttribute('aria-label', `Reroll die ${index + 1}`);
+    target.hidden = true;
+    target.addEventListener('pointerenter', () => (hoveredDie = index as 0 | 1));
+    target.addEventListener('pointerleave', () => (hoveredDie = null));
+    const select = () => {
+      if (!rolling && callbacks.selectableDice().includes(index as 0 | 1))
+        callbacks.selectDie(index as 0 | 1);
+    };
+    const selectOnPress = (event: PointerEvent | MouseEvent) => {
+      event.preventDefault();
+      select();
+    };
+    target.addEventListener('pointerdown', selectOnPress);
+    // Keep desktop selection reliable in browsers that do not synthesize pointer events for
+    // programmatic or assistive mouse input. A successful pointer press clears eligibility, so
+    // the following mouse event cannot activate the ability twice.
+    target.addEventListener('mousedown', selectOnPress);
+    target.addEventListener('click', (event) => {
+      // Pointer selection is handled on press so a moving 3D projection cannot lose pointer-up.
+      if (event.detail === 0) select();
+    });
+    document.body.append(target);
+    return target;
+  });
+  const projected = new THREE.Vector3();
+  const targetPositionsLocked = [false, false];
+  let rollingIndices: (0 | 1)[] = [];
   function updateShadows() {
     dice.forEach((die, i) => {
       const shadow = shadows[i];
       shadow.visible = die.visible;
       shadow.position.set(die.position.x, surface + 0.0004, die.position.z);
       shadow.material.opacity = Math.max(0.08, 1 - (die.position.y - restingY) * 5);
+      const ring = selectionRings[i];
+      const selectable = !rolling && callbacks.selectableDice().includes(i as 0 | 1);
+      ring.visible = selectable && die.visible;
+      ring.position.set(die.position.x, surface + 0.0007, die.position.z);
+      ring.scale.setScalar(hoveredDie === i ? 1.18 : 1);
+      const target = dieTargets[i];
+      target.hidden = !selectable || !die.visible;
+      if (target.hidden) targetPositionsLocked[i] = false;
+      else if (!targetPositionsLocked[i]) {
+        die.getWorldPosition(projected).project(camera);
+        const rect = canvas.getBoundingClientRect();
+        target.style.left = `${rect.left + ((projected.x + 1) / 2) * rect.width}px`;
+        target.style.top = `${rect.top + ((1 - projected.y) / 2) * rect.height}px`;
+        targetPositionsLocked[i] = true;
+      }
     });
+    canvas.dataset.selectableDice = callbacks.selectableDice().join(',');
   }
   let timer = 0,
     rolling = false;
-  let tosses: {
-    start: THREE.Vector3;
-    end: THREE.Vector3;
-    target: THREE.Quaternion;
-    spin: THREE.Vector3;
-  }[] = [];
+  let tosses: (
+    | {
+        start: THREE.Vector3;
+        end: THREE.Vector3;
+        target: THREE.Quaternion;
+        spin: THREE.Vector3;
+      }
+    | undefined
+  )[] = [];
   function show(values: number[]) {
     output.textContent = `${values[0]}  ·  ${values[1]}`;
     output.setAttribute(
@@ -127,29 +205,55 @@ export async function createDice(
     button.removeAttribute('aria-busy');
     dice.forEach((die) => (die.visible = false));
     shadows.forEach((shadow) => (shadow.visible = false));
+    selectionRings.forEach((ring) => (ring.visible = false));
+    dieTargets.forEach((target) => (target.hidden = true));
+    targetPositionsLocked.fill(false);
+    rollingIndices = [];
+    canvas.dataset.selectableDice = '';
+    canvas.dataset.rollingDice = '';
+    canvas.dataset.lastRollingDice = '';
     output.textContent = '— · —';
     output.setAttribute('aria-label', 'No dice rolled yet');
   }
   const duration = 1.5;
-  function startToss(forced?: [number, number]) {
+  function startToss(forced?: [number, number], onlyDie?: 0 | 1) {
     rolling = true;
+    rollingIndices = onlyDie === undefined ? [0, 1] : [onlyDie];
+    canvas.dataset.rollingDice = rollingIndices.join(',');
+    canvas.dataset.lastRollingDice = rollingIndices.join(',');
+    hoveredDie = null;
     timer = 0;
     button.disabled = true;
     button.setAttribute('aria-busy', 'true');
-    output.textContent = 'Rolling…';
-    output.setAttribute('aria-label', 'Rolling two dice');
+    output.textContent = onlyDie === undefined ? 'Rolling…' : `Rerolling die ${onlyDie + 1}…`;
+    output.setAttribute(
+      'aria-label',
+      onlyDie === undefined ? 'Rolling two dice' : `Rerolling die ${onlyDie + 1}`,
+    );
     const side = callbacks.player() === 0 ? -1 : 1;
     const place = (x: number, z: number, y: number) =>
       new THREE.Vector3(side * x - boardCenter.x, y, (z - boardCenter.z) * layout.depth);
     tosses = dice.map((die, i) => {
+      if (!rollingIndices.includes(i as 0 | 1)) return undefined;
+      const rerolling = onlyDie !== undefined;
+      const current = die.position.clone();
       die.visible = true;
       return {
-        start: place(0.23 + i * 0.035, side * 0.22, restingY + 0.1),
-        end: place(
-          0.085 + i * 0.074 + (Math.random() - 0.5) * 0.014,
-          (Math.random() - 0.5) * 0.065,
-          restingY,
-        ),
+        start: rerolling
+          ? current.clone().setY(restingY + 0.075)
+          : place(0.23 + i * 0.035, side * 0.22, restingY + 0.1),
+        end: rerolling
+          ? current
+              .clone()
+              .add(
+                new THREE.Vector3((Math.random() - 0.5) * 0.035, 0, (Math.random() - 0.5) * 0.035),
+              )
+              .setY(restingY)
+          : place(
+              0.085 + i * 0.074 + (Math.random() - 0.5) * 0.014,
+              (Math.random() - 0.5) * 0.065,
+              restingY,
+            ),
         target: landingRotation(forced?.[i] ?? randomFace(), Math.random() * Math.PI * 2),
         spin: new THREE.Vector3(
           (3 + i) * Math.PI * 2,
@@ -168,18 +272,20 @@ export async function createDice(
       output.setAttribute('aria-label', 'Rolling two dice');
       return;
     }
-    startToss();
+    startToss(callbacks.forced() ?? undefined);
   });
   let previousDepth = layout.depth;
   return {
-    play(values: [number, number]) {
-      if (!rolling) startToss(values);
+    play(values: [number, number], rerolledDie?: 0 | 1) {
+      if (!rolling) startToss(values, rerolledDie);
     },
     reset,
     resize() {
+      targetPositionsLocked.fill(false);
       const ratio = layout.depth / previousDepth;
       dice.forEach((die) => (die.position.z *= ratio));
       tosses.forEach((toss) => {
+        if (!toss) return;
         toss.start.z *= ratio;
         toss.end.z *= ratio;
       });
@@ -187,11 +293,13 @@ export async function createDice(
       updateShadows();
     },
     update(dt: number) {
+      updateShadows();
       if (!rolling) return;
       timer += dt;
       const t = Math.min(timer / (reducedMotion.matches ? 0.18 : duration), 1);
       dice.forEach((die, i) => {
         const toss = tosses[i];
+        if (!toss) return;
         die.position.lerpVectors(toss.start, toss.end, 1 - Math.pow(1 - t, 2));
         if (!reducedMotion.matches) {
           // Three diminishing arcs simulate the initial throw and two board bounces.
@@ -222,6 +330,8 @@ export async function createDice(
       updateShadows();
       if (t === 1) {
         rolling = false;
+        rollingIndices = [];
+        canvas.dataset.rollingDice = '';
         // Read the actual settled mesh orientation, rather than displaying a separate random value.
         const values = dice.map((die) => upwardFace(die.quaternion));
         show(values);

@@ -8,6 +8,8 @@ export type BoardInputIntent =
   | { type: 'pickUp'; point: number }
   | { type: 'releaseLast' }
   | { type: 'clear' }
+  | { type: 'cancelAbility' }
+  | { type: 'abilityTarget'; point: number }
   | { type: 'place'; sequence: Move[] };
 
 type BoardInputOptions = {
@@ -22,6 +24,8 @@ type BoardInputOptions = {
   state: () => GameState;
   locked: () => boolean;
   mine: () => boolean;
+  abilitySelected: () => boolean;
+  abilityTargets: () => number[];
   onIntent: (intent: BoardInputIntent) => void;
 };
 
@@ -38,6 +42,8 @@ export function createBoardInput({
   state,
   locked,
   mine,
+  abilitySelected,
+  abilityTargets,
   onIntent,
 }: BoardInputOptions) {
   let view: PickupView = { queue: [], pickable: Array(24).fill(null), sequences: [] };
@@ -46,7 +52,11 @@ export function createBoardInput({
   const pointer = new THREE.Vector2();
 
   function canInteract() {
-    return state().phase === 'WAITING_FOR_MOVE' && mine() && !locked();
+    return state().phase === 'WAITING_FOR_MOVE' && mine() && !locked() && !abilitySelected();
+  }
+
+  function canTargetAbility() {
+    return state().phase === 'TURN_COMPLETE' && mine() && !locked() && abilityTargets().length > 0;
   }
 
   function selectedSequences() {
@@ -76,6 +86,12 @@ export function createBoardInput({
   }
 
   canvas.addEventListener('pointerdown', (event) => {
+    if (canTargetAbility()) {
+      const point = hit(event);
+      if (point !== undefined && abilityTargets().includes(point))
+        onIntent({ type: 'abilityTarget', point });
+      return;
+    }
     if (!canInteract()) return;
     const point = hit(event);
     if (point === undefined) {
@@ -98,10 +114,11 @@ export function createBoardInput({
   });
 
   canvas.addEventListener('pointermove', (event) => {
-    const point = canInteract() ? hit(event) : undefined;
+    const point = canInteract() || canTargetAbility() ? hit(event) : undefined;
     const legal =
       point !== undefined &&
-      (view.pickable[point] !== null ||
+      (abilityTargets().includes(point) ||
+        view.pickable[point] !== null ||
         selectedSequences().some((sequence) => sequence.at(-1)!.to === point));
     canvas.style.cursor = pickup.items.length ? 'none' : legal ? 'pointer' : 'default';
     if (pickup.items.length) {
@@ -126,8 +143,9 @@ export function createBoardInput({
   });
 
   window.addEventListener('keydown', (event) => {
-    if (event.key !== 'Escape' || !pickup.items.length) return;
-    onIntent({ type: 'clear' });
+    if (event.key !== 'Escape') return;
+    if (canTargetAbility()) onIntent({ type: 'cancelAbility' });
+    else if (pickup.items.length) onIntent({ type: 'clear' });
   });
 
   return { refresh };

@@ -21,7 +21,10 @@ test('online flow presents authoritative rolls and moves before adopting them', 
     },
   };
   const dice: OnlineDice = {
-    play: (values) => calls.push(`dice-${values.join('-')}`),
+    play: (values, rerolledDie) =>
+      calls.push(
+        `dice-${values.join('-')}${rerolledDie === undefined ? '' : `-only-${rerolledDie}`}`,
+      ),
     reset: () => calls.push('dice-reset'),
   };
   const flow = createOnlineGameFlow(controller, scene, dice);
@@ -37,6 +40,10 @@ test('online flow presents authoritative rolls and moves before adopting them', 
   assert.equal(calls.at(-1), 'dice-2-3');
   flow.presentedRoll();
   assert.equal(controller.state.active, 1);
+
+  flow.receive({ state: controller.state, canUndo: false, dice: [4, 3], rerolledDie: 0 });
+  assert.equal(calls.at(-1), 'dice-4-3-only-0');
+  flow.presentedRoll();
 
   const ready = structuredClone(controller.state);
   ready.active = 0;

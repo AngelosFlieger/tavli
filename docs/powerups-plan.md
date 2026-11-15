@@ -1,0 +1,363 @@
+# Powerups and passives implementation plan
+
+> **Status:** the version-one vertical slice is playable from the public Classic/Powerups selector. Validated immutable profiles, the typed ten-card registry, ruleset-aware state, configurable round tracking, the pure draft/order/pick/replacement state machine, authoritative local/online draft orchestration, the draft/inventory UI, all six initial powerups, all four initial passives, seeded local reports, and local multi-report balance aggregation are implemented. Remaining rollout work is audio/motion polish and larger real playtest samples.
+
+This plan uses **powerup** for a card that is consumed when played and **passive** for a card that stays equipped and changes a rule. “Ability” is the umbrella term for both.
+
+## Recommended version-one rules
+
+### Mode and inventory
+
+- Add an explicit `CLASSIC` / `POWERUPS_V1` mode choice. A match never changes mode after it starts, and online matchmaking queues players by mode.
+- By default, each player can hold **two powerups** and equip **one passive**.
+- A player cannot hold two copies of the same ability.
+- If a player drafts a card whose category is full, they must choose a card of that category to replace. The replaced card is discarded. Replacing a passive at a draft boundary removes its counters and untriggered effects.
+- If removing a capacity-changing passive leaves more cards than the new cap, those cards are grandfathered: none are discarded automatically, but the player cannot grow that inventory. This avoids an impossible draft choice and lets normal card use return the inventory below its cap.
+- By default, a player may use **one powerup per own turn**. Passives do not count against that limit.
+- Inventories, cooldowns, active effects, and draft results are public information.
+
+These default caps are deliberately small. They make the opponent’s options understandable and keep the HUD usable on a phone. They are centralized balance settings, not values to scatter through the code.
+
+### What “every three rounds” means
+
+A **round** is complete after both players have ended one normal turn. Opening-roll attempts do not count. Round 1 begins when the opening winner is chosen and ends after the starter and the other player have each completed one turn, regardless of which color started.
+
+With the default interval of three, the draft begins after rounds 3, 6, 9, and so on, immediately after the second completed turn and before the next player rolls. A turn with no legal moves still counts after the player presses End Turn. A game-ending move stops the game immediately and never opens a draft.
+
+Track completion explicitly with two player flags rather than deriving it from an integer turn count. That makes the rule robust if a later mechanic skips or grants a turn. Restart resets the round counter, draft, inventories, and effects.
+
+### Draft sequence
+
+1. The authority generates a shared offer using the configured composition, initially three unique cards: **two powerups and one passive**. Offered cards must be legal choices for either player; by default, exclude ability types currently held by either player.
+2. One fair die is rolled automatically for each player, using six sides by default. The results are simultaneous and public. Equal results are rerolled until there is a winner.
+3. The higher roller chooses the configured number of cards, initially one. If the relevant inventory is full, that player also chooses the card to replace.
+4. The other player chooses the same configured number from the remaining cards, with the same replacement rule.
+5. Unchosen cards are discarded. Play resumes with the player who was due to roll before the draft opened.
+
+The offer can be revealed before the order roll; this gives the contest suspense and lets both players plan. A reasonable animation timeout must never be authoritative: state, not animation completion, determines the result. Version one should not add pick timers or automatic picks. They complicate local play and require reconnect rules that the game does not yet have.
+
+Draft-order dice are not movement dice. Normal passives do not affect them unless a future card says so explicitly.
+
+### Safe activation windows
+
+Every powerup declares exactly one timing:
+
+| Timing                   | Allowed state                                                                   |
+| ------------------------ | ------------------------------------------------------------------------------- |
+| `BEFORE_ROLL`            | Current player is in `WAITING_FOR_ROLL`.                                        |
+| `AFTER_ROLL_BEFORE_MOVE` | Dice are resolved, no checker has moved, and the game is in `WAITING_FOR_MOVE`. |
+| `WITH_END_TURN`          | Played atomically with End Turn after all required moves are complete.          |
+
+There are no reaction cards, hidden cards, or mid-sequence powers in version one. A random powerup resolution is generated by the authority, recorded in state/events, and must be accepted once requested.
+
+Undo reverses checker placements only. It never refunds a powerup, changes a completed draft pick, or rerolls dice. A post-roll power is consumed before the first move, so the pre-move snapshot already contains its result; undoing a later move returns to that modified roll. A `WITH_END_TURN` power is atomic with ending the turn, so there is no ambiguous undo point.
+
+### Effect safety rules
+
+The initial catalog should obey these global rules:
+
+- An ability cannot change checker ownership, directly bear off a checker, move an opponent’s checker, award a win, or change outcome points.
+- The two starting points are immune to ability targeting. This preserves mother wins and draws.
+- An effect cannot target a mixed/pinned stack unless its text explicitly defines the interaction. None of the version-one cards do.
+- Modified dice are movement tokens. Turning two non-double tokens into equal values does **not** create four moves, and changing one token from a double does not remove the other tokens.
+- A target that is no longer valid when a delayed effect begins causes that effect to expire without a refund.
+- Durations use deterministic boundaries such as “through the end of Player 1’s next turn,” never wall-clock time.
+- Effects with the same `abilityId`, source player, and target do not stack unless that ability’s supported config explicitly enables a stacking policy. The default profile forbids duplicate ownership and does not refresh durations.
+- Effects can remove legal moves, including all moves for a roll. The normal no-legal-moves flow then applies.
+
+See [the ability catalog](ability-catalog.md) for a proposed starter pool and exact card text.
+
+## Centralized balance configuration
+
+Almost every value likely to change during balancing should come from one immutable, validated `VariantConfig` selected when the match starts. This includes:
+
+- inventory slots, passive slots, duplicate policy, and powerups playable per turn;
+- rounds between drafts, offer composition, picks per player, order-die sides, and offer weights;
+- every probability expressed as integer weights or a numerator/denominator;
+- effect durations, cooldowns, counter caps, bonus or penalty sizes, and expiry behavior;
+- whether a card is enabled, whether it can target home/start points, and other supported target-policy flags; and
+- the list of abilities in a balance profile.
+
+Do not put these values in UI components, session transitions, server handlers, or ability implementation branches. Do not use unvalidated floating-point thresholds such as `Math.random() < 0.333`. Random probabilities should use integer arithmetic so local tests and the server interpret them identically.
+
+### Config shape and profiles
+
+Keep reusable defaults and named balance profiles in pure TypeScript:
+
+```ts
+type Probability = { numerator: number; denominator: number };
+type TurnDuration = {
+  boundary: 'SOURCE_TURN_END' | 'TARGET_TURN_END' | 'NEXT_DRAFT';
+  count: number;
+};
+
+type VariantConfig = {
+  id: string;
+  version: number;
+  inventory: {
+    powerupSlots: number;
+    passiveSlots: number;
+    powerupsPerTurn: number;
+    allowDuplicateAbilities: boolean;
+  };
+  draft: {
+    intervalRounds: number;
+    offer: { powerups: number; passives: number };
+    picksPerPlayer: number;
+    orderDieSides: number;
+    rerollOrderTies: boolean;
+    excludeHeldAbilities: boolean;
+  };
+  abilities: AbilityConfigMap;
+};
+
+export const powerupsV1 = defineVariantConfig({
+  id: 'powerups-v1',
+  version: 1,
+  inventory: {
+    powerupSlots: 2,
+    passiveSlots: 1,
+    powerupsPerTurn: 1,
+    allowDuplicateAbilities: false,
+  },
+  draft: {
+    intervalRounds: 3,
+    offer: { powerups: 2, passives: 1 },
+    picksPerPlayer: 1,
+    orderDieSides: 6,
+    rerollOrderTies: true,
+    excludeHeldAbilities: true,
+  },
+  abilities: {
+    frostSeal: {
+      enabled: true,
+      offerWeight: 10,
+      duration: { boundary: 'TARGET_TURN_END', count: 1 },
+      allowHomePoints: false,
+    },
+    loadedKnuckles: {
+      enabled: true,
+      offerWeight: 10,
+      matchChance: { numerator: 1, denominator: 3 },
+      doubleMoveTokens: 3,
+    },
+  },
+});
+```
+
+The example is illustrative, not a complete schema. Use integers for weights and counts. Store probabilities as exact rational values. For a weighted offer, choose from positive integer `offerWeight` values without replacement.
+
+Provide at least these profiles:
+
+- `powerups-v1`: the shipping candidate defaults;
+- `fast-balance`: more frequent drafts for manual testing; and
+- test fixtures built in each test rather than a mutable global “test mode.”
+
+Profiles can extend a frozen base through an explicit deep merge, but the resolved result must be a complete config. Production code receives only a `ResolvedVariantConfig`, never a partially merged object with fallback lookups throughout the engine.
+
+### Validation and match snapshots
+
+`defineVariantConfig` should validate and freeze the result at startup. Reject a profile before a match can begin when:
+
+- counts are negative or non-integers;
+- a probability is outside `0..1` or has a zero denominator;
+- an enabled ability has missing or unknown parameters;
+- an offer cannot supply both players’ configured picks;
+- an ability ID is missing from the registry or has the wrong powerup/passive kind;
+- a duration boundary is unsupported by that ability; or
+- a combination is structurally unsafe, such as zero draft-order sides with tie rerolls.
+
+Every match snapshots the resolved config and its deterministic hash/version. Configuration never changes mid-match. Pure transitions receive that snapshot as an explicit rules context instead of reading a mutable module global:
+
+```ts
+transitionSession(session, command, { ruleset, variantConfig });
+```
+
+The online server selects the profile, validates it, and sends its public resolved values plus hash in the `matched` message. Updates include the hash so a client can reject a mismatched presentation. The server still validates every action; receiving the config only lets the client render exact text, durations, probabilities, and legal-target previews. Local play uses the same resolved profile.
+
+Changing a profile should increment its version. If remote configuration is added later, only validated data may be loaded; never load executable card code or expressions from JSON.
+
+## State and pure-engine design
+
+Keep variant logic in the functional core and keep Three.js, DOM, sockets, and random-number generation outside it.
+
+### Shared state
+
+Add a discriminant and a nullable variant block to the shared state. An additive shape is the lowest-risk migration for the current code; it can become a full discriminated union later if the modes diverge substantially.
+
+```ts
+type Ruleset = 'CLASSIC' | 'POWERUPS_V1';
+
+type PlayerLoadout = {
+  powerups: AbilityInstance[];
+  passives: AbilityInstance[];
+};
+
+type PowerupsState = {
+  completedRounds: number;
+  actedThisRound: [boolean, boolean];
+  loadouts: [PlayerLoadout, PlayerLoadout];
+  activeEffects: ActiveEffect[];
+  passiveCounters: [Record<string, number>, Record<string, number>];
+  powerupsUsedThisTurn: number;
+  checkerMovedThisTurn: boolean;
+  draft: DraftState | null;
+};
+
+type GameState = ExistingGameState & {
+  ruleset: Ruleset;
+  variantConfigHash: string | null;
+  powerups: PowerupsState | null;
+};
+```
+
+Give every inventory entry and active effect a stable instance ID. An active effect should record at least its ability type, source, target, start boundary, expiry boundary, and any resolved random value. Do not encode behavior in status-message strings.
+
+`DraftState` should be a discriminated union, for example:
+
+- `ORDER_ROLL`: offer, resume player, and all tie attempts made so far.
+- `PICKING`: offer, `[first, second]` pick order, current pick index, and completed picks.
+- `REPLACING`: the pending incoming card and legal inventory instances that can be replaced.
+
+Add `DRAFT_ORDER` and `DRAFT_PICK` to the authoritative session phases. Replacement can be a substate of `DRAFT_PICK`; it does not need another top-level phase. When the draft closes, restore `WAITING_FOR_ROLL` and the saved resume player.
+
+### Commands and events
+
+Extend the pure transition with explicit intents and authority-only resolutions:
+
+```ts
+type PlayerVariantCommand =
+  | { type: 'pickAbility'; abilityId: AbilityId; replaceInstanceId?: string }
+  | { type: 'playPowerup'; instanceId: string; target?: AbilityTarget };
+
+type AuthorityVariantCommand =
+  | { type: 'openDraft'; offer: AbilityId[] }
+  | { type: 'resolveDraftOrder'; rolls: [number, number] }
+  | { type: 'resolvePowerRandomness'; requestId: string; values: number[] };
+```
+
+Client packets contain only player intentions. The browser must never send draft rolls, replacement die values, offers, expiry counters, or effect payloads to the online server. The local adapter can inject authority commands using its local random source; the online lobby injects them using `node:crypto`.
+
+Add semantic events such as `RoundCompleted`, `DraftOpened`, `DraftOrderRolled`, `DraftOrderTied`, `AbilityPicked`, `AbilityReplaced`, `PowerupPlayed`, `PassiveTriggered`, `EffectStarted`, and `EffectExpired`. Send those events with online updates so clients animate what happened instead of reverse-engineering it from a large state diff.
+
+### Ability registry and rule hooks
+
+Use config data for tunable parameters and small pure definitions for behavior. Avoid ability switches in `transition.ts`, the server, controller, HUD, and scene. Adding a normal ability should require one definition module, one config entry, registry registration, and focused tests—not edits across every layer.
+
+Suggested modules:
+
+```text
+src/game/variant/types.ts                    IDs, targets, inventory, draft and effect types
+src/game/variant/config/schema.ts            config types, validation and immutable resolution
+src/game/variant/config/profiles/v1.ts       shipping balance values
+src/game/variant/config/profiles/fast.ts     fast manual-test profile
+src/game/variant/abilities/define.ts          typed definition builders
+src/game/variant/powerups/definitions/        expendable definition/config contracts
+src/game/variant/passives/definitions/        passive definition/config contracts
+src/game/variant/passives/policy.ts           centralized passive state and rule policies
+src/game/variant/abilities/registry.ts        the only AbilityId -> definition registry
+src/game/variant/engine.ts                    generic hook dispatch in deterministic order
+src/game/variant/draft.ts                     offer eligibility, weights, picks and replacement
+src/game/variant/effects.ts                   generic expiry and active-effect queries
+```
+
+Definitions should be strongly typed against their own config:
+
+```ts
+type AbilityDefinition<Id extends AbilityId, Config, Target> = {
+  id: Id;
+  kind: 'POWERUP' | 'PASSIVE';
+  timing?: PowerTiming;
+  validateConfig(value: unknown): Config;
+  describe(config: Config): AbilityCopy;
+  legalTargets(context: AbilityContext, config: Config): Target[];
+  validatePlay(context: AbilityContext, target: Target, config: Config): boolean;
+  apply(context: AbilityContext, target: Target, config: Config): AbilityResult;
+  hooks?: AbilityHooks<Config>;
+};
+```
+
+The registry exposes definitions; the generic engine invokes their hooks in a documented deterministic order. Useful hooks include `modifyRollDistribution`, `modifyMovementTokens`, `movePolicy`, `onMoveApplied`, `onTurnEnded`, `onRoundEnded`, and `onDraftOpened`. Each hook is pure and receives the complete context plus that ability’s resolved config. Definitions return state changes and semantic events; they do not mutate state, animate, send sockets, or query the DOM.
+
+Card titles and descriptions should be generated from the same resolved config through `describe`. If Frost Seal changes from one turn to two, the HUD and help must say two without separately edited strings. Static flavor text may remain metadata.
+
+Registry invariants should be tested automatically: IDs are unique, every enabled config entry has one definition, every definition has config validation and display copy, and every declared hook has a deterministic priority. Prefer phase-specific hook arrays sorted by `(priority, abilityId)` over relying on object or inventory order.
+
+For quick iteration, development builds provide a profile selector and optional unsigned 32-bit seed for local games. Blank is the default and retains fresh cryptographic randomness; an explicit seed controls normal dice, draft offers/order, passive probability checks, and ability randomness through one authority seam. The active profile ID/version is visible in the HUD and its hash is stored in each downloaded seeded playtest report. Tests inject profiles and random sources directly; they do not edit module globals or depend on environment variables. Online matches deliberately do not accept client seeds because future random outcomes must remain unpredictable and server-owned.
+
+`src/game/rules/moves.ts` should remain the classic movement implementation. Add an optional, default-classic movement policy that can reject leaving or landing on a point. The session builds that policy from active variant effects and passes it to `legalMoves`, `rawMoves`, and `moveSequences`. This keeps freeze/fortify rules out of Three.js and prevents the variant module from duplicating Plakoto’s maximum-dice search.
+
+Dice-changing passives and powerups resolve before `remaining` is finalized. Preserve both the physical result and effective movement tokens in state so the UI can explain a modification. A useful shape is `{ rolled: [number, number], tokens: number[], modifiers: DiceModifier[] }`; the existing `roll` and `remaining` fields can be migrated toward it in a separate, tested step.
+
+## Application and UI flow
+
+### Controller and presentation
+
+- Extend `GameController` with draft selection and powerup intents. It should expose derived views such as legal targets and playable inventory, not DOM elements.
+- Add a `variant-actions.ts` application flow for automatic draft rolls, pick/replacement submission, powerup resolution, and event presentation. Keep `gameplay-actions.ts` focused on normal rolls and moves.
+- Revalidate and clear the held-checker queue whenever a power changes movement legality or dice tokens.
+- Add a draft overlay that renders the configured number of accessible card buttons, one presentation of the decisive order dice when the dialog opens, pick order, inventory replacement choices, and an explicit waiting state for the other online player.
+- Add compact, always-visible inventory slots near each player panel. Selecting a playable power shows legal board targets; Escape cancels targeting without consuming it.
+- Active effects need a board marker and a text alternative that says the owner, target, and exact expiry. Never rely on color alone.
+- The Rules overlay must render the resolved round interval, draft composition, inventory caps, per-turn power limit, and each equipped passive’s drawback.
+
+The same two visible 3D dice can present the simultaneous draft-order roll, but presentation code must receive a roll purpose (`OPENING`, `TURN`, `DRAFT_ORDER`, or `POWER_REROLL`) so it never feeds a draft result into normal movement.
+
+### Online protocol and matchmaking
+
+- Include `ruleset` and the server-approved profile ID in matchmaking; keep separate waiting queues per ruleset and config hash.
+- Add validated `pickAbility` commands and timing-specific power submissions. `WITH_END_TURN` cards travel atomically on `end`; future before/post-roll powers may use a dedicated command. Validate seat, phase, current picker/active player, inventory instance, target, timing, and replacement on the server.
+- Let the match authority open drafts, sample weighted offers, roll order dice, reroll ties, resolve power randomness, expire effects, and broadcast the resulting state/events using its immutable config snapshot.
+- Treat draft animation like current dice and move animation: authoritative state may be queued for presentation, but input stays locked until the local presentation catches up.
+- Reject malformed ability IDs, targets, and instance IDs without changing the match, and return the current authoritative view only to the sender.
+
+There is still no reconnection or persistence. Do not add draft pick timers until those policies are designed.
+
+## Undo, outcome, and difficult interactions
+
+| Situation                                   | Version-one rule                                                                              |
+| ------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| Undo after a post-roll power                | Undo checker moves only; the power remains consumed and its dice/effect result remains.       |
+| Freeze makes all moves illegal              | Resolve as the existing no-legal-moves turn.                                                  |
+| Passive is replaced                         | Remove its counters and pending effects at the draft boundary; completed past actions remain. |
+| Delayed target changes before activation    | Expire the effect without refund.                                                             |
+| Game ends on a move before a draft boundary | `GAME_OVER` wins; no draft opens.                                                             |
+| Starting-point target                       | Always illegal, preserving mother outcome rules.                                              |
+| Restart                                     | Reset all variant state and resample future randomness.                                       |
+| Online disconnect during draft              | Existing behavior applies: the match ends for both players.                                   |
+
+## Delivery stages
+
+1. **Configuration and registry scaffold:** add schema validation, immutable profiles, config hashing, typed definition builders, registry invariants, and classic defaults. No cards yet.
+2. **Ruleset scaffold:** add mode/profile selection, state discriminant, config snapshot injection, round tracking, and regression tests.
+3. **Draft vertical slice:** implement the config-driven draft state machine, weighted offer injection, inventory/replacement, local overlay, online commands, and server authority. Use inert test cards first.
+4. **Movement-policy slice (implemented):** effect-aware legal-move policy plus Frost Seal and Bastion now cover configurable targeting, atomic use/end-turn submission, expiry, no-move behavior, online validation, inventory/effect text, and board markers.
+5. **Dice slice (implemented):** physical `roll`, effective `remaining` movement tokens, and public modifier records are distinct. Recast and Nudge cover configured reroll counts, authority randomness, token adjustment, double-creation policy, bearing-off restrictions, local/online presentation, and stale-intent rejection. Recast positions accessible hit targets over its legal 3D dice, sends the chosen index to authority, and rethrows only that die on both clients.
+6. **First passive slice (implemented):** Loaded Knuckles uses an exact configured matching probability, a uniform configured non-match policy, public roll-source state, and configured double-token count under local and server authority. Quartermaster derives inventory capacity from the equipped loadout and enforces a configured own-turn cooldown through public counters. Replacing it clears its counter and grandfathers occupied extra slots so a draft cannot deadlock. Do not enable arbitrary passive stacking in version one.
+7. **Home Guard (implemented):** draft changes rebuild a public config-resolved passive-policy snapshot. The legal-move policy prevents configured home-board pins for both its defensive benefit and offensive drawback, while its configurable start-point exclusion preserves protected baseline points.
+8. **Opportunist (implemented):** an opponent's initial no-legal-move result grants a configured amount of public Focus up to the configured cap. Focus is spent through the shared post-roll action path without consuming the passive or a per-turn powerup use. Gain, cap, uses per roll, adjustment size/directions, eligible roll kinds, bearing-off permission, double creation, trigger, and reduced capacity are profile-controlled; the server rejects unearned or stale spending.
+9. **Jinx (implemented):** the end-turn action auto-targets the opponent and creates a public delayed dice-penalty effect. The shared roll resolver preserves physical dice, adjusts configured movement tokens, records the modifier, consumes or retains unaffected doubles according to config, and expires unused effects at their configured draft boundary.
+10. **Clear Skies (implemented):** public active effects have stable first-class targets. The pre-roll resolver filters configured effect tags, optionally admits opponent protection, removes the selected effect plus deterministic additional eligible effects up to the configured maximum, consumes the card atomically, and is validated by the online authority.
+11. **Ruleset rollout and polish (in progress):** the public selector, profile badge, waiting-state identity, config-derived in-game help, and Classic plus two-seat Powerups browser paths are implemented. Inventories are overlapping focusable cards with an explicit Use step. The final decisive draft attempt animates once as two player-colored dice when the dialog opens, and the current picker avatar then remains beside the offer. Temporary state-derived Frost Seal ice, Bastion ghost/shield, and player-effect treatments improve test readability. Combined moves reserve the pin slow-motion effect for a final pin rather than an intermediate hop. The browser path covers both authoritative drafts, card focus/use, direct Recast die selection, single-die activation presentation, and passive replacement. Development-only local profile/optional-seed controls, downloadable reports, validated multi-file import, hash-separated aggregation, and aggregate JSON export provide the balance workflow. Audio polish and real playtest collection remain.
+
+Each stage should keep `CLASSIC` green and releasable.
+
+## Verification plan
+
+Add focused tests in the existing layers:
+
+- **Configuration:** invalid values and combinations, complete resolution, immutability, stable hashes, registry/config agreement, and exact rational probability boundaries.
+- **Pure session:** configured round boundary, opening exclusion, tied order rerolls, pick order, replacement, invalid phase/player/target, configurable expiry, restart, game-over precedence, and immutable inputs.
+- **Rules:** freeze/fortify movement policy, maximum usable dice under restrictions, higher-die rule, combined move intermediate points, pinning, bearing off, and mother outcomes.
+- **Property tests:** 30 checker IDs remain unique and present; inventory caps hold; draft always terminates after two valid picks; no expired effect changes legal moves.
+- **Controller/application:** busy locks, pickup revalidation, power consumption, local authority injection, online pending state, and interrupted animation recovery.
+- **Lobby/protocol:** server-only randomness, config-hash mismatch, out-of-turn picks, spoofed rolls, stale instance IDs, illegal targets, separate matchmaking queues, and sender-only rejection.
+- **Browser:** a full local draft and one authoritative online draft, keyboard targeting/cancel, phone-sized replacement UI, and active-effect text.
+
+Run `npm test`, `npm run build`, `npm run format:check`, and `npm run test:browser` for implementation changes.
+
+## Balance process
+
+The catalog is designed to be **balanceable**, not assumed balanced without play. Keep all numeric knobs in the selected config profile and record its ID, version, hash, and seed with balance results. The development report records offers/order events, picks/replacements, uses, effect snapshots/expiry, no-legal-move turns, rolls, and the outcome. The analyzer derives completed and censored hold duration, game length, pick/use/replacement counts, win rate by opening player, and win rate after each draft-order result without mixing configuration hashes. Review results by player skill where possible; raw card win rate is otherwise heavily biased by strong players choosing well.
+
+Start with six to eight powerups and four passives. Change one config value per balance experiment and give every experiment a new profile version. Prefer shortening duration, narrowing targets, or increasing cooldown over adding exceptions to the core movement rules. A small simulation/test harness should accept any resolved profile and seeded random source so the same scenarios can compare profiles reproducibly.

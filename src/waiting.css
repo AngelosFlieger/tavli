@@ -86,7 +86,12 @@
   gap: 13px;
   font: 15px/1.5 monospace;
   color: #d9c7a6;
-  margin: 30px 0 24px;
+  margin: 30px 0 5px;
+}
+.waiting-ruleset {
+  margin: 0 0 20px;
+  color: #e7c982;
+  font: 11px/1.4 monospace;
 }
 .waiting-spinner {
   width: 22px;
@@ -170,8 +175,12 @@
   .waiting-status {
     font-size: 12px;
     gap: 9px;
-    margin: 28px 0 23px;
+    margin: 28px 0 5px;
     white-space: nowrap;
+  }
+  .waiting-ruleset {
+    margin-bottom: 18px;
+    font-size: 10px;
   }
   .waiting-spinner {
     width: 19px;

@@ -79,6 +79,42 @@ test('two processes pair through MongoDB and both see the same roll', async () =
   }
 });
 
+test('MongoDB matchmaking keeps rulesets and balance profiles in separate queues', async () => {
+  const store = await openStore({ name: `plakoto-test-${randomUUID()}` });
+  const tables = createTables(store, () => 1);
+  const standard = { ruleset: 'POWERUPS_V1', profileId: 'powerups-v1' } as const;
+  const fast = { ruleset: 'POWERUPS_V1', profileId: 'fast-balance' } as const;
+  try {
+    await Promise.all(
+      ['classic-1', 'classic-2', 'standard-1', 'standard-2', 'fast-1', 'fast-2'].map((id) =>
+        tables.connect(id),
+      ),
+    );
+    assert.equal((await tables.find('classic-1'))[0]?.message.type, 'waiting');
+    assert.equal((await tables.find('standard-1', standard))[0]?.message.type, 'waiting');
+    assert.equal((await tables.find('fast-1', fast))[0]?.message.type, 'waiting');
+
+    const classic = await tables.find('classic-2');
+    const standardMatch = await tables.find('standard-2', standard);
+    const fastMatch = await tables.find('fast-2', fast);
+
+    const matchedState = (events: Awaited<ReturnType<typeof tables.find>>) => {
+      const message = events.find((event) => event.message.type === 'matched')?.message;
+      assert.equal(message?.type, 'matched');
+      return message?.type === 'matched' ? message.state : null;
+    };
+    assert.equal(matchedState(classic)?.ruleset, 'CLASSIC');
+    assert.equal(matchedState(standardMatch)?.ruleset, 'POWERUPS_V1');
+    assert.equal(matchedState(fastMatch)?.ruleset, 'POWERUPS_V1');
+    assert.notEqual(
+      matchedState(standardMatch)?.variantConfigHash,
+      matchedState(fastMatch)?.variantConfigHash,
+    );
+  } finally {
+    await store.drop();
+  }
+});
+
 test('cancelling keeps the match and records the opponent as winner', async () => {
   const store = await openStore({ name: `plakoto-test-${randomUUID()}` });
   const first = createTables(store, () => 1);

@@ -3,19 +3,28 @@ import type { Move, Position } from '../rules/position';
 import { initialPresentedSession, sessionMessage } from './messages';
 import type { GameState } from './state';
 import { transitionSession, type SessionCommand, type SessionResult } from './transition';
+import { CLASSIC_RULES, type RulesContext } from '../variant/types';
 
 export type { GameState } from './state';
 
 // Compatibility facade retained for regression tests using the old Game API.
 export class Game {
-  state: GameState = initialPresentedSession().state;
+  state: GameState;
   history: GameState[] = [];
   private moveKey = '';
   private cachedMoves: Move[] = [];
   private pendingRoll = false;
 
+  constructor(private readonly rules: RulesContext = CLASSIC_RULES) {
+    this.state = initialPresentedSession(rules).state;
+  }
+
   private dispatch(command: SessionCommand): SessionResult {
-    const result = transitionSession({ state: this.state, history: this.history }, command);
+    const result = transitionSession(
+      { state: this.state, history: this.history },
+      command,
+      this.rules,
+    );
     if (!result.ok) return result;
     this.state = result.session.state;
     this.history = result.session.history;
@@ -26,7 +35,12 @@ export class Game {
 
   moves(): Move[] {
     if (this.state.active === null || this.state.phase !== 'WAITING_FOR_MOVE') return [];
-    const key = JSON.stringify([this.state.board, this.state.remaining, this.state.active]);
+    const key = JSON.stringify([
+      this.state.board,
+      this.state.remaining,
+      this.state.active,
+      this.state.powerups?.activeEffects,
+    ]);
     if (key !== this.moveKey) {
       this.moveKey = key;
       this.cachedMoves = legalMoves(this.state, this.state.active, this.state.remaining);

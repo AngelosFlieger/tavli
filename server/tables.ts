@@ -1,7 +1,12 @@
 import { randomUUID } from 'node:crypto';
 import { initialPresentedSession } from '../src/game/session/messages';
-import { createLobby } from '../src/net/lobby';
-import type { Command, ServerMessage } from '../src/net/messages';
+import { createLobby, matchKey, rulesForSelection, rulesForState } from '../src/net/lobby';
+import {
+  CLASSIC_SELECTION,
+  type Command,
+  type MatchSelection,
+  type ServerMessage,
+} from '../src/net/messages';
 import type { Store, StoredMatch } from './store';
 
 const reconnectGraceMs = 45_000;
@@ -9,8 +14,14 @@ const reconnectGraceMs = 45_000;
 export type TableEvent = { userId: string; message: ServerMessage };
 
 /** Runs the matches for people connected to this process. MongoDB is the shared queue and referee. */
-export function createTables(store: Store, rollDie: () => number, now = () => Date.now()) {
-  const lobby = createLobby(rollDie);
+export function createTables(
+  store: Store,
+  rollDie: () => number,
+  now = () => Date.now(),
+  randomInt: (maximum: number) => number = (maximum) =>
+    Math.min(maximum - 1, Math.floor(((rollDie() - 1) / 6) * maximum)),
+) {
+  const lobby = createLobby(rollDie, randomInt);
   const revision = new Map<string, number>();
   const away = new Map<string, [number | null, number | null]>();
   const waiting = new Set<string>();
@@ -68,11 +79,14 @@ export function createTables(store: Store, rollDie: () => number, now = () => Da
         you: seat.you,
         state: seat.state,
         canUndo: seat.canUndo,
+        variantConfig: rulesForState(seat.state).variantConfig,
       });
     },
-    async find(userId: string) {
+    async find(userId: string, selection: MatchSelection = CLASSIC_SELECTION) {
       if (await pull(userId)) return this.connect(userId);
-      const opponent = await store.claimOpponent(userId);
+      const rules = rulesForSelection(selection);
+      const key = matchKey(rules);
+      const opponent = await store.claimOpponent(userId, key);
       if (!opponent) {
         waiting.add(userId);
         return emit(userId, 'waiting', { type: 'waiting' });
@@ -80,15 +94,15 @@ export function createTables(store: Store, rollDie: () => number, now = () => Da
       const match: StoredMatch = {
         id: randomUUID(),
         seats: [opponent, userId],
-        session: initialPresentedSession(),
+        session: initialPresentedSession(rules),
         revision: 0,
         away: [null, null],
         endedAt: null,
         winner: null,
       };
       if (!(await store.insertMatch(match))) {
-        await store.wait(opponent);
-        await store.wait(userId);
+        await store.wait(opponent, key);
+        await store.wait(userId, key);
         waiting.add(userId);
         return emit(userId, 'waiting', { type: 'waiting' });
       }
@@ -100,7 +114,12 @@ export function createTables(store: Store, rollDie: () => number, now = () => Da
         const seat = lobby.seat(id);
         if (!seat) continue;
         events.push(
-          ...emit(id, `${match.id}:0`, { type: 'matched', you: seat.you, state: seat.state }),
+          ...emit(id, `${match.id}:0`, {
+            type: 'matched',
+            you: seat.you,
+            state: seat.state,
+            variantConfig: rules.variantConfig,
+          }),
         );
       }
       return events;
@@ -219,7 +238,8 @@ export function createTables(store: Store, rollDie: () => number, now = () => Da
       return local ? emit(userId, `left:${local.id}`, { type: 'left' }) : [];
     }
     waiting.delete(userId);
-    const previousRoll = lobby.snapshot(userId)?.session.state.roll ?? [];
+    const previousState = lobby.snapshot(userId)?.session.state;
+    const previousRoll = previousState?.roll ?? [];
     const known = seen.get(userId);
     adopt(match);
     const seat = lobby.seat(userId);
@@ -232,11 +252,15 @@ export function createTables(store: Store, rollDie: () => number, now = () => Da
         roll.length === 2 && roll.join() !== previousRoll.join()
           ? ([roll[0], roll[1]] as [number, number])
           : undefined;
+      const latestModifier = seat.state.diceModifiers.at(-1);
+      const rerolledDie =
+        dice && latestModifier?.abilityId === 'recast' ? latestModifier.dieIndex : undefined;
       return emit(userId, token, {
         type: 'update',
         state: seat.state,
         canUndo: seat.canUndo,
         dice,
+        ...(rerolledDie === undefined ? {} : { rerolledDie }),
       });
     }
     const previous = known?.match(/^([^:]+):\d+$/)?.[1];
@@ -247,7 +271,12 @@ export function createTables(store: Store, rollDie: () => number, now = () => Da
         canUndo: seat.canUndo,
         resetDice: true,
       });
-    return emit(userId, token, { type: 'matched', you: seat.you, state: seat.state });
+    return emit(userId, token, {
+      type: 'matched',
+      you: seat.you,
+      state: seat.state,
+      variantConfig: rulesForState(seat.state).variantConfig,
+    });
   }
 
   function played(
@@ -274,7 +303,7 @@ export function createTables(store: Store, rollDie: () => number, now = () => Da
     const next: StoredMatch = {
       id: randomUUID(),
       seats: match.seats,
-      session: initialPresentedSession(),
+      session: initialPresentedSession(rulesForState(match.session.state)),
       revision: 0,
       away: [null, null],
       endedAt: null,

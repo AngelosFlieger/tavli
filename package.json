@@ -10,6 +10,7 @@
     "preview": "vite preview",
     "test": "node scripts/test.mjs",
     "test:browser": "node scripts/browser-smoke.mjs",
+    "test:browser:headed": "node scripts/browser-smoke.mjs --headed",
     "ios:sync": "npm run build && cap sync ios",
     "format": "prettier --write src server tests scripts index.html vite.config.ts tsconfig.json package.json",
     "format:check": "prettier --check src server tests scripts index.html vite.config.ts tsconfig.json package.json"

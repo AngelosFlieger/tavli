@@ -8,6 +8,7 @@ import {
   type MatchTransport,
 } from '../src/app/match-session';
 import type { Command } from '../src/net/messages';
+import type { MatchSelection } from '../src/net/messages';
 
 test('match session cancels searches and rejects a late pairing', () => {
   const controller = new GameController();
@@ -111,4 +112,79 @@ test('match session joins, forwards updates, and leaves after disconnect', () =>
     'note-Can’t reach the game server.',
   ]);
   assert.equal(controller.scripted, false);
+});
+
+test('match session forwards an explicit powerup selection to matchmaking', () => {
+  const controller = new GameController();
+  let selection: MatchSelection | undefined;
+  const match = createMatchSession(
+    controller,
+    { join() {}, receive() {}, leave() {} },
+    { startSetup() {} },
+    { setSearching() {}, showNote() {}, enterTable() {}, showTitle() {} },
+    () => ({
+      find: (next) => {
+        selection = next;
+      },
+      cancel() {},
+      send() {},
+    }),
+  );
+  match.toggleSearch({ ruleset: 'POWERUPS_V1', profileId: 'powerups-v1' });
+  assert.deepEqual(selection, { ruleset: 'POWERUPS_V1', profileId: 'powerups-v1' });
+});
+
+test('match session configures an explicit local powerup game', () => {
+  const controller = new GameController();
+  let setups = 0;
+  const match = createMatchSession(
+    controller,
+    { join() {}, receive() {}, leave() {} },
+    { startSetup: () => setups++ },
+    { setSearching() {}, showNote() {}, enterTable() {}, showTitle() {} },
+    () => ({ find() {}, cancel() {}, send() {} }),
+  );
+
+  match.startLocal({ ruleset: 'POWERUPS_V1', profileId: 'powerups-v1' });
+
+  assert.equal(setups, 1);
+  assert.equal(controller.state.ruleset, 'POWERUPS_V1');
+  assert.equal(controller.variantConfig?.id, 'powerups-v1');
+  assert.equal(controller.state.variantConfigHash, controller.variantConfig?.hash);
+});
+
+test('match session resolves alternate registered profiles for local play', () => {
+  const controller = new GameController();
+  const match = createMatchSession(
+    controller,
+    { join() {}, receive() {}, leave() {} },
+    { startSetup() {} },
+    { setSearching() {}, showNote() {}, enterTable() {}, showTitle() {} },
+    () => ({ find() {}, cancel() {}, send() {} }),
+  );
+
+  match.startLocal({ ruleset: 'POWERUPS_V1', profileId: 'fast-balance' });
+
+  assert.equal(controller.variantConfig?.id, 'fast-balance');
+  assert.equal(controller.variantConfig?.draft.intervalRounds, 1);
+});
+
+test('match session restarts the local random stream from an explicit playtest seed', () => {
+  const controller = new GameController();
+  const match = createMatchSession(
+    controller,
+    { join() {}, receive() {}, leave() {} },
+    { startSetup() {} },
+    { setSearching() {}, showNote() {}, enterTable() {}, showTitle() {} },
+    () => ({ find() {}, cancel() {}, send() {} }),
+  );
+
+  assert.equal(match.startLocal({ ruleset: 'CLASSIC' }, 12345), true);
+  assert.equal(controller.beginRoll(), true);
+  const first = controller.takeForcedLocalRoll();
+  controller.receiveRoll(first!);
+
+  assert.equal(match.startLocal({ ruleset: 'CLASSIC' }, 12345), true);
+  assert.equal(controller.beginRoll(), true);
+  assert.deepEqual(controller.takeForcedLocalRoll(), first);
 });

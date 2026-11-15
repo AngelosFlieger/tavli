@@ -1,4 +1,5 @@
 import type { Move } from '../game/engine';
+import type { AbilityTarget, RollAbilityOption } from '../game/variant/types';
 import { GameController, type LocalMoveRequest } from './game-controller';
 
 /** The presentation operations needed after a user command is accepted. */
@@ -9,7 +10,10 @@ export type ActionScene = {
   playLocalMove: (sequence: Move[], request: LocalMoveRequest, done: () => void) => void;
 };
 
-export type ActionDice = { reset: () => void };
+export type ActionDice = {
+  reset: () => void;
+  play: (values: [number, number], rerolledDie?: 0 | 1) => void;
+};
 
 /** Sequences local presentation and online command waits without scene dependencies. */
 export function createGameplayActions(
@@ -59,8 +63,18 @@ export function createGameplayActions(
     },
     finishTurn() {
       if (!controller.endTurn(setupLocked())) return false;
-      if (!controller.scripted) scene.refresh();
+      scene.refresh();
       return true;
+    },
+    playRollAbility(option: RollAbilityOption) {
+      const request = controller.requestRollAbility(option);
+      if (!request) return;
+      scene.refresh();
+      if (request.type === 'local' && request.dice) dice.play(request.dice, request.rerolledDie);
+    },
+    playBeforeRollAbility(target: AbilityTarget) {
+      if (!controller.requestBeforeRollAbility(target)) return;
+      scene.refresh();
     },
     finishInterruptedMove() {
       if (!controller.hasLocalMove) return;

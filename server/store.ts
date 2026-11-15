@@ -37,10 +37,10 @@ export type Store = {
   /** Starts a new match for the same two accounts and leaves the finished one in place. */
   followOn(previousId: string, match: StoredMatch): Promise<boolean>;
   release(id: string): Promise<void>;
-  claimOpponent(userId: string): Promise<string | null>;
+  claimOpponent(userId: string, matchKey: string): Promise<string | null>;
   leaveQueue(userId: string): Promise<void>;
   queued(userId: string): Promise<boolean>;
-  wait(userId: string): Promise<void>;
+  wait(userId: string, matchKey: string): Promise<void>;
   expireAway(before: number): Promise<{ match: StoredMatch; released: string[] }[]>;
   close(): Promise<void>;
   drop(): Promise<void>;
@@ -73,8 +73,12 @@ export async function openStore(options: StoreOptions = {}): Promise<Store> {
   const matches = db.collection<MatchDocument>('matches');
   const playing = db.collection<PlayingDocument>('playing');
   const queue = db.collection<QueueDocument>('queue');
-  const joinQueue = (userId: string) =>
-    queue.updateOne({ _id: userId }, { $setOnInsert: { joinedAt: new Date() } }, { upsert: true });
+  const joinQueue = (userId: string, matchKey: string) =>
+    queue.updateOne(
+      { _id: userId },
+      { $set: { matchKey }, $setOnInsert: { joinedAt: new Date() } },
+      { upsert: true },
+    );
 
   return {
     async createUser(user) {
@@ -200,16 +204,17 @@ export async function openStore(options: StoreOptions = {}): Promise<Store> {
     async release(id) {
       await playing.deleteMany({ matchId: id });
     },
-    async wait(userId) {
-      await joinQueue(userId);
+    async wait(userId, matchKey) {
+      await joinQueue(userId, matchKey);
     },
-    async claimOpponent(userId) {
-      await joinQueue(userId);
+    async claimOpponent(userId, matchKey) {
+      await joinQueue(userId, matchKey);
       const me = await queue.findOne({ _id: userId });
       if (!me) return null;
       const claimed = await queue.findOneAndDelete(
         {
           _id: { $ne: userId },
+          matchKey,
           $or: [
             { joinedAt: { $lt: me.joinedAt } },
             { joinedAt: me.joinedAt, _id: { $lt: userId } },
@@ -313,7 +318,7 @@ type MatchDocument = {
 };
 
 type PlayingDocument = { _id: string; matchId: string };
-type QueueDocument = { _id: string; joinedAt: Date };
+type QueueDocument = { _id: string; joinedAt: Date; matchKey?: string };
 
 async function ensureSchema(db: Db) {
   const meta = db.collection<{ _id: string; version: number }>('meta');
@@ -360,7 +365,11 @@ async function ensureSchema(db: Db) {
   await createCollection(db, 'queue', {
     bsonType: 'object',
     required: ['_id', 'joinedAt'],
-    properties: { _id: { bsonType: 'string' }, joinedAt: { bsonType: 'date' } },
+    properties: {
+      _id: { bsonType: 'string' },
+      joinedAt: { bsonType: 'date' },
+      matchKey: { bsonType: 'string' },
+    },
   });
   await db.collection('queue').createIndex({ joinedAt: 1 });
   await meta.updateOne({ _id: 'schema' }, { $set: { version: schemaVersion } }, { upsert: true });

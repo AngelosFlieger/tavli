@@ -1,12 +1,20 @@
 import type { GameController } from '../app/game-controller';
 import type { PickupView } from '../app/pickup-selection';
 import type { Move } from '../game/engine';
+import type { AbilityId, AbilityTarget, RollAbilityOption } from '../game/variant/types';
+import { describeConfiguredAbility } from '../game/variant/abilities/registry';
+import { createDraftPanel } from './draft-panel';
 
 type GameplayHudActions = {
   undo: () => void;
   restart: () => void;
   releaseLast: () => void;
   bearOff: (sequence: Move[]) => void;
+  pickAbility: (abilityId: AbilityId, replaceInstanceId?: string) => boolean;
+  selectAbility: (instanceId: string) => boolean;
+  cancelAbility: () => void;
+  playRollAbility: (option: RollAbilityOption) => void;
+  playBeforeRollAbility: (target: AbilityTarget) => void;
   onChange: () => void;
 };
 
@@ -22,11 +30,17 @@ export function createGameplayHud(
   const message = document.querySelector<HTMLElement>('#game-message')!;
   const choices = document.querySelector<HTMLElement>('#move-choices')!;
   const next = document.querySelector<HTMLButtonElement>('#next-game')!;
+  const rulesetBadge = document.querySelector<HTMLElement>('#ruleset-badge')!;
   const panels = [
     document.querySelector<HTMLElement>('.player.red')!,
     document.querySelector<HTMLElement>('.player.ivory')!,
   ];
-  let rollShown: 'roll' | 'end' | null = null;
+  let rollShown: 'roll' | 'end' | 'ability-target' | 'ability-end' | null = null;
+  const draftPanel = createDraftPanel(controller, locked, {
+    pickAbility: actions.pickAbility,
+    selectAbility: actions.selectAbility,
+    cancelAbility: actions.cancelAbility,
+  });
 
   undo.addEventListener('click', actions.undo);
   next.addEventListener('click', actions.restart);
@@ -45,12 +59,27 @@ export function createGameplayHud(
       !mine ||
       !['WAITING_FOR_MOVE', 'TURN_COMPLETE'].includes(state.phase) ||
       !controller.canUndo;
-    const mode = ending ? 'end' : 'roll';
+    const selectedAbility = controller.selectedAbility;
+    const selectedTarget = controller.selectedAbilityTarget;
+    const mode = ending
+      ? selectedAbility
+        ? selectedTarget
+          ? 'ability-end'
+          : 'ability-target'
+        : 'end'
+      : 'roll';
     if (mode !== rollShown) {
       rollShown = mode;
       roll.classList.toggle('end-action', ending);
-      roll.innerHTML = ending ? 'END <span>→</span>' : 'ROLL <span>↗</span>';
+      roll.innerHTML = ending
+        ? selectedAbility
+          ? selectedTarget
+            ? 'USE &amp; END <span>→</span>'
+            : 'SELECT POINT <span>↗</span>'
+          : 'END <span>→</span>'
+        : 'ROLL <span>↗</span>';
     }
+    if (selectedAbility && !selectedTarget) roll.disabled = true;
     roll.setAttribute(
       'aria-label',
       ending ? 'End turn' : state.opening ? `Player ${state.active! + 1} opening roll` : 'Roll',
@@ -67,6 +96,94 @@ export function createGameplayHud(
       );
     });
     choices.replaceChildren();
+    if (selectedAbility && state.phase === 'TURN_COMPLETE') {
+      const copy = controller.variantConfig
+        ? describeConfiguredAbility(selectedAbility.abilityId, controller.variantConfig)
+        : null;
+      const status = document.createElement('span');
+      status.className = 'pickup-status';
+      status.textContent = selectedTarget
+        ? `${copy?.name ?? 'Ability'} targets ${describeTarget(selectedTarget)}`
+        : `Choose a highlighted point for ${copy?.name ?? 'this ability'}`;
+      const cancel = document.createElement('button');
+      cancel.textContent = 'Cancel ability';
+      cancel.onclick = actions.cancelAbility;
+      choices.append(status, cancel);
+    }
+    if (selectedAbility && state.phase === 'WAITING_FOR_ROLL') {
+      const copy = controller.variantConfig
+        ? describeConfiguredAbility(selectedAbility.abilityId, controller.variantConfig)
+        : null;
+      const status = document.createElement('span');
+      status.className = 'pickup-status';
+      status.textContent = `Choose an effect for ${copy?.name ?? 'this ability'}`;
+      choices.append(status);
+      for (const target of controller.abilityTargets()) {
+        if (target.type !== 'EFFECT') continue;
+        const effect = state.powerups?.activeEffects.find(
+          (candidate) => candidate.instanceId === target.instanceId,
+        );
+        if (!effect) continue;
+        const effectCopy = controller.variantConfig
+          ? describeConfiguredAbility(effect.abilityId, controller.variantConfig)
+          : null;
+        const button = document.createElement('button');
+        button.textContent = `Remove ${effectCopy?.name ?? effect.abilityId} · ${describeTarget(effect.target)}`;
+        button.onclick = () => actions.playBeforeRollAbility(target);
+        choices.append(button);
+      }
+      const cancel = document.createElement('button');
+      cancel.textContent = 'Cancel ability';
+      cancel.onclick = actions.cancelAbility;
+      choices.append(cancel);
+    }
+    if (selectedAbility && state.phase === 'WAITING_FOR_MOVE') {
+      const copy = controller.variantConfig
+        ? describeConfiguredAbility(selectedAbility.abilityId, controller.variantConfig)
+        : null;
+      const status = document.createElement('span');
+      status.className = 'pickup-status';
+      const directDieSelection = selectedAbility.abilityId === 'recast';
+      status.textContent = directDieSelection
+        ? 'Click the die you want to reroll'
+        : `Choose how to use ${copy?.name ?? 'this ability'}`;
+      choices.append(status);
+      for (const option of controller.rollAbilityOptions()) {
+        const before = state.roll[option.target.index];
+        const after =
+          selectedAbility.abilityId === 'nudge' || selectedAbility.abilityId === 'opportunist'
+            ? before +
+              (option.option === 'INCREASE' ? 1 : -1) *
+                (selectedAbility.abilityId === 'nudge'
+                  ? controller.variantConfig!.abilities.nudge.adjustment
+                  : controller.variantConfig!.abilities.opportunist.focusAdjustment)
+            : null;
+        const button = document.createElement('button');
+        if (directDieSelection) button.className = 'dice-choice-fallback';
+        button.textContent =
+          after === null
+            ? `Reroll die ${option.target.index + 1} · ${before}`
+            : `Die ${option.target.index + 1} · ${before} → ${after}`;
+        button.onclick = () => actions.playRollAbility(option);
+        choices.append(button);
+      }
+      const cancel = document.createElement('button');
+      cancel.textContent = 'Cancel ability';
+      cancel.onclick = actions.cancelAbility;
+      choices.append(cancel);
+    } else if (state.phase === 'WAITING_FOR_MOVE' && state.diceModifiers.length) {
+      const modified = document.createElement('span');
+      modified.className = 'pickup-status';
+      modified.textContent = state.diceModifiers
+        .map((modifier) => {
+          const name = controller.variantConfig
+            ? describeConfiguredAbility(modifier.abilityId, controller.variantConfig).name
+            : modifier.abilityId;
+          return `${name} die ${modifier.dieIndex + 1}: ${modifier.before} → ${modifier.after}`;
+        })
+        .join(' · ');
+      choices.append(modified);
+    }
     if (state.phase === 'WAITING_FOR_MOVE' && queue.length && !blocked) {
       const status = document.createElement('span');
       status.className = 'pickup-status';
@@ -85,10 +202,33 @@ export function createGameplayHud(
       }
     }
     next.hidden = state.phase !== 'GAME_OVER';
+    const config = controller.variantConfig;
+    rulesetBadge.hidden = !config;
+    rulesetBadge.textContent = config ? `Powerups · ${config.id} v${config.version}` : '';
+    rulesetBadge.title = config ? `Configuration ${config.hash}` : '';
+    draftPanel.render();
     canvas.dataset.phase = state.phase;
     canvas.dataset.active = String(state.active);
+    canvas.dataset.ruleset = state.ruleset;
+    canvas.dataset.variantConfig = state.variantConfigHash ?? '';
+    canvas.dataset.remaining = state.remaining.join(',');
     actions.onChange();
   }
 
   return { render };
+}
+
+function describeTarget(target: NonNullable<GameController['selectedAbilityTarget']>): string {
+  switch (target.type) {
+    case 'PLAYER':
+      return `Player ${target.player + 1}`;
+    case 'POINT':
+      return `point ${target.point + 1}`;
+    case 'CHECKER':
+      return `checker ${target.checker + 1}`;
+    case 'DIE':
+      return `die ${target.index + 1}`;
+    case 'EFFECT':
+      return `effect ${target.instanceId}`;
+  }
 }

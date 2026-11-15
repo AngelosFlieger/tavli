@@ -140,7 +140,7 @@ test('landing on a singleton pins without hitting; pinned point blocks its owner
   );
   assert.equal(q.off[1].length, 0);
 });
-test('move presentation marks only a fresh enemy singleton landing as a pin', () => {
+test('move presentation marks only a final fresh enemy singleton landing as a pin', () => {
   const p = empty();
   p.board[1] = [0];
   p.board[3] = [15];
@@ -151,9 +151,15 @@ test('move presentation marks only a fresh enemy singleton landing as a pin', ()
   ]);
   assert.deepEqual(
     stages.map((stage) => stage.pinPoint),
-    [3, null],
+    [null, null],
   );
   assert.deepEqual(p.board[3], [15]);
+
+  const finalPin = prepareAnimationStages(p, 0, [{ from: 1, to: 3, die: 2 }]);
+  assert.deepEqual(
+    finalPin.map((stage) => stage.pinPoint),
+    [3],
+  );
 });
 test('multiple controllers maintain the pin until the last leaves', () => {
   const p = empty();
