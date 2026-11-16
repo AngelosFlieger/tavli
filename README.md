@@ -32,13 +32,13 @@ Development builds also show local balance-playtest controls. Leave the seed bla
 
 Stop `npm run dev` before `npm start`. Both want port 3000.
 
-Accounts, login sessions, and live matches are stored in MongoDB. The game uses `mongodb://127.0.0.1:27017` and the `plakoto` database. In Compass, connect to that address and open `plakoto`. The collections are `users`, `sessions`, `matches`, `playing`, and `queue`. Start the local MongoDB server before `npm run dev`. More than one game process can share that database; give each a different `PORT`.
+Accounts, login sessions, and live matches are stored in MongoDB. The game uses `mongodb://127.0.0.1:27017` and the `plakoto` database. In Compass, connect to that address and open `plakoto`. The collections are `users`, `sessions`, `matches`, `playing`, and `queue`. Start the local MongoDB server before `npm run dev`. Run one game server per database; the server owns live authoritative sessions and clears stale queue entries when it starts.
 
 ## Multiplayer
 
 The page asks you to create an account or sign in before the menu. Email and username both have to be unique. The browser keeps an HttpOnly cookie for 30 days, so a later visit skips the form. Sign out is in Settings.
 
-Choose Classic or Powerups, then click Multiplayer to wait. The next person searching for the same ruleset and balance profile joins you; Classic and Powerups players never share a queue. The first person plays crimson and takes the first opening roll; the higher opening total decides who takes the first turn. The server rolls the dice, drafts, and ability randomness and checks every move; the browsers show the authoritative result. Use Cancel to stop searching. A dropped connection can resume for 45 seconds. Finished games stay in the database with the final position and the winner.
+Choose Classic or Powerups, then click Multiplayer to wait. The next person searching for the same ruleset and balance profile joins you; Classic and Powerups players never share a queue. The first person plays crimson and takes the first opening roll; the higher opening total decides who takes the first turn. The server rolls the dice, drafts, and ability randomness and checks every move; the browsers show the authoritative result. Use Cancel to stop searching. A dropped connection can resume for 45 seconds; a paired opponent who never connects loses after 20 seconds. Either player can Resign, and a finished game offers a rematch only after both players accept. A completed game stays in the database with its final position, winner, and result kind.
 
 To share the game running on this Mac, leave `npm run dev` or `npm start` going and start a tunnel:
 

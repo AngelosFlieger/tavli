@@ -19,6 +19,7 @@ export type GameplayHooks = {
   onMove: (sequence: Move[]) => void;
   onUndo: () => void;
   onRestart: () => void;
+  onForfeit: () => void;
   onRollAbility: (option: RollAbilityOption) => void;
   onBeforeRollAbility: (target: AbilityTarget) => void;
 };
@@ -172,6 +173,7 @@ export async function createGameplay(
   const hud = createGameplayHud(canvas, controller, locked, {
     undo: hooks.onUndo,
     restart: hooks.onRestart,
+    forfeit: hooks.onForfeit,
     releaseLast() {
       controller.releaseLastPickup();
       refresh(false);

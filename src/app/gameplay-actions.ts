@@ -51,6 +51,10 @@ export function createGameplayActions(
       dice.reset();
       scene.refresh();
     },
+    forfeit() {
+      if (!controller.forfeit(setupLocked())) return;
+      scene.refresh(false);
+    },
     canRestart: () => controller.canRestart(setupLocked()),
     beginRoll() {
       const accepted = controller.beginRoll(setupLocked());

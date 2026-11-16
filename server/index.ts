@@ -6,7 +6,14 @@ import { networkInterfaces } from 'node:os';
 import { extname, join, normalize, sep } from 'node:path';
 import { WebSocket, WebSocketServer, type WebSocket as Socket } from 'ws';
 import type { PlayerId } from '../src/net/lobby';
-import { isCommand, isMatchSelection, type ServerMessage } from '../src/net/messages';
+import {
+  isCommand,
+  isHello,
+  isMatchSelection,
+  isProtocolCompatible,
+  PROTOCOL_VERSION,
+  type ServerMessage,
+} from '../src/net/messages';
 import { createAccounts } from './accounts';
 import { handleAuth, sessionToken } from './routes';
 import { openStore } from './store';
@@ -32,6 +39,7 @@ const tables = createTables(
   () => Date.now(),
   authorityRandomInt,
 );
+await tables.start();
 const sockets = new Map<PlayerId, Socket>();
 const owners = new Map<Socket, PlayerId>();
 const replaced = new WeakSet<Socket>();
@@ -64,7 +72,7 @@ async function attach(socket: Socket, request: IncomingMessage) {
   const token = sessionToken(request.headers.cookie);
   const user = token ? await accounts.authenticate(token) : null;
   if (!user) {
-    sendSocket(socket, { type: 'rejected' });
+    sendSocket(socket, { type: 'rejected', reason: 'AUTH' });
     socket.close();
     return;
   }
@@ -75,14 +83,43 @@ async function attach(socket: Socket, request: IncomingMessage) {
   }
   sockets.set(user.id, socket);
   owners.set(socket, user.id);
-  const resumed = await tables.connect(user.id);
-  if (resumed.length === 0) send(user.id, { type: 'ready', name: user.username });
-  else deliver(resumed);
+  let ready = false;
+  const handshakeTimer = setTimeout(() => {
+    if (!ready) socket.close();
+  }, 10_000);
+  handshakeTimer.unref();
 
   socket.on('message', (data) => {
-    void handleCommand(socket, data);
+    void (async () => {
+      if (ready) {
+        await handleCommand(socket, data);
+        return;
+      }
+      const message = parse(data);
+      if (!isHello(message)) {
+        sendSocket(socket, { type: 'rejected', reason: 'PROTOCOL' });
+        socket.close();
+        return;
+      }
+      if (!isProtocolCompatible(message.protocol)) {
+        sendSocket(socket, { type: 'rejected', reason: 'PROTOCOL' });
+        socket.close();
+        return;
+      }
+      ready = true;
+      clearTimeout(handshakeTimer);
+      const resumed = await tables.connect(user.id);
+      if (resumed.length === 0)
+        send(user.id, { type: 'ready', protocol: PROTOCOL_VERSION, name: user.username });
+      else deliver(resumed);
+    })().catch((error: unknown) => {
+      console.error(error);
+      send(user.id, { type: 'error', code: 'INTERNAL' });
+    });
   });
+  socket.on('error', () => {});
   socket.on('close', () => {
+    clearTimeout(handshakeTimer);
     if (replaced.has(socket)) return;
     const userId = owners.get(socket);
     owners.delete(socket);
@@ -97,18 +134,29 @@ async function handleCommand(socket: Socket, data: unknown) {
   if (!message || typeof message !== 'object' || !('type' in message)) return;
   const userId = owners.get(socket);
   if (!userId) return;
-  if (message.type === 'find') {
-    if (!('selection' in message) || !isMatchSelection(message.selection)) return;
-    deliver(await tables.find(userId, message.selection));
-    return;
+  try {
+    if (message.type === 'find') {
+      if (!('selection' in message) || !isMatchSelection(message.selection)) {
+        send(userId, { type: 'error', code: 'INVALID_COMMAND' });
+        return;
+      }
+      deliver(await tables.find(userId, message.selection));
+      return;
+    }
+    if (message.type === 'cancel') {
+      deliver(await tables.cancel(userId));
+      return;
+    }
+    const command = isCommand(message) ? message : null;
+    if (!command) {
+      send(userId, { type: 'error', code: 'INVALID_COMMAND' });
+      return;
+    }
+    deliver(await tables.act(userId, command));
+  } catch (error) {
+    console.error(error);
+    send(userId, { type: 'error', code: 'INTERNAL' });
   }
-  if (message.type === 'cancel') {
-    deliver(await tables.cancel(userId));
-    return;
-  }
-  const command = isCommand(message) ? message : null;
-  if (!command) return;
-  deliver(await tables.act(userId, command));
 }
 
 http.listen(port, '0.0.0.0', () => {
@@ -128,6 +176,16 @@ const syncTimer = setInterval(() => {
     });
 }, 250);
 syncTimer.unref();
+
+async function shutdown() {
+  clearInterval(syncTimer);
+  wss.close();
+  http.close();
+  await store.close();
+  process.exit(0);
+}
+process.once('SIGINT', () => void shutdown());
+process.once('SIGTERM', () => void shutdown());
 
 async function route(request: IncomingMessage, response: ServerResponse) {
   if (await handleAuth(request, response, accounts)) return;

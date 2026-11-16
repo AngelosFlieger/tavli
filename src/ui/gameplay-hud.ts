@@ -13,6 +13,7 @@ import { createDraftPanel } from './draft-panel';
 type GameplayHudActions = {
   undo: () => void;
   restart: () => void;
+  forfeit: () => void;
   releaseLast: () => void;
   bearOff: (sequence: Move[]) => void;
   pickAbility: (abilityId: AbilityId, replaceInstanceId?: string) => boolean;
@@ -35,6 +36,7 @@ export function createGameplayHud(
   const message = document.querySelector<HTMLElement>('#game-message')!;
   const choices = document.querySelector<HTMLElement>('#move-choices')!;
   const next = document.querySelector<HTMLButtonElement>('#next-game')!;
+  const forfeit = document.querySelector<HTMLButtonElement>('#forfeit');
   const rulesetBadge = document.querySelector<HTMLElement>('#ruleset-badge')!;
   const panels = [
     document.querySelector<HTMLElement>('.player.red')!,
@@ -49,6 +51,7 @@ export function createGameplayHud(
 
   undo.addEventListener('click', actions.undo);
   next.addEventListener('click', actions.restart);
+  forfeit?.addEventListener('click', actions.forfeit);
 
   function render({ queue, sequences }: PickupView) {
     const state = controller.state;
@@ -201,6 +204,10 @@ export function createGameplayHud(
       }
     }
     next.hidden = state.phase !== 'GAME_OVER';
+    if (forfeit) {
+      forfeit.hidden = !controller.scripted || state.phase === 'GAME_OVER';
+      forfeit.disabled = blocked;
+    }
     const config = controller.variantConfig;
     rulesetBadge.hidden = !config;
     rulesetBadge.textContent = config ? `Powerups · ${config.id} v${config.version}` : '';

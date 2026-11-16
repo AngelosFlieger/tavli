@@ -74,6 +74,7 @@ async function start() {
       onMove: (sequence) => actions.move(sequence),
       onUndo: () => actions.undo(),
       onRestart: () => actions.restart(),
+      onForfeit: () => actions.forfeit(),
       onRollAbility: (option) => actions.playRollAbility(option),
       onBeforeRollAbility: (target) => actions.playBeforeRollAbility(target),
     },
