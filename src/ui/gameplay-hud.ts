@@ -9,6 +9,7 @@ import {
   usesDirectDieSelection,
 } from './abilities/presenters';
 import { createDraftPanel } from './draft-panel';
+import { formatClock } from '../game/clock';
 
 type GameplayHudActions = {
   undo: () => void;
@@ -34,6 +35,7 @@ export function createGameplayHud(
   const roll = document.querySelector<HTMLButtonElement>('#roll')!;
   const undo = document.querySelector<HTMLButtonElement>('#undo')!;
   const message = document.querySelector<HTMLElement>('#game-message')!;
+  const clock = document.querySelector<HTMLOutputElement>('#game-clock');
   const choices = document.querySelector<HTMLElement>('#move-choices')!;
   const next = document.querySelector<HTMLButtonElement>('#next-game')!;
   const forfeit = document.querySelector<HTMLButtonElement>('#forfeit');
@@ -52,6 +54,16 @@ export function createGameplayHud(
   undo.addEventListener('click', actions.undo);
   next.addEventListener('click', actions.restart);
   forfeit?.addEventListener('click', actions.forfeit);
+  const clockTimer = setInterval(() => {
+    if (!clock) return;
+    const stateClock = controller.state.clock;
+    clock.hidden = !stateClock;
+    if (stateClock) {
+      clock.textContent = formatClock(stateClock, Date.now());
+      clock.classList.toggle('is-low', formatClock(stateClock, Date.now()).startsWith('0:'));
+    }
+  }, 250);
+  void clockTimer;
 
   function render({ queue, sequences }: PickupView) {
     const state = controller.state;

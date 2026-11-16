@@ -14,6 +14,14 @@ import { generateMovementRoll } from '../game/variant/passives/policy';
 import { rulesForState } from '../game/variant/rules-context';
 import type { RulesContext } from '../game/variant/types';
 import { isCommand, type Command, type Update } from './messages';
+import {
+  advanceClock,
+  DISABLED_CLOCK,
+  pauseClock,
+  resumeClock,
+  startClock,
+  type ClockConfig,
+} from '../game/clock';
 
 export type PlayerId = string;
 export type ActResult = { to: PlayerId[]; update: Update };
@@ -29,6 +37,8 @@ export function createLobby(
   rollDie: () => number,
   randomInt: (maximum: number) => number = (maximum) =>
     Math.min(maximum - 1, Math.floor(((rollDie() - 1) / 6) * maximum)),
+  clockConfig: ClockConfig = DISABLED_CLOCK,
+  now: () => number = () => Date.now(),
 ) {
   const seats = new Map<PlayerId, Seat>();
 
@@ -73,7 +83,17 @@ export function createLobby(
       session.state.variantConfigHash !== (rules.variantConfig?.hash ?? null)
     )
       return false;
-    const match = new Match(first, second, rollDie, randomInt, rules, session, id);
+    const match = new Match(
+      first,
+      second,
+      rollDie,
+      randomInt,
+      rules,
+      session,
+      id,
+      clockConfig,
+      now,
+    );
     seats.set(first, { match, player: 0 });
     seats.set(second, { match, player: 1 });
     return true;
@@ -85,7 +105,17 @@ export function createLobby(
     return found.match.end(outcome);
   }
 
-  return { leave, act, end, seat, snapshot, restore };
+  function pause(id: PlayerId): void {
+    const found = seats.get(id);
+    if (found) found.match.pauseClock(now());
+  }
+
+  function resume(id: PlayerId): void {
+    const found = seats.get(id);
+    if (found) found.match.resumeClock(now());
+  }
+
+  return { leave, act, end, pause, resume, seat, snapshot, restore };
 }
 
 class Match {
@@ -100,9 +130,21 @@ class Match {
     private rules: RulesContext,
     session: Session = initialPresentedSession(rules),
     readonly id: string = crypto.randomUUID(),
+    private clockConfig: ClockConfig = DISABLED_CLOCK,
+    private now: () => number = () => Date.now(),
   ) {
     this.ids = [first, second];
     this.session = structuredClone(session);
+    if (this.session.state.clock === null && this.session.state.phase !== 'GAME_OVER')
+      this.session.state.clock = startClock(clockConfig, this.session.state.phase, this.now());
+  }
+
+  pauseClock(now = this.now()): void {
+    this.session.state.clock = pauseClock(this.session.state.clock, now);
+  }
+
+  resumeClock(now = this.now()): void {
+    this.session.state.clock = resumeClock(this.session.state.clock, now);
   }
 
   exportSession(): Session {
@@ -125,6 +167,7 @@ class Match {
         phase: 'GAME_OVER',
         outcome: structuredClone(outcome),
         message: sessionMessage(this.session.state, events) ?? outcome.reason,
+        clock: null,
       },
       history: [],
     };
@@ -143,9 +186,17 @@ class Match {
   }
 
   private apply(command: SessionCommand): SessionEvent[] | null {
+    const previous = this.session.state.phase;
     const result = this.resolve(command);
     if (!result) return null;
     this.session = result.session;
+    this.session.state.clock = advanceClock(
+      this.session.state.clock,
+      previous,
+      this.session.state.phase,
+      this.clockConfig,
+      this.now(),
+    );
     return result.events;
   }
 
