@@ -1,5 +1,5 @@
 import type { GameState, Player } from '../game/engine';
-import type { Command, Update } from '../net/messages';
+import type { ClientErrorCode, Command, Update } from '../net/messages';
 import { CLASSIC_SELECTION, type MatchSelection } from '../net/messages';
 import type { GameController } from './game-controller';
 import { rulesForSelection } from '../game/variant/rules-context';
@@ -19,6 +19,8 @@ export type MatchEvents = {
   onWaiting: () => void;
   onMatched: (you: Player, state: GameState, variantConfig: ResolvedVariantConfig | null) => void;
   onUpdate: (update: Update) => void;
+  onError: (code: ClientErrorCode) => void;
+  onRematch: (status: 'OFFERED' | 'DECLINED') => void;
   onLeft: () => void;
   onClose: () => void;
 };
@@ -51,6 +53,18 @@ export type MatchUi = {
   enterTable: () => void;
   showTitle: () => void;
   signedOut: () => void;
+};
+
+const errorCopy: Record<ClientErrorCode, string> = {
+  PROTOCOL: 'This client and server use different protocol versions. Reload to update.',
+  AUTH: 'Sign in again to play online.',
+  NOT_FOUND: 'That match is no longer available.',
+  NOT_YOUR_TURN: 'Wait for your turn.',
+  MATCH_ENDED: 'This match has ended.',
+  MATCH_NOT_FINISHED: 'Finish the current game before starting a rematch.',
+  WAITING_FOR_OPPONENT: 'Waiting for the other player to accept.',
+  INVALID_COMMAND: 'That move is not available.',
+  INTERNAL: 'The game server hit an error. Try again.',
 };
 
 /** Owns search, match, and disconnect sequencing behind transport and UI ports. */
@@ -114,6 +128,16 @@ export function createMatchSession(
     },
     onUpdate(update) {
       flow.receive(update);
+    },
+    onError(code) {
+      ui.showNote(errorCopy[code]);
+    },
+    onRematch(status) {
+      ui.showNote(
+        status === 'OFFERED'
+          ? 'Your opponent wants a rematch. Press New game to accept.'
+          : 'The rematch offer was declined.',
+      );
     },
     onLeft() {
       searching = false;

@@ -37,6 +37,7 @@ type ControllerOperation =
   | { type: 'MOVE'; authority: 'LOCAL' | 'ONLINE' }
   | { type: 'DRAFT_PICK' }
   | { type: 'END_TURN' }
+  | { type: 'FORFEIT' }
   | { type: 'ABILITY'; completion: 'ONLINE_UPDATE' | 'LOCAL_DICE_PRESENTATION' }
   | { type: 'REMOTE_MOVE'; result: RemoteState };
 
@@ -494,7 +495,14 @@ export class GameController {
   }
 
   canRestart(locked = false): boolean {
-    return !locked && !this.busy;
+    if (locked || this.busy) return false;
+    return !this.online || this.state.phase === 'GAME_OVER';
+  }
+
+  forfeit(locked = false): boolean {
+    if (locked || this.busy || !this.online || this.state.phase === 'GAME_OVER') return false;
+    this.sendOnline({ type: 'forfeit' }, { type: 'FORFEIT' });
+    return true;
   }
 
   restart(locked = false): 'local' | 'sent' | null {

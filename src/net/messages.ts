@@ -13,16 +13,31 @@ export type MatchSelection = VariantRulesSelection;
 
 export const CLASSIC_SELECTION: MatchSelection = Object.freeze({ ruleset: 'CLASSIC' });
 
+export const PROTOCOL_VERSION = 1;
+
+export type ClientErrorCode =
+  | 'PROTOCOL'
+  | 'AUTH'
+  | 'NOT_FOUND'
+  | 'NOT_YOUR_TURN'
+  | 'MATCH_ENDED'
+  | 'MATCH_NOT_FINISHED'
+  | 'WAITING_FOR_OPPONENT'
+  | 'INVALID_COMMAND'
+  | 'INTERNAL';
+
 export type Command =
   | { type: 'roll' }
   | { type: 'move'; sequence: Move[] }
   | { type: 'undo' }
   | { type: 'end'; ability?: AbilityActivation }
   | { type: 'restart' }
+  | { type: 'forfeit' }
   | { type: 'playAbility'; activation: AbilityActivation }
   | { type: 'pickAbility'; abilityId: AbilityId; replaceInstanceId?: string };
 
 export type ClientPacket =
+  | { type: 'hello'; protocol: number }
   | { type: 'find'; selection: MatchSelection }
   | { type: 'cancel' }
   | Command;
@@ -38,8 +53,9 @@ export type Update = {
 };
 
 export type ServerMessage =
-  | { type: 'ready'; name: string }
-  | { type: 'rejected' }
+  | { type: 'ready'; protocol: number; name: string }
+  | { type: 'rejected'; reason?: 'AUTH' | 'PROTOCOL' }
+  | { type: 'error'; code: ClientErrorCode }
   | { type: 'waiting' }
   | {
       type: 'matched';
@@ -55,7 +71,18 @@ export type ServerMessage =
       variantConfig: ResolvedVariantConfig | null;
     }
   | ({ type: 'update' } & Update)
+  | { type: 'rematch'; status: 'OFFERED' | 'DECLINED' }
   | { type: 'left' };
+
+export function isHello(value: unknown): value is { type: 'hello'; protocol: number } {
+  if (!value || typeof value !== 'object') return false;
+  const message = value as { type?: unknown; protocol?: unknown };
+  return message.type === 'hello' && Number.isInteger(message.protocol);
+}
+
+export function isProtocolCompatible(value: number): boolean {
+  return value === PROTOCOL_VERSION;
+}
 
 export function isCommand(value: unknown): value is Command {
   if (!value || typeof value !== 'object') return false;
@@ -68,6 +95,7 @@ export function isCommand(value: unknown): value is Command {
     activation?: unknown;
   };
   if (message.type === 'roll' || message.type === 'undo' || message.type === 'restart') return true;
+  if (message.type === 'forfeit') return true;
   if (message.type === 'end')
     return message.ability === undefined || isAbilityActivation(message.ability);
   if (message.type === 'playAbility') return isAbilityActivation(message.activation);

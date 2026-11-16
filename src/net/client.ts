@@ -1,6 +1,8 @@
 import { socketUrl } from './account';
 import {
   CLASSIC_SELECTION,
+  PROTOCOL_VERSION,
+  type ClientErrorCode,
   type ClientPacket,
   type MatchSelection,
   type ServerMessage,
@@ -22,6 +24,8 @@ export type TableEvents = {
   onWaiting: () => void;
   onMatched: (you: Player, state: GameState, variantConfig: ResolvedVariantConfig | null) => void;
   onUpdate: (update: Update) => void;
+  onError: (code: ClientErrorCode) => void;
+  onRematch: (status: 'OFFERED' | 'DECLINED') => void;
   onLeft: () => void;
   onClose: () => void;
 };
@@ -48,7 +52,7 @@ export function connectTable(events: TableEvents) {
     currentSocket = socket;
     socket.onopen = () => {
       if (socket !== currentSocket) return;
-      flush();
+      socket.send(JSON.stringify({ type: 'hello', protocol: PROTOCOL_VERSION }));
     };
     socket.onmessage = (event) => {
       if (socket !== currentSocket) return;
@@ -60,7 +64,17 @@ export function connectTable(events: TableEvents) {
         socket.close();
         return;
       }
+      if (message.type === 'error') {
+        events.onError(message.code);
+        return;
+      }
       if (message.type === 'ready') {
+        if (message.protocol !== PROTOCOL_VERSION) {
+          intentional = true;
+          events.onError('PROTOCOL');
+          socket.close();
+          return;
+        }
         authed = true;
         retry = 0;
         flush();
@@ -79,15 +93,23 @@ export function connectTable(events: TableEvents) {
         );
         return;
       }
-      if (message.type === 'waiting') events.onWaiting();
-      else if (
+      if (message.type === 'waiting') {
+        authed = true;
+        retry = 0;
+        flush();
+        events.onWaiting();
+      } else if (
         message.type === 'matched' &&
         (message.you === 0 || message.you === 1) &&
         message.state
       )
         events.onMatched(message.you, message.state, message.variantConfig);
       else if (message.type === 'update' && message.state) events.onUpdate(message);
+      else if (message.type === 'rematch') events.onRematch(message.status);
       else if (message.type === 'left') events.onLeft();
+    };
+    socket.onerror = () => {
+      if (socket === currentSocket) events.onError('INTERNAL');
     };
     socket.onclose = () => {
       if (socket !== currentSocket) return;
@@ -147,10 +169,12 @@ function parse(data: unknown): ServerMessage | null {
       message &&
       (message.type === 'ready' ||
         message.type === 'rejected' ||
+        message.type === 'error' ||
         message.type === 'waiting' ||
         message.type === 'matched' ||
         message.type === 'resume' ||
         message.type === 'update' ||
+        message.type === 'rematch' ||
         message.type === 'left')
     )
       return message;

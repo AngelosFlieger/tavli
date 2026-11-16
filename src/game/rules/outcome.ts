@@ -9,19 +9,22 @@ export function outcome(position: Position): Outcome | null {
     );
   });
   if (motherPinned[0] && motherPinned[1])
-    return { winner: null, points: 0, reason: 'Both mothers pinned — draw' };
+    return { winner: null, points: 0, reason: 'Both mothers pinned — draw', kind: 'DRAW' };
   for (const player of [0, 1] as Player[]) {
     if (
       motherPinned[other(player)] &&
       !position.board[PATHS[player][0]].some((id) => owner(id) === player)
     )
-      return { winner: player, points: 2, reason: 'Mother victory' };
-    if (position.off[player].length === 15)
+      return { winner: player, points: 2, reason: 'Mother victory', kind: 'MOTHER_VICTORY' };
+    if (position.off[player].length === 15) {
+      const mars = position.off[other(player)].length === 0;
       return {
         winner: player,
-        points: position.off[other(player)].length ? 1 : 2,
-        reason: position.off[other(player)].length ? 'All checkers borne off' : 'Mars',
+        points: mars ? 2 : 1,
+        reason: mars ? 'Mars' : 'All checkers borne off',
+        kind: mars ? 'MARS' : 'BEAR_OFF',
       };
+    }
   }
   return null;
 }

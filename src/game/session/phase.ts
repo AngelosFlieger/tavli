@@ -7,6 +7,20 @@ export type Phase =
   | 'DRAFT_PICK'
   | 'GAME_OVER';
 
+export const PHASES: readonly Phase[] = [
+  'OPENING_ROLL',
+  'WAITING_FOR_ROLL',
+  'WAITING_FOR_MOVE',
+  'TURN_COMPLETE',
+  'DRAFT_ORDER',
+  'DRAFT_PICK',
+  'GAME_OVER',
+];
+
+export function isPhase(value: unknown): value is Phase {
+  return typeof value === 'string' && PHASES.includes(value as Phase);
+}
+
 export type PhaseAction =
   | 'beginRoll'
   | 'needOpeningRoll'

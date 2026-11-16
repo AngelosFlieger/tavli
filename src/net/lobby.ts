@@ -1,4 +1,5 @@
 import type { Player } from '../game/rules/position';
+import type { Outcome } from '../game/rules/position';
 import { initialPresentedSession, sessionMessage } from '../game/session/messages';
 import type { GameState, Session } from '../game/session/state';
 import {
@@ -78,7 +79,13 @@ export function createLobby(
     return true;
   }
 
-  return { leave, act, seat, snapshot, restore };
+  function end(id: PlayerId, outcome: Outcome): Update | null {
+    const found = seats.get(id);
+    if (!found) return null;
+    return found.match.end(outcome);
+  }
+
+  return { leave, act, end, seat, snapshot, restore };
 }
 
 class Match {
@@ -108,6 +115,20 @@ class Match {
       canUndo: this.session.history.length > 0,
       ...(events?.length ? { events: structuredClone(events) } : {}),
     };
+  }
+
+  end(outcome: Outcome): Update {
+    const events: SessionEvent[] = [{ type: 'GameEnded', outcome }];
+    this.session = {
+      state: {
+        ...structuredClone(this.session.state),
+        phase: 'GAME_OVER',
+        outcome: structuredClone(outcome),
+        message: sessionMessage(this.session.state, events) ?? outcome.reason,
+      },
+      history: [],
+    };
+    return this.view(events);
   }
 
   private resolve(
@@ -145,6 +166,7 @@ class Match {
       return events ? { to: [...this.ids], update: this.view(events) } : rejected();
     }
     if (player !== this.session.state.active) return rejected();
+    if (command.type === 'forfeit') return rejected();
     if (command.type === 'playAbility') {
       if (!this.rules.variantConfig) return rejected();
       if (this.session.state.phase === 'WAITING_FOR_ROLL') {

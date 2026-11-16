@@ -173,7 +173,12 @@ test('multiple controllers maintain the pin until the last leaves', () => {
 test('mother pin wins two points when own starting checkers have departed', () => {
   const p = empty();
   p.board[12] = [15, 0];
-  assert.deepEqual(outcome(p), { winner: 0, points: 2, reason: 'Mother victory' });
+  assert.deepEqual(outcome(p), {
+    winner: 0,
+    points: 2,
+    reason: 'Mother victory',
+    kind: 'MOTHER_VICTORY',
+  });
 });
 test('mother exception continues until own start empties, both pinned is a draw', () => {
   const p = empty();
@@ -181,7 +186,12 @@ test('mother exception continues until own start empties, both pinned is a draw'
   p.board[0] = [1];
   assert.equal(outcome(p), null);
   p.board[0] = [1, 16];
-  assert.deepEqual(outcome(p), { winner: null, points: 0, reason: 'Both mothers pinned — draw' });
+  assert.deepEqual(outcome(p), {
+    winner: null,
+    points: 0,
+    reason: 'Both mothers pinned — draw',
+    kind: 'DRAW',
+  });
 });
 test('bearing off requires all remaining checkers home and none pinned', () => {
   const p = empty();
