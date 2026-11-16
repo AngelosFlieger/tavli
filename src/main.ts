@@ -12,6 +12,7 @@ import {
   initShell,
   setSearching,
   showNote,
+  showRoom,
   showTitle,
   syncShell,
   type Session,
@@ -43,6 +44,8 @@ const session: Session = {
   canNewGame: () => false,
   onLocal() {},
   onMultiplayer() {},
+  onCreateRoom() {},
+  onJoinRoom() {},
   onSignOut() {},
   playtestReport: () => null,
 };
@@ -180,6 +183,7 @@ async function start() {
     {
       setSearching,
       showNote,
+      showRoom,
       showTitle,
       enterTable,
       signedOut() {
@@ -207,6 +211,16 @@ async function start() {
     historyMode = 'ONLINE';
     playtest.clear();
     match.toggleSearch(selection);
+  };
+  session.onCreateRoom = (selection) => {
+    historyMode = 'ONLINE';
+    playtest.clear();
+    match.createRoom(selection);
+  };
+  session.onJoinRoom = (code) => {
+    historyMode = 'ONLINE';
+    playtest.clear();
+    match.joinRoom(code);
   };
   session.playtestReport = () => playtest.snapshot();
   session.onSignOut = () => {

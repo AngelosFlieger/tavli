@@ -24,6 +24,9 @@ export type ClientErrorCode =
   | 'MATCH_NOT_FINISHED'
   | 'WAITING_FOR_OPPONENT'
   | 'INVALID_COMMAND'
+  | 'ROOM_NOT_FOUND'
+  | 'ROOM_OWNED'
+  | 'ROOM_CLOSED'
   | 'INTERNAL';
 
 export type Command =
@@ -39,6 +42,8 @@ export type Command =
 export type ClientPacket =
   | { type: 'hello'; protocol: number }
   | { type: 'find'; selection: MatchSelection }
+  | { type: 'createRoom'; selection: MatchSelection }
+  | { type: 'joinRoom'; code: string }
   | { type: 'cancel' }
   | Command;
 
@@ -57,6 +62,7 @@ export type ServerMessage =
   | { type: 'rejected'; reason?: 'AUTH' | 'PROTOCOL' }
   | { type: 'error'; code: ClientErrorCode }
   | { type: 'waiting' }
+  | { type: 'room'; code: string }
   | {
       type: 'matched';
       you: Player;

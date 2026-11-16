@@ -18,6 +18,7 @@ export type MatchEvents = {
   onRejected: () => void;
   onReconnect: () => void;
   onWaiting: () => void;
+  onRoom: (code: string) => void;
   onMatched: (you: Player, state: GameState, variantConfig: ResolvedVariantConfig | null) => void;
   onUpdate: (update: Update) => void;
   onError: (code: ClientErrorCode) => void;
@@ -29,6 +30,8 @@ export type MatchEvents = {
 export type MatchTransport = {
   connect: () => void;
   find: (selection?: MatchSelection) => void;
+  createRoom: (selection?: MatchSelection) => void;
+  joinRoom: (code: string) => void;
   cancel: () => void;
   send: (command: Command) => void;
   abandon: () => void;
@@ -51,6 +54,7 @@ export type MatchScene = { startSetup: () => void };
 export type MatchUi = {
   setSearching: (searching: boolean) => void;
   showNote: (message: string | null) => void;
+  showRoom: (code: string) => void;
   enterTable: () => void;
   showTitle: () => void;
   signedOut: () => void;
@@ -101,6 +105,9 @@ export function createMatchSession(
     onWaiting() {
       if (!searching) return;
       ui.setSearching(true);
+    },
+    onRoom(code) {
+      ui.showRoom(code);
     },
     onMatched(you, state, variantConfig) {
       if (!searching) {
@@ -185,6 +192,16 @@ export function createMatchSession(
       searching = true;
       ui.showNote(null);
       table.find(selection);
+    },
+    createRoom(selection: MatchSelection = CLASSIC_SELECTION) {
+      searching = true;
+      ui.showNote(null);
+      table.createRoom(selection);
+    },
+    joinRoom(code: string) {
+      searching = true;
+      ui.showNote(null);
+      table.joinRoom(code);
     },
   };
 }

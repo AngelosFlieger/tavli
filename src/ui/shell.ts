@@ -28,6 +28,8 @@ export type Session = {
   canNewGame: () => boolean;
   onLocal: (selection: MatchSelection, seed?: number) => void;
   onMultiplayer: (selection: MatchSelection) => void;
+  onCreateRoom: (selection: MatchSelection) => void;
+  onJoinRoom: (code: string) => void;
   onSignOut: () => void;
   playtestReport: () => PlaytestReport | null;
 };
@@ -113,6 +115,36 @@ export function initShell(next: Session) {
     multiplayerButton.classList.remove('mode-pressed'),
   );
 
+  roomButton = document.querySelector<HTMLButtonElement>('#start-room')!;
+  roomPanel = document.querySelector<HTMLElement>('#room-panel')!;
+  roomCreate = document.querySelector<HTMLButtonElement>('#room-create')!;
+  roomJoin = document.querySelector<HTMLButtonElement>('#room-join')!;
+  roomCode = document.querySelector<HTMLInputElement>('#room-code')!;
+  roomStatus = document.querySelector<HTMLElement>('#room-status')!;
+  roomCancel = document.querySelector<HTMLButtonElement>('#room-cancel')!;
+  roomButton.addEventListener('click', () => {
+    roomPanel.hidden = !roomPanel.hidden;
+  });
+  roomCreate.addEventListener('click', () => {
+    roomPanel.hidden = true;
+    session.onCreateRoom(selectedMatch());
+  });
+  roomJoin.addEventListener('click', () => {
+    const code = roomCode.value.trim().toUpperCase();
+    if (!code) return;
+    roomPanel.hidden = true;
+    session.onJoinRoom(code);
+  });
+  roomCode.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') roomJoin.click();
+  });
+  roomCancel.addEventListener('click', () => {
+    roomStatus.hidden = true;
+    roomCancel.hidden = true;
+    roomPanel.hidden = true;
+    session.onMultiplayer(selectedMatch());
+  });
+
   document.querySelector('#waiting-cancel')!.addEventListener('click', () => {
     if (searching) session.onMultiplayer(selectedMatch());
   });
@@ -136,6 +168,13 @@ let startScreen: HTMLElement;
 let rulesetPicker: HTMLFieldSetElement;
 let rulesetInputs: HTMLInputElement[];
 let waitingRuleset: HTMLElement;
+let roomButton: HTMLButtonElement;
+let roomPanel: HTMLElement;
+let roomCreate: HTMLButtonElement;
+let roomJoin: HTMLButtonElement;
+let roomCode: HTMLInputElement;
+let roomStatus: HTMLElement;
+let roomCancel: HTMLButtonElement;
 let playtestProfile: HTMLSelectElement | null = null;
 let playtestSeed: HTMLInputElement | null = null;
 let playEnabled = false;
@@ -145,6 +184,7 @@ export function enterTable() {
   document.body.classList.remove('on-title', 'is-waiting');
   document.querySelector<HTMLElement>('#waiting-screen')!.hidden = true;
   startScreen.hidden = true;
+  roomPanel.hidden = true;
   window.dispatchEvent(new Event('resize'));
   document.querySelector<HTMLButtonElement>('#roll')!.focus();
   followScene('game');
@@ -155,6 +195,9 @@ export function showTitle() {
   document.body.classList.remove('is-waiting');
   document.querySelector<HTMLElement>('#waiting-screen')!.hidden = true;
   startScreen.hidden = false;
+  roomPanel.hidden = true;
+  roomStatus.hidden = true;
+  roomCancel.hidden = true;
   window.dispatchEvent(new Event('resize'));
   followScene('title');
 }
@@ -170,7 +213,9 @@ export function setSearching(on: boolean) {
   matchLabel.textContent = on ? t('menu.searching') : t('menu.multiplayer');
   multiplayerButton.setAttribute('aria-pressed', String(on));
   localButton.disabled = on || !playEnabled;
+  roomButton.disabled = on || !playEnabled;
   rulesetPicker.disabled = on;
+  if (on) roomPanel.hidden = true;
 }
 
 export function showNote(text: string | null) {
@@ -178,10 +223,18 @@ export function showNote(text: string | null) {
   matchNote.textContent = text ?? '';
 }
 
+export function showRoom(code: string) {
+  roomStatus.hidden = false;
+  roomCancel.hidden = false;
+  roomPanel.hidden = false;
+  roomStatus.textContent = t('room.created', { code });
+}
+
 export function enablePlay() {
   playEnabled = true;
   if (!searching) localButton.disabled = false;
   multiplayerButton.disabled = false;
+  roomButton.disabled = false;
 }
 
 export function syncShell() {

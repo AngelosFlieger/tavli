@@ -45,12 +45,28 @@
         </fieldset>
         <button id="start-multiplayer" class="mode-button online-mode" disabled>
           <span class="mode-star" aria-hidden="true">✦</span
-          ><span id="multiplayer-label">Multiplayer</span
+          ><span id="multiplayer-label" data-i18n="menu.multiplayer">Multiplayer</span
           ><span class="mode-star" aria-hidden="true">✦</span></button
         ><button id="start-local" class="mode-button local-mode" disabled>
-          <span class="mode-star" aria-hidden="true">✦</span><span>Local Game</span
+          <span class="mode-star" aria-hidden="true">✦</span
+          ><span data-i18n="menu.local">Local Game</span
           ><span class="mode-star" aria-hidden="true">✦</span>
         </button>
+        <button id="start-room" class="mode-button local-mode" disabled>
+          <span class="mode-star" aria-hidden="true">✦</span
+          ><span data-i18n="menu.privateRoom">Private room</span
+          ><span class="mode-star" aria-hidden="true">✦</span>
+        </button>
+        <div id="room-panel" class="room-panel" hidden>
+          <button type="button" id="room-create" data-i18n="room.create">Create room</button>
+          <label
+            ><span data-i18n="room.codeLabel">Code</span>
+            <input id="room-code" maxlength="8" autocomplete="off" spellcheck="false"
+          /></label>
+          <button type="button" id="room-join" data-i18n="room.join">Join</button>
+          <p id="room-status" role="status" hidden></p>
+          <button type="button" id="room-cancel" data-i18n="room.cancel" hidden>Cancel room</button>
+        </div>
         <div class="start-options">
           <button data-open="help">
             <svg
