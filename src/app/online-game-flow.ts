@@ -1,8 +1,8 @@
 import type { GameState, Move, Player } from '../game/engine';
 import type { Command, Update } from '../net/messages';
 import type { GameController } from './game-controller';
-import { resolveVariantConfig } from '../game/variant/config/schema';
-import { CLASSIC_RULES, powerupsRules, type ResolvedVariantConfig } from '../game/variant/types';
+import { rulesForState } from '../game/variant/rules-context';
+import type { ResolvedVariantConfig } from '../game/variant/types';
 
 export type OnlineScene = {
   faceSeat: () => void;
@@ -40,14 +40,7 @@ export function createOnlineGameFlow(
       canUndo = false,
       variantConfig: ResolvedVariantConfig | null = null,
     ) {
-      const rules = variantConfig
-        ? powerupsRules(resolveVariantConfig(variantConfig))
-        : CLASSIC_RULES;
-      if (
-        state.ruleset !== rules.ruleset ||
-        state.variantConfigHash !== (rules.variantConfig?.hash ?? null)
-      )
-        throw new Error('matched state and variant configuration do not agree');
+      const rules = rulesForState(state, variantConfig);
       if (!controller.configure(rules)) throw new Error('controller could not adopt match rules');
       controller.join(you, send, rules);
       controller.adopt(state, canUndo);

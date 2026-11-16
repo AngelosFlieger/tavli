@@ -3,6 +3,11 @@ import type { PickupView } from '../app/pickup-selection';
 import type { Move } from '../game/engine';
 import type { AbilityId, AbilityTarget, RollAbilityOption } from '../game/variant/types';
 import { describeConfiguredAbility } from '../game/variant/abilities/registry';
+import {
+  rollAbilityOptionLabel,
+  rollAbilityPrompt,
+  usesDirectDieSelection,
+} from './abilities/presenters';
 import { createDraftPanel } from './draft-panel';
 
 type GameplayHudActions = {
@@ -143,27 +148,21 @@ export function createGameplayHud(
         : null;
       const status = document.createElement('span');
       status.className = 'pickup-status';
-      const directDieSelection = selectedAbility.abilityId === 'recast';
-      status.textContent = directDieSelection
-        ? 'Click the die you want to reroll'
-        : `Choose how to use ${copy?.name ?? 'this ability'}`;
+      const directDieSelection = usesDirectDieSelection(selectedAbility.abilityId);
+      status.textContent = rollAbilityPrompt(
+        selectedAbility.abilityId,
+        copy?.name ?? 'this ability',
+      );
       choices.append(status);
       for (const option of controller.rollAbilityOptions()) {
-        const before = state.roll[option.target.index];
-        const after =
-          selectedAbility.abilityId === 'nudge' || selectedAbility.abilityId === 'opportunist'
-            ? before +
-              (option.option === 'INCREASE' ? 1 : -1) *
-                (selectedAbility.abilityId === 'nudge'
-                  ? controller.variantConfig!.abilities.nudge.adjustment
-                  : controller.variantConfig!.abilities.opportunist.focusAdjustment)
-            : null;
         const button = document.createElement('button');
         if (directDieSelection) button.className = 'dice-choice-fallback';
-        button.textContent =
-          after === null
-            ? `Reroll die ${option.target.index + 1} · ${before}`
-            : `Die ${option.target.index + 1} · ${before} → ${after}`;
+        button.textContent = rollAbilityOptionLabel(
+          selectedAbility.abilityId,
+          state,
+          option,
+          controller.variantConfig!,
+        );
         button.onclick = () => actions.playRollAbility(option);
         choices.append(button);
       }

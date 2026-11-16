@@ -1,13 +1,16 @@
 import { randomUUID } from 'node:crypto';
 import { initialPresentedSession } from '../src/game/session/messages';
-import { createLobby, matchKey, rulesForSelection, rulesForState } from '../src/net/lobby';
+import { createLobby } from '../src/net/lobby';
+import { matchKey, rulesForSelection, rulesForState } from '../src/game/variant/rules-context';
 import {
   CLASSIC_SELECTION,
   type Command,
   type MatchSelection,
   type ServerMessage,
+  type Update,
 } from '../src/net/messages';
-import type { Store, StoredMatch } from './store';
+import type { RulesContext } from '../src/game/variant/types';
+import type { Store, StoredMatch, StoredRevisionUpdate } from './store';
 
 const reconnectGraceMs = 45_000;
 
@@ -35,7 +38,7 @@ export function createTables(
       return;
     }
     if (loaded) lobby.leave(loaded.ids[0]);
-    lobby.restore(match.seats[0], match.seats[1], match.session, match.id);
+    lobby.restore(match.seats[0], match.seats[1], match.session, match.id, rulesForMatch(match));
     revision.set(match.id, match.revision);
     away.set(match.id, match.away);
   }
@@ -79,7 +82,7 @@ export function createTables(
         you: seat.you,
         state: seat.state,
         canUndo: seat.canUndo,
-        variantConfig: rulesForState(seat.state).variantConfig,
+        variantConfig: rulesForMatch(match).variantConfig,
       });
     },
     async find(userId: string, selection: MatchSelection = CLASSIC_SELECTION) {
@@ -95,6 +98,8 @@ export function createTables(
         id: randomUUID(),
         seats: [opponent, userId],
         session: initialPresentedSession(rules),
+        variantConfig: rules.variantConfig,
+        lastUpdate: null,
         revision: 0,
         away: [null, null],
         endedAt: null,
@@ -143,7 +148,7 @@ export function createTables(
           return result.to
             .filter((id) => online.has(id))
             .map((id) => ({ userId: id, message: { type: 'update' as const, ...result.update } }));
-        const stored = played(after, match);
+        const stored = played(after, match, result.update);
         const saved =
           after.session.state.phase === 'GAME_OVER'
             ? await store.endMatch(stored, winnerOf(stored))
@@ -238,8 +243,6 @@ export function createTables(
       return local ? emit(userId, `left:${local.id}`, { type: 'left' }) : [];
     }
     waiting.delete(userId);
-    const previousState = lobby.snapshot(userId)?.session.state;
-    const previousRoll = previousState?.roll ?? [];
     const known = seen.get(userId);
     adopt(match);
     const seat = lobby.seat(userId);
@@ -247,20 +250,16 @@ export function createTables(
     const token = `${match.id}:${match.revision}`;
     if (known === token) return [];
     if (known?.startsWith(`${match.id}:`)) {
-      const roll = seat.state.roll;
-      const dice =
-        roll.length === 2 && roll.join() !== previousRoll.join()
-          ? ([roll[0], roll[1]] as [number, number])
-          : undefined;
-      const latestModifier = seat.state.diceModifiers.at(-1);
-      const rerolledDie =
-        dice && latestModifier?.abilityId === 'recast' ? latestModifier.dieIndex : undefined;
+      const knownRevision = Number(known.slice(known.lastIndexOf(':') + 1));
+      const details =
+        knownRevision === match.revision - 1 && match.lastUpdate?.revision === match.revision
+          ? structuredClone(match.lastUpdate.details)
+          : {};
       return emit(userId, token, {
+        ...details,
         type: 'update',
         state: seat.state,
         canUndo: seat.canUndo,
-        dice,
-        ...(rerolledDie === undefined ? {} : { rerolledDie }),
       });
     }
     const previous = known?.match(/^([^:]+):\d+$/)?.[1];
@@ -275,19 +274,23 @@ export function createTables(
       type: 'matched',
       you: seat.you,
       state: seat.state,
-      variantConfig: rulesForState(seat.state).variantConfig,
+      variantConfig: rulesForMatch(match).variantConfig,
     });
   }
 
   function played(
     after: NonNullable<ReturnType<typeof lobby.snapshot>>,
     match: StoredMatch,
+    update: Update,
   ): StoredMatch {
+    const currentRevision = revision.get(after.id) ?? match.revision;
     return {
       id: after.id,
       seats: [after.ids[0], after.ids[1]],
       session: after.session,
-      revision: revision.get(after.id) ?? match.revision,
+      variantConfig: rulesForMatch(match).variantConfig,
+      lastUpdate: revisionUpdate(currentRevision + 1, update),
+      revision: currentRevision,
       away: away.get(after.id) ?? match.away,
       endedAt: match.endedAt,
       winner: match.winner,
@@ -300,10 +303,13 @@ export function createTables(
   }
 
   async function rematch(match: StoredMatch): Promise<TableEvent[]> {
+    const rules = rulesForMatch(match);
     const next: StoredMatch = {
       id: randomUUID(),
       seats: match.seats,
-      session: initialPresentedSession(rulesForState(match.session.state)),
+      session: initialPresentedSession(rules),
+      variantConfig: rules.variantConfig,
+      lastUpdate: null,
       revision: 0,
       away: [null, null],
       endedAt: null,
@@ -317,6 +323,25 @@ export function createTables(
     }
     adopt(next);
     return broadcast(next);
+  }
+
+  function rulesForMatch(match: StoredMatch): RulesContext {
+    try {
+      return rulesForState(match.session.state, match.variantConfig ?? undefined);
+    } catch (error) {
+      throw new Error(`Stored rules do not match session ${match.id}`, { cause: error });
+    }
+  }
+
+  function revisionUpdate(revision: number, update: Update): StoredRevisionUpdate {
+    const details: StoredRevisionUpdate['details'] = {
+      ...(update.events ? { events: structuredClone(update.events) } : {}),
+      ...(update.dice ? { dice: [...update.dice] as [number, number] } : {}),
+      ...(update.rerolledDie === undefined ? {} : { rerolledDie: update.rerolledDie }),
+      ...(update.sequence ? { sequence: update.sequence.map((move) => ({ ...move })) } : {}),
+      ...(update.resetDice === undefined ? {} : { resetDice: update.resetDice }),
+    };
+    return { revision, details };
   }
 
   function broadcast(match: StoredMatch): TableEvent[] {

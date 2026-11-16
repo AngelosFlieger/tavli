@@ -1,6 +1,7 @@
 import type { BoardLayout } from './layout';
 import * as THREE from 'three';
 import { loadModel } from './assets';
+import { createDieSelectionOverlay } from './die-selection-overlay';
 
 // Die.glb's modeled pips: Blender Z becomes glTF Y; Blender Y becomes glTF -Z.
 export const faces = [
@@ -122,62 +123,24 @@ export async function createDice(
     root.add(ring);
     return ring;
   });
-  let hoveredDie: 0 | 1 | null = null;
-  const dieTargets = dice.map((_die, index) => {
-    const target = document.createElement('button');
-    target.type = 'button';
-    target.className = 'die-target';
-    target.dataset.die = String(index);
-    target.setAttribute('aria-label', `Reroll die ${index + 1}`);
-    target.hidden = true;
-    target.addEventListener('pointerenter', () => (hoveredDie = index as 0 | 1));
-    target.addEventListener('pointerleave', () => (hoveredDie = null));
-    const select = () => {
-      if (!rolling && callbacks.selectableDice().includes(index as 0 | 1))
-        callbacks.selectDie(index as 0 | 1);
-    };
-    const selectOnPress = (event: PointerEvent | MouseEvent) => {
-      event.preventDefault();
-      select();
-    };
-    target.addEventListener('pointerdown', selectOnPress);
-    // Keep desktop selection reliable in browsers that do not synthesize pointer events for
-    // programmatic or assistive mouse input. A successful pointer press clears eligibility, so
-    // the following mouse event cannot activate the ability twice.
-    target.addEventListener('mousedown', selectOnPress);
-    target.addEventListener('click', (event) => {
-      // Pointer selection is handled on press so a moving 3D projection cannot lose pointer-up.
-      if (event.detail === 0) select();
-    });
-    document.body.append(target);
-    return target;
+  const selectionOverlay = createDieSelectionOverlay(dice, camera, canvas, {
+    selectableDice: callbacks.selectableDice,
+    selectDie: callbacks.selectDie,
   });
-  const projected = new THREE.Vector3();
-  const targetPositionsLocked = [false, false];
   let rollingIndices: (0 | 1)[] = [];
   function updateShadows() {
+    const selectableDice = selectionOverlay.update(rolling);
     dice.forEach((die, i) => {
       const shadow = shadows[i];
       shadow.visible = die.visible;
       shadow.position.set(die.position.x, surface + 0.0004, die.position.z);
       shadow.material.opacity = Math.max(0.08, 1 - (die.position.y - restingY) * 5);
       const ring = selectionRings[i];
-      const selectable = !rolling && callbacks.selectableDice().includes(i as 0 | 1);
+      const selectable = selectableDice.includes(i as 0 | 1);
       ring.visible = selectable && die.visible;
       ring.position.set(die.position.x, surface + 0.0007, die.position.z);
-      ring.scale.setScalar(hoveredDie === i ? 1.18 : 1);
-      const target = dieTargets[i];
-      target.hidden = !selectable || !die.visible;
-      if (target.hidden) targetPositionsLocked[i] = false;
-      else if (!targetPositionsLocked[i]) {
-        die.getWorldPosition(projected).project(camera);
-        const rect = canvas.getBoundingClientRect();
-        target.style.left = `${rect.left + ((projected.x + 1) / 2) * rect.width}px`;
-        target.style.top = `${rect.top + ((1 - projected.y) / 2) * rect.height}px`;
-        targetPositionsLocked[i] = true;
-      }
+      ring.scale.setScalar(selectionOverlay.hovered() === i ? 1.18 : 1);
     });
-    canvas.dataset.selectableDice = callbacks.selectableDice().join(',');
   }
   let timer = 0,
     rolling = false;
@@ -206,10 +169,8 @@ export async function createDice(
     dice.forEach((die) => (die.visible = false));
     shadows.forEach((shadow) => (shadow.visible = false));
     selectionRings.forEach((ring) => (ring.visible = false));
-    dieTargets.forEach((target) => (target.hidden = true));
-    targetPositionsLocked.fill(false);
+    selectionOverlay.reset();
     rollingIndices = [];
-    canvas.dataset.selectableDice = '';
     canvas.dataset.rollingDice = '';
     canvas.dataset.lastRollingDice = '';
     output.textContent = '— · —';
@@ -221,7 +182,7 @@ export async function createDice(
     rollingIndices = onlyDie === undefined ? [0, 1] : [onlyDie];
     canvas.dataset.rollingDice = rollingIndices.join(',');
     canvas.dataset.lastRollingDice = rollingIndices.join(',');
-    hoveredDie = null;
+    selectionOverlay.reset();
     timer = 0;
     button.disabled = true;
     button.setAttribute('aria-busy', 'true');
@@ -281,7 +242,7 @@ export async function createDice(
     },
     reset,
     resize() {
-      targetPositionsLocked.fill(false);
+      selectionOverlay.invalidatePositions();
       const ratio = layout.depth / previousDepth;
       dice.forEach((die) => (die.position.z *= ratio));
       tosses.forEach((toss) => {

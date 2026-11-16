@@ -2,10 +2,17 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { initialGameState } from '../src/game/session/state';
 import { transitionSession } from '../src/game/session/transition';
+import {
+  afterRollAbilityBehaviors,
+  beforeRollAbilityBehaviors,
+  endTurnAbilityBehaviors,
+} from '../src/game/variant/abilities/behavior-registry';
 import { abilityRegistry, describeAbility } from '../src/game/variant/abilities/registry';
+import { passiveAbilityBehaviors } from '../src/game/variant/passives/behavior-registry';
 import { resolveVariantConfig } from '../src/game/variant/config/schema';
 import { FAST_BALANCE, POWERUPS_V1 } from '../src/game/variant/config/profiles';
 import { createPowerupsV1Input } from '../src/game/variant/config/profiles/v1';
+import { rulesForSelection, rulesForState } from '../src/game/variant/rules-context';
 import { ABILITY_IDS, powerupsRules, type AbilityConfigMap } from '../src/game/variant/types';
 
 test('version-one balance values resolve once and are deeply immutable', () => {
@@ -32,6 +39,27 @@ test('profile changes produce new hashes and config-derived card copy', () => {
   );
   assert.equal(FAST_BALANCE.draft.intervalRounds, 1);
   assert.notEqual(FAST_BALANCE.hash, POWERUPS_V1.hash);
+});
+
+test('one rules-context boundary resolves selections, legacy hashes, and exact snapshots', () => {
+  assert.equal(rulesForSelection({ ruleset: 'CLASSIC' }).ruleset, 'CLASSIC');
+  assert.equal(
+    rulesForSelection({ ruleset: 'POWERUPS_V1', profileId: 'fast-balance' }).variantConfig?.hash,
+    FAST_BALANCE.hash,
+  );
+
+  const registered = initialGameState(powerupsRules(FAST_BALANCE));
+  assert.equal(rulesForState(registered).variantConfig?.hash, FAST_BALANCE.hash);
+  assert.equal(rulesForState(registered, FAST_BALANCE).variantConfig?.hash, FAST_BALANCE.hash);
+  assert.throws(() => rulesForState(registered, null), /do not agree/);
+
+  const input = createPowerupsV1Input();
+  input.id = 'archived-balance';
+  input.draft.intervalRounds = 4;
+  const snapshot = resolveVariantConfig(input);
+  const archived = initialGameState(powerupsRules(snapshot));
+  assert.throws(() => rulesForState(archived), /Unknown variant configuration/);
+  assert.equal(rulesForState(archived, snapshot).variantConfig?.hash, snapshot.hash);
 });
 
 test('config hashes are stable when object keys have a different insertion order', () => {
@@ -102,6 +130,46 @@ test('the registry has one typed definition for every configured ability', () =>
     assert.equal(definition.id, abilityId);
     assert.ok(definition.kind === 'POWERUP' || definition.kind === 'PASSIVE');
     assert.equal(POWERUPS_V1.abilities[abilityId].enabled, true);
+  }
+});
+
+test('every end-turn definition has one colocated behavior capability', () => {
+  const endTurnIds = ABILITY_IDS.filter(
+    (abilityId) => abilityRegistry[abilityId].timing === 'WITH_END_TURN',
+  );
+  assert.deepEqual(Object.keys(endTurnAbilityBehaviors), endTurnIds);
+  for (const abilityId of endTurnIds) {
+    assert.equal(endTurnAbilityBehaviors[abilityId].id, abilityId);
+  }
+});
+
+test('every before-roll definition has one colocated behavior capability', () => {
+  const beforeRollIds = ABILITY_IDS.filter(
+    (abilityId) => abilityRegistry[abilityId].timing === 'BEFORE_ROLL',
+  );
+  assert.deepEqual(Object.keys(beforeRollAbilityBehaviors), beforeRollIds);
+  for (const abilityId of beforeRollIds) {
+    assert.equal(beforeRollAbilityBehaviors[abilityId].id, abilityId);
+  }
+});
+
+test('every after-roll definition has one colocated behavior capability', () => {
+  const afterRollIds = ABILITY_IDS.filter(
+    (abilityId) => abilityRegistry[abilityId].timing === 'AFTER_ROLL_BEFORE_MOVE',
+  );
+  assert.deepEqual(Object.keys(afterRollAbilityBehaviors), afterRollIds);
+  for (const abilityId of afterRollIds) {
+    assert.equal(afterRollAbilityBehaviors[abilityId].id, abilityId);
+  }
+});
+
+test('every passive definition has one colocated behavior capability', () => {
+  const passiveIds = ABILITY_IDS.filter(
+    (abilityId) => abilityRegistry[abilityId].kind === 'PASSIVE',
+  );
+  assert.deepEqual(Object.keys(passiveAbilityBehaviors), passiveIds);
+  for (const abilityId of passiveIds) {
+    assert.equal(passiveAbilityBehaviors[abilityId].id, abilityId);
   }
 });
 

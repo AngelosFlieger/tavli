@@ -94,6 +94,31 @@ test('presentation locks input after the authoritative phase advances', () => {
   assert.equal(controller.endTurn(), true);
 });
 
+test('a late local move completion cannot release a newer operation', () => {
+  const controller = new GameController();
+  const moving = structuredClone(controller.state);
+  moving.opening = false;
+  moving.phase = 'WAITING_FOR_MOVE';
+  moving.roll = [2, 3];
+  moving.remaining = [2, 3];
+  controller.adopt(moving, false);
+  assert.equal(controller.requestMove([controller.moves()[0]])?.type, 'local');
+
+  const rolling = structuredClone(controller.state);
+  rolling.phase = 'WAITING_FOR_ROLL';
+  rolling.roll = [];
+  rolling.remaining = [];
+  controller.adopt(rolling, false);
+  assert.equal(controller.beginRoll(), true);
+  assert.equal(controller.busy, true);
+
+  controller.finishLocalMove();
+  assert.equal(controller.busy, true);
+  controller.receiveRoll([2, 4]);
+  assert.equal(controller.busy, false);
+  assert.deepEqual(controller.state.roll, [2, 4]);
+});
+
 test('online controller waits for authority, then adopts presented dice and moves', () => {
   const controller = new GameController();
   const sent: Command[] = [];

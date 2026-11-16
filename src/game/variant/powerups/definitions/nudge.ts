@@ -1,5 +1,7 @@
-import type { NudgeConfig } from '../../types';
+import { defineAfterRollAbilityBehavior } from '../../abilities/capabilities';
 import { defineAbility } from '../../abilities/define';
+import { applyNumericAdjustment, numericAdjustmentOptions } from '../../abilities/roll-adjustment';
+import type { NudgeConfig } from '../../types';
 import {
   baseConfig,
   boolean,
@@ -47,5 +49,35 @@ export const nudge = defineAbility<'nudge', NudgeConfig>({
     const sign =
       config.directions.length === 2 ? '±' : config.directions[0] === 'INCREASE' ? '+' : '−';
     return { name: 'Nudge', summary: `Adjust one movement die by ${sign}${config.adjustment}.` };
+  },
+});
+
+export const nudgeAfterRoll = defineAfterRollAbilityBehavior({
+  id: 'nudge',
+  options(state, _player, availableDice, config) {
+    return numericAdjustmentOptions(state, availableDice, {
+      adjustment: config.adjustment,
+      directions: config.directions,
+      allowedRolls: config.allowedRolls,
+      allowBearingOff: config.allowBearingOff,
+      createdMatchBecomesDouble: config.createdMatchBecomesDouble,
+    });
+  },
+  randomCount() {
+    return 0;
+  },
+  apply(state, player, activation, _randomValues, config, resolvedConfig, services) {
+    return applyNumericAdjustment(
+      state,
+      activation,
+      {
+        adjustment: config.adjustment,
+        directions: config.directions,
+        allowedRolls: config.allowedRolls,
+        allowBearingOff: config.allowBearingOff,
+        createdMatchBecomesDouble: config.createdMatchBecomesDouble,
+      },
+      (after) => services.movementTokensForRoll(state, player, [after, after], resolvedConfig),
+    );
   },
 });

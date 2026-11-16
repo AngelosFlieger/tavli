@@ -1,5 +1,15 @@
-import type { OpportunistConfig } from '../../types';
+import { defineAfterRollAbilityBehavior } from '../../abilities/capabilities';
 import { defineAbility } from '../../abilities/define';
+import { applyNumericAdjustment, numericAdjustmentOptions } from '../../abilities/roll-adjustment';
+import { other } from '../../../rules/position';
+import { definePassiveAbilityBehavior } from '../capabilities';
+import {
+  clearPassiveCounter,
+  OPPORTUNIST_FOCUS,
+  passiveCounter,
+  setPassiveCounter,
+} from '../counters';
+import type { OpportunistConfig } from '../../types';
 import {
   baseConfig,
   boolean,
@@ -13,6 +23,7 @@ import {
 export const opportunist = defineAbility<'opportunist', OpportunistConfig>({
   id: 'opportunist',
   kind: 'PASSIVE',
+  timing: 'AFTER_ROLL_BEFORE_MOVE',
   validateConfig(value) {
     const input = record(value, 'opportunist');
     exactKeys(
@@ -65,5 +76,68 @@ export const opportunist = defineAbility<'opportunist', OpportunistConfig>({
       drawback: `Powerup capacity becomes ${config.equippedPowerupSlots}.`,
       summary: 'Turn an opponent’s stalled roll into a later dice adjustment.',
     };
+  },
+});
+
+export const opportunistAfterRoll = defineAfterRollAbilityBehavior({
+  id: 'opportunist',
+  canActivate(state, player, config) {
+    const used = state.diceModifiers.filter(
+      (modifier) => modifier.abilityId === 'opportunist' && modifier.source === player,
+    ).length;
+    return (
+      passiveCounter(state.powerups!, player, OPPORTUNIST_FOCUS) > 0 &&
+      used < config.focusUsesPerRoll
+    );
+  },
+  options(state, _player, availableDice, config) {
+    return numericAdjustmentOptions(state, availableDice, {
+      adjustment: config.focusAdjustment,
+      directions: config.focusDirections,
+      allowedRolls: config.allowedRolls,
+      allowBearingOff: config.allowBearingOff,
+      createdMatchBecomesDouble: config.createdMatchBecomesDouble,
+    });
+  },
+  randomCount() {
+    return 0;
+  },
+  apply(state, player, activation, _randomValues, config, resolvedConfig, services) {
+    return applyNumericAdjustment(
+      state,
+      activation,
+      {
+        adjustment: config.focusAdjustment,
+        directions: config.focusDirections,
+        allowedRolls: config.allowedRolls,
+        allowBearingOff: config.allowBearingOff,
+        createdMatchBecomesDouble: config.createdMatchBecomesDouble,
+      },
+      (after) => services.movementTokensForRoll(state, player, [after, after], resolvedConfig),
+    );
+  },
+  commit(state, player) {
+    const focus = passiveCounter(state.powerups!, player, OPPORTUNIST_FOCUS);
+    if (focus > 0) setPassiveCounter(state.powerups!, player, OPPORTUNIST_FOCUS, focus - 1);
+  },
+});
+
+export const opportunistPassive = definePassiveAbilityBehavior({
+  id: 'opportunist',
+  inventory: {
+    powerupCapacity(config) {
+      return { mode: 'REPLACE', slots: config.equippedPowerupSlots };
+    },
+  },
+  opponentStalled(powerups, owner, stalledPlayer, config) {
+    if (owner !== other(stalledPlayer)) return null;
+    const current = passiveCounter(powerups, owner, OPPORTUNIST_FOCUS);
+    const focus = Math.min(config.focusCap, current + config.focusGain);
+    if (focus === current) return null;
+    setPassiveCounter(powerups, owner, OPPORTUNIST_FOCUS, focus);
+    return { type: 'FocusGained', player: owner, focus };
+  },
+  unequipped(powerups, player) {
+    clearPassiveCounter(powerups, player, OPPORTUNIST_FOCUS);
   },
 });

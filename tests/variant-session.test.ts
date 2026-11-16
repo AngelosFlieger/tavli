@@ -1113,6 +1113,23 @@ test('Quartermaster expands capacity and blocks powerups for configured own turn
   assert.equal(tryNudge().ok, true);
 });
 
+test('a replacement capacity passive takes precedence over additive passive capacity', () => {
+  const input = createPowerupsV1Input();
+  input.id = 'combined-passive-capacity';
+  input.inventory.passiveSlots = 2;
+  input.inventory.powerupSlots = 2;
+  input.abilities.quartermaster.extraPowerupSlots = 3;
+  input.abilities.opportunist.equippedPowerupSlots = 1;
+  const config = resolveVariantConfig(input);
+  const state = initialGameState(powerupsRules(config));
+  state.powerups!.loadouts[0].passives = [
+    { instanceId: 'quartermaster-1', abilityId: 'quartermaster' },
+    { instanceId: 'opportunist-1', abilityId: 'opportunist' },
+  ];
+
+  assert.equal(powerupCapacity(state.powerups!, 0, config), 1);
+});
+
 test('replacing Quartermaster clears its cooldown and grandfathers occupied extra slots', () => {
   const input = createPowerupsV1Input();
   input.id = 'quartermaster-replacement-test';

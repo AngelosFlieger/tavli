@@ -10,9 +10,9 @@ import {
 import { advancePendingDraft } from '../game/variant/authority';
 import { rollAbilityRandomCount } from '../game/variant/roll-activation';
 import { generateMovementRoll } from '../game/variant/passives/policy';
-import { VARIANT_PROFILE_IDS, variantProfile } from '../game/variant/config/profiles';
-import { CLASSIC_RULES, powerupsRules, type RulesContext } from '../game/variant/types';
-import { isCommand, type Command, type MatchSelection, type Update } from './messages';
+import { rulesForState } from '../game/variant/rules-context';
+import type { RulesContext } from '../game/variant/types';
+import { isCommand, type Command, type Update } from './messages';
 
 export type PlayerId = string;
 export type ActResult = { to: PlayerId[]; update: Update };
@@ -59,42 +59,26 @@ export function createLobby(
     return { id: found.match.id, ids: [...found.match.ids], session: found.match.exportSession() };
   }
 
-  function restore(first: PlayerId, second: PlayerId, session: Session, id: string) {
+  function restore(
+    first: PlayerId,
+    second: PlayerId,
+    session: Session,
+    id: string,
+    rules: RulesContext = rulesForState(session.state),
+  ) {
     if (seats.has(first) || seats.has(second)) return false;
-    const match = new Match(
-      first,
-      second,
-      rollDie,
-      randomInt,
-      rulesForState(session.state),
-      session,
-      id,
-    );
+    if (
+      session.state.ruleset !== rules.ruleset ||
+      session.state.variantConfigHash !== (rules.variantConfig?.hash ?? null)
+    )
+      return false;
+    const match = new Match(first, second, rollDie, randomInt, rules, session, id);
     seats.set(first, { match, player: 0 });
     seats.set(second, { match, player: 1 });
     return true;
   }
 
   return { leave, act, seat, snapshot, restore };
-}
-
-export function rulesForSelection(selection: MatchSelection): RulesContext {
-  return selection.ruleset === 'CLASSIC'
-    ? CLASSIC_RULES
-    : powerupsRules(variantProfile(selection.profileId));
-}
-
-export function matchKey(rules: RulesContext): string {
-  return `${rules.ruleset}:${rules.variantConfig?.hash ?? 'classic'}`;
-}
-
-export function rulesForState(state: GameState): RulesContext {
-  if (state.ruleset === 'CLASSIC') return CLASSIC_RULES;
-  const config = VARIANT_PROFILE_IDS.map(variantProfile).find(
-    (candidate) => candidate.hash === state.variantConfigHash,
-  );
-  if (!config) throw new Error(`Unknown variant configuration ${state.variantConfigHash ?? ''}`);
-  return powerupsRules(config);
 }
 
 class Match {
@@ -245,10 +229,7 @@ class Match {
     this.session = advanced.session;
     return {
       to: [...this.ids],
-      update: {
-        ...this.view([...events, ...advanced.events]),
-        ...(advanced.orderRolls.length ? { draftRolls: advanced.orderRolls } : {}),
-      },
+      update: this.view([...events, ...advanced.events]),
     };
   }
 }

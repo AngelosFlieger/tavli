@@ -6,11 +6,10 @@ import {
   type AbilityId,
   type ResolvedVariantConfig,
 } from '../game/variant/types';
-import { isVariantProfileId, type VariantProfileId } from '../game/variant/config/profiles';
+import { isVariantProfileId } from '../game/variant/config/profiles';
+import type { VariantRulesSelection } from '../game/variant/rules-context';
 
-export type MatchSelection =
-  | { ruleset: 'CLASSIC' }
-  | { ruleset: 'POWERUPS_V1'; profileId: VariantProfileId };
+export type MatchSelection = VariantRulesSelection;
 
 export const CLASSIC_SELECTION: MatchSelection = Object.freeze({ ruleset: 'CLASSIC' });
 
@@ -34,7 +33,6 @@ export type Update = {
   events?: SessionEvent[];
   dice?: [number, number];
   rerolledDie?: 0 | 1;
-  draftRolls?: [number, number][];
   sequence?: Move[];
   resetDice?: boolean;
 };

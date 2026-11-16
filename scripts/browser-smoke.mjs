@@ -263,7 +263,21 @@ async function endOnlineTurn(pages) {
   await pages[active].waitForFunction(
     () => !document.querySelector('#roll')?.hasAttribute('disabled'),
   );
-  return actAndWait(pages, () => pages[active].locator('#roll').click());
+  const state = await actAndWait(pages, () => pages[active].locator('#roll').click());
+  if (state.active !== null && !['DRAFT_ORDER', 'DRAFT_PICK', 'GAME_OVER'].includes(state.phase)) {
+    await Promise.all(
+      pages.map(async (page) => {
+        const incoming = page.locator(`.ability-tray.is-current[data-player="${state.active}"]`);
+        await incoming.waitFor({ state: 'visible' });
+        assert.equal(
+          await page.locator(`.ability-tray.is-current[data-player="${active}"]`).count(),
+          0,
+          'outgoing player tray remained current after turn change',
+        );
+      }),
+    );
+  }
+  return state;
 }
 
 async function advanceToRound(pages, targetRound) {
@@ -615,9 +629,37 @@ async function onlineSmoke(browser, errors) {
     (instance) => instance.abilityId === draftedPassiveId,
   );
   assert.ok(draftedPassive, 'the drafted passive was not added to inventory');
-  await pages[firstPicker]
-    .locator(`.ability-slot[data-instance="${draftedPower.instanceId}"]`)
-    .waitFor({ state: 'visible' });
+  const activeTrayPlayer = powerupState.active;
+  assert.ok(activeTrayPlayer === 0 || activeTrayPlayer === 1, 'resumed turn has no active tray');
+  for (const page of pages) {
+    assert.equal(
+      await page.locator('.player .ability-loadout').count(),
+      0,
+      'ability cards should not be mounted inside player avatars',
+    );
+    const placement = await page
+      .locator(`.ability-slot[data-instance="${draftedPower.instanceId}"]`)
+      .evaluate((card) => ({
+        inBottomTray: card.closest('#ability-trays') !== null,
+        player: card.closest('.ability-tray')?.getAttribute('data-player'),
+      }));
+    assert.equal(placement.inBottomTray, true, 'ability card is outside the bottom tray');
+    assert.equal(placement.player, String(firstPicker), 'ability card is in the wrong player tray');
+    const currentTrays = page.locator('.ability-tray.is-current');
+    assert.equal(await currentTrays.count(), 1, 'only one player tray should be current');
+    assert.equal(
+      await currentTrays.getAttribute('data-player'),
+      String(activeTrayPlayer),
+      'the visible tray does not belong to the active player',
+    );
+    assert.equal(
+      await page
+        .locator(`.ability-tray[data-player="${1 - activeTrayPlayer}"]`)
+        .getAttribute('aria-hidden'),
+      'true',
+      'inactive player tray should be hidden',
+    );
+  }
 
   powerupState = await activateDraftedPower(pages, firstPicker, draftedPower);
   console.log(`Powerups browser path: activated ${draftedPower.abilityId}`);

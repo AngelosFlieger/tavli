@@ -1,4 +1,4 @@
-/* Ability draft modal and compact inventory chips. */
+/* Ability draft modal and bottom-screen inventory trays. */
 #draft-panel {
   position: fixed;
   inset: 0;
@@ -354,12 +354,105 @@
   text-decoration: underline;
 }
 
+.ability-trays {
+  position: fixed;
+  z-index: 7;
+  bottom: 3.5%;
+  left: calc(50% + 145px);
+  display: block;
+  width: clamp(120px, calc(50vw - 160px), 280px);
+  height: 66px;
+  pointer-events: none;
+}
+
+.ability-trays[hidden],
+.on-title .ability-trays,
+.is-waiting .ability-trays,
+.signed-out .ability-trays,
+.auth-pending .ability-trays {
+  display: none;
+}
+
+.ability-tray {
+  position: absolute;
+  inset: 0;
+  min-width: 0;
+  color: #ead39f;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: translateX(-54px) scale(0.96);
+  transition:
+    opacity 0.24s ease,
+    transform 0.32s cubic-bezier(0.2, 0.8, 0.2, 1),
+    visibility 0s linear 0.32s;
+}
+
+.ability-tray.ivory {
+  text-align: left;
+  transform: translateX(54px) scale(0.96);
+}
+
+.ability-tray.is-current {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transform: translateX(0) scale(1);
+  transition-delay: 0s;
+}
+
+.ability-tray > header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 4px 4px;
+  font: 8px/1 monospace;
+  letter-spacing: 0.11em;
+  text-shadow: 1px 2px #070e1b;
+  text-transform: uppercase;
+}
+
+.ability-tray.ivory > header {
+  justify-content: flex-start;
+}
+
+.ability-tray > header i {
+  width: 7px;
+  height: 7px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: #cb354d;
+  box-shadow: 0 0 8px #cb354daa;
+}
+
+.ability-tray.ivory > header i {
+  background: #f1dfb3;
+  box-shadow: 0 0 8px #f1dfb3aa;
+}
+
+.ability-tray.is-current > header {
+  color: #fff0c0;
+}
+
+.ability-tray.you > header span::after {
+  content: ' · you';
+}
+
 .ability-loadout {
   position: relative;
   display: grid;
-  width: 100%;
+  width: max-content;
+  max-width: 100%;
   gap: 5px;
-  margin-top: 6px;
+  pointer-events: none;
+}
+
+.ability-tray.ivory .ability-loadout {
+  justify-self: start;
+}
+
+.ability-tray.is-current .ability-loadout {
+  pointer-events: auto;
 }
 
 .ability-card-stack {
@@ -367,6 +460,11 @@
   min-height: 48px;
   align-items: end;
   padding: 3px 5px 3px 0;
+}
+
+.ability-tray.ivory .ability-card-stack,
+.ability-tray.ivory .active-effect-list {
+  justify-content: flex-start;
 }
 
 .ability-inventory-card {
@@ -449,8 +547,8 @@
 .ability-focus-card {
   position: absolute;
   z-index: 12;
-  top: 0;
-  left: calc(100% + 10px);
+  bottom: calc(100% + 10px);
+  left: 0;
   width: 210px;
   padding: 14px;
   color: #f7e5b9;
@@ -461,13 +559,9 @@
   text-align: left;
 }
 
-.player:has(.ability-focus-card) {
-  z-index: 5;
-}
-
-.player.ivory .ability-focus-card {
-  top: auto;
-  bottom: 0;
+.ability-tray.ivory .ability-focus-card {
+  right: 0;
+  left: auto;
 }
 
 .ability-focus-card[data-kind='PASSIVE'] {
@@ -567,19 +661,12 @@ button.ability-slot {
   border-style: dashed;
 }
 
-.player.has-hostile-effect {
+.ability-tray.has-hostile-effect .ability-loadout {
+  padding: 4px;
+  border-radius: 9px;
   box-shadow:
     0 0 0 1px #7e8dff88,
     0 0 20px #634dc466;
-}
-
-.player.inactive .ability-loadout {
-  pointer-events: auto;
-}
-
-.player.inactive:has(.ability-loadout:focus-within) {
-  opacity: 1;
-  filter: none;
 }
 
 @media (max-width: 1100px) {
@@ -667,6 +754,18 @@ button.ability-slot {
     transform: rotateX(-90deg) translateZ(20px);
   }
 
+  .ability-tray > header {
+    font-size: 7px;
+    letter-spacing: 0.04em;
+  }
+
+  .ability-inventory-card {
+    width: 66px;
+    min-width: 66px;
+    height: 44px;
+    margin-right: -41px;
+  }
+
   .ability-focus-card {
     position: fixed;
     top: auto;
@@ -674,6 +773,41 @@ button.ability-slot {
     bottom: 112px;
     left: 12px;
     width: auto;
+  }
+}
+
+@media (max-aspect-ratio: 1/1) {
+  .ability-trays {
+    bottom: calc(var(--safe-bottom, 0px) + 103px);
+    left: 50%;
+    width: min(360px, calc(100vw - 16px));
+    transform: translateX(-50%);
+  }
+
+  .ability-focus-card {
+    right: 12px;
+    bottom: calc(var(--safe-bottom, 0px) + 186px);
+    left: 12px;
+    max-height: min(360px, 45dvh);
+    overflow: auto;
+  }
+
+  body:has(.ability-trays:not([hidden])) .game-hud {
+    bottom: calc(var(--safe-bottom, 0px) + 178px);
+  }
+}
+
+@media (max-aspect-ratio: 1/1) and (max-height: 720px) {
+  .ability-trays {
+    bottom: calc(var(--safe-bottom, 0px) + 91px);
+  }
+
+  .ability-focus-card {
+    bottom: calc(var(--safe-bottom, 0px) + 166px);
+  }
+
+  body:has(.ability-trays:not([hidden])) .game-hud {
+    bottom: calc(var(--safe-bottom, 0px) + 164px);
   }
 }
 

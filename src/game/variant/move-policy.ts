@@ -1,5 +1,5 @@
 import type { Move, Player, Position } from '../rules/position';
-import { owner } from '../rules/position';
+import { activeEffectIsValid } from './abilities/behavior-registry';
 import type { PowerupsState } from './types';
 import { moveAllowedByPassives } from './passives/policy';
 
@@ -33,15 +33,7 @@ export function moveAllowedByActiveEffects(
   if (!powerups) return true;
   return powerups.activeEffects.every((effect) => {
     if (effect.affectedPlayer !== player || effect.target.type !== 'POINT') return true;
-    const stack = position.board[effect.target.point];
-    if (
-      (effect.abilityId === 'frostSeal' &&
-        (!stack.length || owner(stack.at(-1)!) !== effect.affectedPlayer)) ||
-      (effect.abilityId === 'bastion' &&
-        (effect.modifiers.anchorChecker === undefined ||
-          !stack.includes(effect.modifiers.anchorChecker)))
-    )
-      return true;
+    if (!activeEffectIsValid(position, effect)) return true;
     if (effect.modifiers.blockLeaving && move.from === effect.target.point) return false;
     if (effect.modifiers.blockLanding && move.to === effect.target.point) return false;
     return true;

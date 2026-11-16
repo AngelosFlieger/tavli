@@ -1,6 +1,16 @@
-import type { GameState } from '../session/state';
 import type { Player } from '../rules/position';
+import type { GameState } from '../session/state';
+import {
+  applyConfiguredAfterRoll,
+  commitConfiguredAfterRoll,
+  configuredAfterRollCanActivate,
+  configuredAfterRollOptions,
+  configuredAfterRollRandomCount,
+  hasAfterRollAbilityBehavior,
+  type AfterRollAbilityId,
+} from './abilities/behavior-registry';
 import { abilityRegistry } from './abilities/registry';
+import { canUsePowerup, movementTokensForRoll, recordPowerupUse } from './passives/policy';
 import type {
   AbilityActivation,
   AbilityInstance,
@@ -8,17 +18,8 @@ import type {
   ResolvedVariantConfig,
   RollAbilityOption,
 } from './types';
-import {
-  canUsePowerup,
-  movementTokensForRoll,
-  opportunistFocus,
-  recordPowerupUse,
-  spendOpportunistFocus,
-} from './passives/policy';
 
-type RollAbilityInstance = AbilityInstance & {
-  abilityId: 'recast' | 'nudge' | 'opportunist';
-};
+type RollAbilityInstance = AbilityInstance & { abilityId: AfterRollAbilityId };
 
 export function rollAbilityOptions(
   state: GameState,
@@ -39,20 +40,12 @@ export function rollAbilityOptions(
   const powerup = loadout.powerups.find((candidate) => candidate.instanceId === instanceId);
   const passive = loadout.passives.find((candidate) => candidate.instanceId === instanceId);
   const instance = powerup ?? passive;
-  if (!instance) return [];
-  if (powerup) {
-    if (
-      !canUsePowerup(powerups, player, config) ||
-      abilityRegistry[instance.abilityId].timing !== 'AFTER_ROLL_BEFORE_MOVE'
-    )
-      return [];
-  } else if (instance.abilityId !== 'opportunist' || opportunistFocus(powerups, player) <= 0)
-    return [];
   if (
-    instance.abilityId === 'opportunist' &&
-    state.diceModifiers.filter(
-      (modifier) => modifier.abilityId === 'opportunist' && modifier.source === player,
-    ).length >= config.abilities.opportunist.focusUsesPerRoll
+    !instance ||
+    abilityRegistry[instance.abilityId].timing !== 'AFTER_ROLL_BEFORE_MOVE' ||
+    !hasAfterRollAbilityBehavior(instance.abilityId) ||
+    (powerup && !canUsePowerup(powerups, player, config)) ||
+    !configuredAfterRollCanActivate(instance.abilityId, state, player, config)
   )
     return [];
   const availableDice = ([0, 1] as const).filter(
@@ -60,40 +53,7 @@ export function rollAbilityOptions(
       !state.diceModifiers.some((modifier) => modifier.dieIndex === index) &&
       state.remaining.includes(state.roll[index]),
   );
-  const double = state.roll[0] === state.roll[1];
-  if (instance.abilityId === 'recast') {
-    const recast = config.abilities.recast;
-    if (!recast.acceptResult || (recast.allowedRolls === 'NON_DOUBLE' && double)) return [];
-    return availableDice.map((index) => ({ target: { type: 'DIE', index } }));
-  }
-  if (instance.abilityId === 'nudge') {
-    const nudge = config.abilities.nudge;
-    if (nudge.allowedRolls === 'NON_DOUBLE' && double) return [];
-    return availableDice.flatMap((index) =>
-      nudge.directions.flatMap((direction) => {
-        const after =
-          state.roll[index] + (direction === 'INCREASE' ? nudge.adjustment : -nudge.adjustment);
-        return after >= 1 && after <= 6
-          ? [{ target: { type: 'DIE' as const, index }, option: direction }]
-          : [];
-      }),
-    );
-  }
-  if (instance.abilityId === 'opportunist') {
-    const opportunist = config.abilities.opportunist;
-    if (opportunist.allowedRolls === 'NON_DOUBLE' && double) return [];
-    return availableDice.flatMap((index) =>
-      opportunist.focusDirections.flatMap((direction) => {
-        const after =
-          state.roll[index] +
-          (direction === 'INCREASE' ? opportunist.focusAdjustment : -opportunist.focusAdjustment);
-        return after >= 1 && after <= 6
-          ? [{ target: { type: 'DIE' as const, index }, option: direction }]
-          : [];
-      }),
-    );
-  }
-  return [];
+  return configuredAfterRollOptions(instance.abilityId, state, player, availableDice, config);
 }
 
 export function rollAbilityRandomCount(
@@ -103,8 +63,7 @@ export function rollAbilityRandomCount(
   config: ResolvedVariantConfig,
 ): number | null {
   const instance = rollAbilityInstance(state, player, activation, config);
-  if (!instance) return null;
-  return instance.abilityId === 'recast' ? config.abilities.recast.rerollCount : 0;
+  return instance ? configuredAfterRollRandomCount(instance.abilityId, config) : null;
 }
 
 export function activateRollAbility(
@@ -117,67 +76,44 @@ export function activateRollAbility(
   const instance = rollAbilityInstance(state, player, activation, config);
   const target = activation.target;
   if (!instance || target.type !== 'DIE') return null;
-  const expectedRandom = instance.abilityId === 'recast' ? config.abilities.recast.rerollCount : 0;
+  const expectedRandom = configuredAfterRollRandomCount(instance.abilityId, config);
   if (
     randomValues.length !== expectedRandom ||
     randomValues.some((value) => !Number.isInteger(value) || value < 1 || value > 6)
   )
     return null;
 
+  const applied = applyConfiguredAfterRoll(
+    instance.abilityId,
+    state,
+    player,
+    activation,
+    randomValues,
+    config,
+    { movementTokensForRoll },
+  );
+  if (!applied) return null;
   const powerups = state.powerups!;
   const inventory = powerups.loadouts[player].powerups;
-  const before = state.roll[target.index];
-  const wasDouble = state.roll[0] === state.roll[1];
-  let after: number;
-  let allowBearingOff = true;
-  if (instance.abilityId === 'recast') {
-    after = randomValues.at(-1)!;
-    const recast = config.abilities.recast;
-    if (wasDouble && recast.originalDoubleHandling === 'CHANGE_MATCHING_TOKENS')
-      state.remaining = state.remaining.map((token) => (token === before ? after : token));
-    else replaceOneToken(state.remaining, before, after);
-    state.roll[target.index] = after;
-    if (!wasDouble && state.roll[0] === state.roll[1] && recast.createdMatchBecomesDouble)
-      state.remaining = movementTokensForRoll(state, player, [after, after], config);
-  } else {
-    const adjustment =
-      instance.abilityId === 'nudge'
-        ? config.abilities.nudge.adjustment
-        : config.abilities.opportunist.focusAdjustment;
-    const allowCreatedDouble =
-      instance.abilityId === 'nudge'
-        ? config.abilities.nudge.createdMatchBecomesDouble
-        : config.abilities.opportunist.createdMatchBecomesDouble;
-    const direction = activation.option!;
-    after = before + (direction === 'INCREASE' ? adjustment : -adjustment);
-    replaceOneToken(state.remaining, before, after);
-    allowBearingOff =
-      instance.abilityId === 'nudge'
-        ? config.abilities.nudge.allowBearingOff
-        : config.abilities.opportunist.allowBearingOff;
-    if (!wasDouble && after === state.roll[target.index === 0 ? 1 : 0] && allowCreatedDouble)
-      state.remaining = movementTokensForRoll(state, player, [after, after], config);
-  }
+  const inventoryIndex = inventory.findIndex(
+    (candidate) => candidate.instanceId === activation.instanceId,
+  );
+  if (inventoryIndex >= 0) {
+    inventory.splice(inventoryIndex, 1);
+    recordPowerupUse(powerups, player, config);
+  } else commitConfiguredAfterRoll(instance.abilityId, state, player, config);
+
   const modifier: DiceModifier = {
     instanceId: activation.instanceId,
     abilityId: instance.abilityId,
     source: player,
     dieIndex: target.index,
-    before,
-    after,
+    before: applied.before,
+    after: applied.after,
     randomResults: [...randomValues],
     ...(activation.option ? { option: activation.option } : {}),
-    allowBearingOff,
+    allowBearingOff: applied.allowBearingOff,
   };
-  if (instance.abilityId === 'opportunist') {
-    if (!spendOpportunistFocus(powerups, player)) return null;
-  } else {
-    const inventoryIndex = inventory.findIndex(
-      (candidate) => candidate.instanceId === activation.instanceId,
-    );
-    inventory.splice(inventoryIndex, 1);
-    recordPowerupUse(powerups, player, config);
-  }
   state.diceModifiers.push(modifier);
   return modifier;
 }
@@ -199,15 +135,7 @@ function rollAbilityInstance(
   const instance = [...loadout.powerups, ...loadout.passives].find(
     (candidate) => candidate.instanceId === activation.instanceId,
   );
-  return instance?.abilityId === 'recast' ||
-    instance?.abilityId === 'nudge' ||
-    instance?.abilityId === 'opportunist'
+  return instance && hasAfterRollAbilityBehavior(instance.abilityId)
     ? (instance as RollAbilityInstance)
     : null;
-}
-
-function replaceOneToken(tokens: number[], before: number, after: number): void {
-  const index = tokens.indexOf(before);
-  if (index < 0) throw new Error('roll ability token is missing');
-  tokens[index] = after;
 }

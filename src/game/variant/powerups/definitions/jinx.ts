@@ -1,3 +1,5 @@
+import { other } from '../../../rules/position';
+import { defineEndTurnAbilityBehavior } from '../../abilities/capabilities';
 import type { JinxConfig } from '../../types';
 import { defineAbility } from '../../abilities/define';
 import {
@@ -55,6 +57,34 @@ export const jinx = defineAbility<'jinx', JinxConfig>({
     return {
       name: 'Jinx',
       summary: `Reduce the opponent’s ${config.targetToken.toLowerCase()} die by ${config.penalty}.`,
+    };
+  },
+});
+
+export const jinxEndTurn = defineEndTurnAbilityBehavior({
+  id: 'jinx',
+  targets(_state, player) {
+    return [{ type: 'PLAYER', player: other(player) }];
+  },
+  effect(_state, activation, player, config) {
+    return {
+      abilityId: 'jinx',
+      source: player,
+      affectedPlayer: other(player),
+      target: activation.target,
+      tags: ['DICE_PENALTY'],
+      modifiers: {
+        dicePenalty: {
+          penalty: config.penalty,
+          minimumToken: config.minimumToken,
+          targetToken: config.targetToken,
+          affectDoubles: config.affectDoubles,
+          unaffectedDoubleConsumes: config.unaffectedDoubleConsumes,
+          doubleHandling: config.doubleHandling,
+        },
+      },
+      duration: config.duration,
+      remaining: config.duration.count,
     };
   },
 });

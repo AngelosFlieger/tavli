@@ -23,9 +23,9 @@ import {
 import { activateRollAbility } from '../variant/roll-activation';
 import {
   advancePassiveCountersAtTurnEnd,
-  gainOpportunistFocus,
-  hasPassive,
+  movementRollSource,
   movementTokensForRoll,
+  passiveStallEvents,
 } from '../variant/passives/policy';
 import { resolvePendingRollEffects } from '../variant/powerups/roll-effects';
 import { activateBeforeRollAbility } from '../variant/powerups/before-roll';
@@ -303,9 +303,7 @@ export function transitionSession(
     state.roll = [...values];
     state.diceModifiers = [];
     state.rollSource =
-      !state.opening && rules.variantConfig && hasPassive(state.powerups, active, 'loadedKnuckles')
-        ? 'loadedKnuckles'
-        : null;
+      !state.opening && rules.variantConfig ? movementRollSource(state, active) : null;
     if (state.opening) {
       state.openingRolls[active] = [...values];
       if (active === 0) {
@@ -355,8 +353,7 @@ export function transitionSession(
     if (legalMoves(state, active, state.remaining).length) events.push({ type: 'MovesAvailable' });
     else {
       if (state.powerups && rules.variantConfig) {
-        const gained = gainOpportunistFocus(state.powerups, active, rules.variantConfig);
-        if (gained) events.push({ type: 'FocusGained', ...gained });
+        events.push(...passiveStallEvents(state.powerups, active, rules.variantConfig));
       }
       state.phase = nextPhase(state.phase, 'movesExhausted')!;
       events.push({ type: 'NoLegalMoves' });
@@ -467,7 +464,7 @@ export function transitionSession(
       const powerups = state.powerups;
       const usedPowerupThisTurn = powerups.powerupsUsedThisTurn > 0;
       powerups.actedThisRound[active] = true;
-      advancePassiveCountersAtTurnEnd(powerups, active, usedPowerupThisTurn);
+      advancePassiveCountersAtTurnEnd(powerups, active, usedPowerupThisTurn, rules.variantConfig);
       powerups.powerupsUsedThisTurn = 0;
       powerups.checkerMovedThisTurn = false;
       if (powerups.actedThisRound.every(Boolean)) {

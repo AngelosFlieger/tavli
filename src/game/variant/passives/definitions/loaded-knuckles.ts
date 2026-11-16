@@ -1,5 +1,6 @@
 import type { LoadedKnucklesConfig } from '../../types';
 import { defineAbility } from '../../abilities/define';
+import { definePassiveAbilityBehavior } from '../capabilities';
 import {
   baseConfig,
   exactKeys,
@@ -39,3 +40,37 @@ export const loadedKnuckles = defineAbility<'loadedKnuckles', LoadedKnucklesConf
     };
   },
 });
+
+export const loadedKnucklesPassive = definePassiveAbilityBehavior({
+  id: 'loadedKnuckles',
+  roll: {
+    source: 'loadedKnuckles',
+    generate(_state, _player, config, rollDie, randomInt) {
+      const first = checkedDie(rollDie());
+      const chance = config.matchChance;
+      const chanceRoll = checkedRandom(randomInt(chance.denominator), chance.denominator);
+      if (chanceRoll < chance.numerator) return [first, first];
+
+      const alternatives = [1, 2, 3, 4, 5, 6].filter((value) => value !== first);
+      return [
+        first,
+        alternatives[checkedRandom(randomInt(alternatives.length), alternatives.length)],
+      ];
+    },
+    movementTokens(_state, _player, values, config) {
+      return Array(config.doubleMoveTokens).fill(values[0]);
+    },
+  },
+});
+
+function checkedDie(value: number): number {
+  if (!Number.isInteger(value) || value < 1 || value > 6)
+    throw new Error('die source returned an out-of-range value');
+  return value;
+}
+
+function checkedRandom(value: number, maximum: number): number {
+  if (!Number.isInteger(value) || value < 0 || value >= maximum)
+    throw new Error('random source returned an out-of-range value');
+  return value;
+}

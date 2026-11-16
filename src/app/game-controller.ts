@@ -30,6 +30,18 @@ import { PickupSelection } from './pickup-selection';
 
 type RemoteState = { epoch: number; state: GameState; canUndo: boolean };
 
+type ControllerOperation =
+  | { type: 'IDLE' }
+  | { type: 'ROLL'; authority: 'LOCAL'; forced: [number, number] | null }
+  | { type: 'ROLL'; authority: 'ONLINE' }
+  | { type: 'MOVE'; authority: 'LOCAL' | 'ONLINE' }
+  | { type: 'DRAFT_PICK' }
+  | { type: 'END_TURN' }
+  | { type: 'ABILITY'; completion: 'ONLINE_UPDATE' | 'LOCAL_DICE_PRESENTATION' }
+  | { type: 'REMOTE_MOVE'; result: RemoteState };
+
+type ActiveControllerOperation = Exclude<ControllerOperation, { type: 'IDLE' }>;
+
 export type LocalMoveRequest = {
   type: 'local';
   start: Position;
@@ -50,21 +62,14 @@ export class GameController {
   private cachedMoves: Move[] = [];
   private online: { you: Player; send: (command: Command) => void } | null = null;
   private remoteCanUndo = false;
-  private rollBusy = false;
-  private moveBusy = false;
-  private draftBusy = false;
-  private endBusy = false;
-  private abilityBusy = false;
-  private remoteAnimation = false;
+  private operation: ControllerOperation = { type: 'IDLE' };
   private epoch = 0;
   private pendingRoll: RemoteState | null = null;
-  private remoteResult: RemoteState | null = null;
   private abilitySelection: {
     instanceId: string;
     target?: AbilityActivation['target'];
     option?: AbilityActivation['option'];
   } | null = null;
-  private pendingLocalRoll: [number, number] | null = null;
   private eventSink: ((events: SessionEvent[], state: GameState) => void) | null = null;
 
   constructor(
@@ -95,14 +100,7 @@ export class GameController {
   }
 
   get busy(): boolean {
-    return (
-      this.rollBusy ||
-      this.moveBusy ||
-      this.draftBusy ||
-      this.endBusy ||
-      this.abilityBusy ||
-      this.remoteAnimation
-    );
+    return this.operation.type !== 'IDLE';
   }
 
   get throwingPlayer(): Player {
@@ -174,6 +172,12 @@ export class GameController {
     return result;
   }
 
+  private sendOnline(command: Command, operation: ActiveControllerOperation): void {
+    if (!this.online) throw new Error('online command requested without an authority connection');
+    this.operation = operation;
+    this.online.send(command);
+  }
+
   pickAt(point: number): number | null {
     if (this.busy || this.abilitySelection || !this.mine()) return null;
     return this.pickup.pickAt(point, this.state);
@@ -202,44 +206,49 @@ export class GameController {
     if (locked || this.busy || this.abilitySelection || !this.mine()) return false;
     if (this.online) {
       if (!['OPENING_ROLL', 'WAITING_FOR_ROLL'].includes(this.state.phase)) return false;
-      this.rollBusy = true;
-      this.online.send({ type: 'roll' });
+      this.sendOnline({ type: 'roll' }, { type: 'ROLL', authority: 'ONLINE' });
       return true;
     }
     const accepted = this.dispatchLocal({ type: 'beginRoll' }).ok;
     if (accepted) {
-      this.rollBusy = true;
       const config = this.rules.variantConfig;
       const active = this.state.active;
-      if (active !== null)
-        this.pendingLocalRoll = config
-          ? generateMovementRoll(
-              this.state,
-              active,
-              config,
-              () => this.randomInt(6) + 1,
-              this.randomInt,
-            )
-          : [this.randomInt(6) + 1, this.randomInt(6) + 1];
+      const forced: [number, number] | null =
+        active === null
+          ? null
+          : config
+            ? generateMovementRoll(
+                this.state,
+                active,
+                config,
+                () => this.randomInt(6) + 1,
+                this.randomInt,
+              )
+            : [this.randomInt(6) + 1, this.randomInt(6) + 1];
+      this.operation = { type: 'ROLL', authority: 'LOCAL', forced };
     }
     return accepted;
   }
 
   takeForcedLocalRoll(): [number, number] | null {
-    const values = this.pendingLocalRoll;
-    this.pendingLocalRoll = null;
+    if (this.operation.type !== 'ROLL' || this.operation.authority !== 'LOCAL') return null;
+    const values = this.operation.forced;
+    this.operation = { ...this.operation, forced: null };
     return values;
   }
 
   receiveRoll(values: number[]): void {
-    if (this.abilityBusy) {
-      this.abilityBusy = false;
+    if (
+      this.operation.type === 'ABILITY' &&
+      this.operation.completion === 'LOCAL_DICE_PRESENTATION'
+    ) {
+      this.operation = { type: 'IDLE' };
       this.pickup.clear();
       return;
     }
-    if (this.rollBusy && !this.online) this.dispatchLocal({ type: 'receiveRoll', values });
-    this.pendingLocalRoll = null;
-    this.rollBusy = false;
+    if (this.operation.type !== 'ROLL') return;
+    if (this.operation.authority === 'LOCAL') this.dispatchLocal({ type: 'receiveRoll', values });
+    this.operation = { type: 'IDLE' };
     this.pickup.clear();
   }
 
@@ -253,8 +262,7 @@ export class GameController {
     )
       return null;
     if (this.online) {
-      this.moveBusy = true;
-      this.online.send({ type: 'move', sequence });
+      this.sendOnline({ type: 'move', sequence }, { type: 'MOVE', authority: 'ONLINE' });
       return { type: 'sent' };
     }
     const from = sequence[0]?.from;
@@ -264,18 +272,19 @@ export class GameController {
     const player = this.state.active;
     const result = this.dispatchLocal({ type: 'move', sequence });
     if (!result.ok) return null;
-    this.moveBusy = true;
+    this.operation = { type: 'MOVE', authority: 'LOCAL' };
     this.pickup.consume(checker);
     return { type: 'local', start, stages: result.stages!, checker, player };
   }
 
   finishLocalMove(): void {
-    this.moveBusy = false;
+    if (this.operation.type !== 'MOVE' || this.operation.authority !== 'LOCAL') return;
+    this.operation = { type: 'IDLE' };
     this.pickup.revalidate(this.state);
   }
 
   get hasLocalMove(): boolean {
-    return !this.online && this.moveBusy;
+    return this.operation.type === 'MOVE' && this.operation.authority === 'LOCAL';
   }
 
   undo(locked = false): boolean {
@@ -296,8 +305,7 @@ export class GameController {
       ? { instanceId: this.abilitySelection.instanceId, target: this.abilitySelection.target }
       : undefined;
     if (this.online) {
-      this.endBusy = true;
-      this.online.send({ type: 'end', ...(ability ? { ability } : {}) });
+      this.sendOnline({ type: 'end', ...(ability ? { ability } : {}) }, { type: 'END_TURN' });
       this.abilitySelection = null;
       return true;
     }
@@ -387,8 +395,10 @@ export class GameController {
       target,
     };
     if (this.online) {
-      this.abilityBusy = true;
-      this.online.send({ type: 'playAbility', activation });
+      this.sendOnline(
+        { type: 'playAbility', activation },
+        { type: 'ABILITY', completion: 'ONLINE_UPDATE' },
+      );
       this.abilitySelection = null;
       return { type: 'sent' };
     }
@@ -424,8 +434,10 @@ export class GameController {
       ...(option.option ? { option: option.option } : {}),
     };
     if (this.online) {
-      this.abilityBusy = true;
-      this.online.send({ type: 'playAbility', activation });
+      this.sendOnline(
+        { type: 'playAbility', activation },
+        { type: 'ABILITY', completion: 'ONLINE_UPDATE' },
+      );
       this.abilitySelection = null;
       return { type: 'sent' };
     }
@@ -441,7 +453,7 @@ export class GameController {
     if (!used) return null;
     this.abilitySelection = null;
     this.pickup.clear();
-    if (randomCount) this.abilityBusy = true;
+    if (randomCount) this.operation = { type: 'ABILITY', completion: 'LOCAL_DICE_PRESENTATION' };
     return {
       type: 'local',
       ...(randomCount
@@ -460,12 +472,14 @@ export class GameController {
     const player = draft.pickOrder[draft.currentPick];
     if (this.online) {
       if (this.online.you !== player) return false;
-      this.draftBusy = true;
-      this.online.send({
-        type: 'pickAbility',
-        abilityId,
-        ...(replaceInstanceId === undefined ? {} : { replaceInstanceId }),
-      });
+      this.sendOnline(
+        {
+          type: 'pickAbility',
+          abilityId,
+          ...(replaceInstanceId === undefined ? {} : { replaceInstanceId }),
+        },
+        { type: 'DRAFT_PICK' },
+      );
       return true;
     }
     return this.dispatchLocal({ type: 'pickAbility', player, abilityId, replaceInstanceId }).ok;
@@ -505,39 +519,36 @@ export class GameController {
   }
 
   beginRemoteMove(sequence: Move[], state: GameState, canUndo: boolean): number | null {
-    this.moveBusy = false;
     const checker = this.state.board[sequence[0]?.from]?.at(-1);
-    if (checker === undefined) return null;
+    if (checker === undefined) {
+      this.operation = { type: 'IDLE' };
+      return null;
+    }
     this.pickup.consume(checker);
-    this.remoteResult = { epoch: this.epoch, state, canUndo };
-    this.remoteAnimation = true;
+    this.operation = {
+      type: 'REMOTE_MOVE',
+      result: { epoch: this.epoch, state, canUndo },
+    };
     return checker;
   }
 
   finishRemoteMove(): { state: GameState; canUndo: boolean } | null {
-    const result = this.remoteResult;
-    this.remoteResult = null;
-    this.remoteAnimation = false;
+    if (this.operation.type !== 'REMOTE_MOVE') return null;
+    const result = this.operation.result;
+    this.operation = { type: 'IDLE' };
     return result && result.epoch === this.epoch ? result : null;
   }
 
   get hasRemoteMove(): boolean {
-    return this.remoteResult?.epoch === this.epoch;
+    return this.operation.type === 'REMOTE_MOVE' && this.operation.result.epoch === this.epoch;
   }
 
   adopt(state: GameState, canUndo: boolean, preservePickup = false): void {
     this.epoch++;
     this.pendingRoll = null;
-    this.remoteResult = null;
-    this.remoteAnimation = false;
-    this.rollBusy = false;
-    this.moveBusy = false;
-    this.draftBusy = false;
-    this.endBusy = false;
-    this.abilityBusy = false;
+    this.operation = { type: 'IDLE' };
     this.remoteCanUndo = canUndo;
     this.abilitySelection = null;
-    this.pendingLocalRoll = null;
     this.session = { state: structuredClone(state), history: [] };
     this.moveKey = '';
     if (preservePickup) this.pickup.revalidate(this.state);

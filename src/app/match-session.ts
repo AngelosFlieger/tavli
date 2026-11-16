@@ -2,8 +2,8 @@ import type { GameState, Player } from '../game/engine';
 import type { Command, Update } from '../net/messages';
 import { CLASSIC_SELECTION, type MatchSelection } from '../net/messages';
 import type { GameController } from './game-controller';
-import { variantProfile } from '../game/variant/config/profiles';
-import { CLASSIC_RULES, powerupsRules, type ResolvedVariantConfig } from '../game/variant/types';
+import { rulesForSelection } from '../game/variant/rules-context';
+import type { ResolvedVariantConfig } from '../game/variant/types';
 import { createSeededRandomInt } from '../game/random';
 
 export type MatchEvents = {
@@ -153,10 +153,7 @@ export function createMatchSession(
       }
     },
     startLocal(selection: MatchSelection = CLASSIC_SELECTION, seed?: number): boolean {
-      const rules =
-        selection.ruleset === 'CLASSIC'
-          ? CLASSIC_RULES
-          : powerupsRules(variantProfile(selection.profileId));
+      const rules = rulesForSelection(selection);
       if (
         !controller.configure(rules, seed === undefined ? undefined : createSeededRandomInt(seed))
       )
