@@ -1,8 +1,9 @@
 import { initialGameState, type GameState, type Session } from './state';
+import { CLASSIC_RULES, type RulesContext } from '../variant/types';
 import type { SessionEvent } from './transition';
 
-export function initialPresentedSession(): Session {
-  const state = initialGameState();
+export function initialPresentedSession(rules: RulesContext = CLASSIC_RULES): Session {
+  const state = initialGameState(rules);
   state.message = sessionMessage(state, [{ type: 'GameReset' }])!;
   return { state, history: [] };
 }
@@ -34,6 +35,20 @@ export function sessionMessage(state: GameState, events: SessionEvent[]): string
         : `Player ${event.outcome.winner + 1} wins · ${event.outcome.reason}`;
     case 'TurnEnded':
       return `Player ${event.next + 1} · roll both dice.`;
+    case 'DraftDue':
+      return `Round ${event.round} complete · ability draft.`;
+    case 'DraftOpened':
+      return 'Rolling to decide who drafts first…';
+    case 'DraftOrderTied':
+      return 'Draft roll tied · rolling again.';
+    case 'DraftOrderChosen':
+      return `Player ${event.first + 1} drafts first.`;
+    case 'AbilityPicked':
+      return `Player ${event.player + 1} picked an ability.`;
+    case 'AbilityUsed':
+      return `Player ${event.player + 1} used an ability.`;
+    case 'DraftCompleted':
+      return `Player ${state.active! + 1} · roll both dice.`;
     default:
       return null;
   }

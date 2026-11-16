@@ -5,3 +5,4 @@ export type { Move, Outcome, Player, Position } from './rules/position';
 export { Game } from './session/game';
 export type { GameState } from './session/game';
 export type { Phase } from './session/phase';
+export type { RulesContext, Ruleset } from './variant/types';

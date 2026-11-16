@@ -1,14 +1,23 @@
 import type { GameState, Player } from '../game/engine';
 import type { Command, Update } from '../net/messages';
+import { CLASSIC_SELECTION, type MatchSelection } from '../net/messages';
 import type { GameController } from './game-controller';
+import { rulesForSelection } from '../game/variant/rules-context';
+import type { ResolvedVariantConfig } from '../game/variant/types';
+import { createSeededRandomInt } from '../game/random';
 
 export type MatchEvents = {
   onReady: (name: string) => void;
-  onResume: (you: Player, state: GameState, canUndo: boolean) => void;
+  onResume: (
+    you: Player,
+    state: GameState,
+    canUndo: boolean,
+    variantConfig: ResolvedVariantConfig | null,
+  ) => void;
   onRejected: () => void;
   onReconnect: () => void;
   onWaiting: () => void;
-  onMatched: (you: Player, state: GameState) => void;
+  onMatched: (you: Player, state: GameState, variantConfig: ResolvedVariantConfig | null) => void;
   onUpdate: (update: Update) => void;
   onLeft: () => void;
   onClose: () => void;
@@ -16,7 +25,7 @@ export type MatchEvents = {
 
 export type MatchTransport = {
   connect: () => void;
-  find: () => void;
+  find: (selection?: MatchSelection) => void;
   cancel: () => void;
   send: (command: Command) => void;
   abandon: () => void;
@@ -28,6 +37,7 @@ export type MatchFlow = {
     send: (command: Command) => void,
     state: GameState,
     canUndo?: boolean,
+    variantConfig?: ResolvedVariantConfig | null,
   ) => void;
   receive: (update: Update) => void;
   leave: () => void;
@@ -61,12 +71,12 @@ export function createMatchSession(
       ui.showTitle();
       ui.showNote('The match ended while you were disconnected.');
     },
-    onResume(you, state, canUndo) {
+    onResume(you, state, canUndo, variantConfig) {
       searching = false;
       playing = true;
       ui.setSearching(false);
       ui.showNote(null);
-      flow.join(you, (command) => table.send(command), state, canUndo);
+      flow.join(you, (command) => table.send(command), state, canUndo, variantConfig);
       ui.enterTable();
       scene.startSetup();
     },
@@ -89,7 +99,7 @@ export function createMatchSession(
       if (!searching) return;
       ui.setSearching(true);
     },
-    onMatched(you, state) {
+    onMatched(you, state, variantConfig) {
       if (!searching) {
         table.cancel();
         return;
@@ -98,7 +108,7 @@ export function createMatchSession(
       playing = true;
       ui.setSearching(false);
       ui.showNote(null);
-      flow.join(you, (command) => table.send(command), state);
+      flow.join(you, (command) => table.send(command), state, false, variantConfig);
       ui.enterTable();
       scene.startSetup();
     },
@@ -142,14 +152,20 @@ export function createMatchSession(
         ui.showTitle();
       }
     },
-    startLocal() {
+    startLocal(selection: MatchSelection = CLASSIC_SELECTION, seed?: number): boolean {
+      const rules = rulesForSelection(selection);
+      if (
+        !controller.configure(rules, seed === undefined ? undefined : createSeededRandomInt(seed))
+      )
+        return false;
       scene.startSetup();
-      if (!searching) return;
+      if (!searching) return true;
       searching = false;
       ui.setSearching(false);
       table.cancel();
+      return true;
     },
-    toggleSearch() {
+    toggleSearch(selection: MatchSelection = CLASSIC_SELECTION) {
       if (searching) {
         searching = false;
         ui.setSearching(false);
@@ -159,7 +175,7 @@ export function createMatchSession(
       }
       searching = true;
       ui.showNote(null);
-      table.find();
+      table.find(selection);
     },
   };
 }

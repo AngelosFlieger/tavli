@@ -11,12 +11,16 @@ import { owner, type Move, type Position } from '../game/engine';
 import { GameController, type LocalMoveRequest } from '../app/game-controller';
 import { pointPosition } from '../game/points';
 import { loadModel } from './assets';
+import type { AbilityTarget, RollAbilityOption } from '../game/variant/types';
+import { createAbilityEffects } from './ability-effects';
 
 export type GameplayHooks = {
   onChange: () => void;
   onMove: (sequence: Move[]) => void;
   onUndo: () => void;
   onRestart: () => void;
+  onRollAbility: (option: RollAbilityOption) => void;
+  onBeforeRollAbility: (target: AbilityTarget) => void;
 };
 
 export async function createGameplay(
@@ -55,6 +59,7 @@ export async function createGameplay(
     }
   });
   const board = createBoardPresentation(center, layout, checkers, heights);
+  const abilityEffects = createAbilityEffects(root, checkers, heights);
   const preview = createMovePreview(root, camera, checkers, center);
   function updatePresentation() {
     const title = document.body.classList.contains('on-title');
@@ -135,6 +140,8 @@ export async function createGameplay(
     state: () => controller.state,
     locked,
     mine,
+    abilitySelected: () => controller.selectedAbility !== null,
+    abilityTargets: () => controller.abilityTargetPoints(),
     onIntent(intent) {
       switch (intent.type) {
         case 'place':
@@ -152,6 +159,13 @@ export async function createGameplay(
           controller.clearPickup();
           refresh(false);
           break;
+        case 'abilityTarget':
+          if (controller.targetSelectedAbility(intent.point)) refresh(false);
+          break;
+        case 'cancelAbility':
+          controller.cancelSelectedAbility();
+          refresh(false);
+          break;
       }
     },
   });
@@ -163,12 +177,38 @@ export async function createGameplay(
       refresh(false);
     },
     bearOff: hooks.onMove,
+    pickAbility(abilityId, replaceInstanceId) {
+      const picked = controller.pickAbility(abilityId, replaceInstanceId);
+      if (picked) refresh(false);
+      return picked;
+    },
+    selectAbility(instanceId) {
+      const selected = controller.selectAbility(instanceId);
+      if (selected) refresh(false);
+      return selected;
+    },
+    cancelAbility() {
+      controller.cancelSelectedAbility();
+      refresh(false);
+    },
+    playRollAbility: hooks.onRollAbility,
+    playBeforeRollAbility: hooks.onBeforeRollAbility,
     onChange: hooks.onChange,
   });
   function refresh(updatePositions = true) {
     if (updatePositions && setupTime === null) board.sync(controller.state);
     const state = controller.state;
+    const presentedEffects = abilityEffects.sync(state);
+    canvas.dataset.effectVisuals = presentedEffects
+      .map((effect) => `${effect.abilityId}:${effect.point}`)
+      .join(',');
     const moves = mine() && !locked() ? controller.moves() : [];
+    const abilityTargets = controller.abilityTargetPoints();
+    const effectPoints = new Set(
+      state.powerups?.activeEffects.flatMap((effect) =>
+        effect.target.type === 'POINT' ? [effect.target.point] : [],
+      ),
+    );
     const pickupView = input.refresh();
     const { queue, pickable, sequences } = pickupView;
     markers.forEach((marker, point) => {
@@ -176,13 +216,17 @@ export async function createGameplay(
         moves.some((move) => move.from === point) || (queue.length > 0 && pickable[point] !== null);
       const landed = sequences.filter((sequence) => sequence.at(-1)!.to === point);
       const queuedSource = state.board[point].some((id) => queue.includes(id));
-      marker.visible = source || queuedSource;
+      const abilityTarget = abilityTargets.includes(point);
+      const activeEffect = effectPoints.has(point);
+      marker.visible = source || queuedSource || abilityTarget || activeEffect;
       const column = columns[point];
       column.visible = landed.length > 0;
       column.material.uniforms.color.value.setHex(
         landed.length > 0 && landed.every((sequence) => sequence.length > 1) ? 0xffb52e : 0x29e1cd,
       );
-      (marker.material as THREE.MeshBasicMaterial).color.set(queuedSource ? 0xffd46b : 0xeac678);
+      (marker.material as THREE.MeshBasicMaterial).color.set(
+        abilityTarget ? 0x6de3d5 : activeEffect ? 0x69a7ff : queuedSource ? 0xffd46b : 0xeac678,
+      );
       (marker.material as THREE.MeshBasicMaterial).opacity = queuedSource ? 0.35 : 0.7;
       const stack = state.board[point],
         top = stack.at(-1);
@@ -236,6 +280,7 @@ export async function createGameplay(
         return;
       }
       animator.update(dt);
+      if (!reducedMotion.matches && preferences.motion) abilityEffects.update(dt);
     },
     playRemoteMove(sequence: Move[], checker: number, done: () => void) {
       const start: Position = { board: controller.state.board, off: controller.state.off };

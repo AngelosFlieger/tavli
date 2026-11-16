@@ -7,6 +7,9 @@ import {
   type OnlineScene,
 } from '../src/app/online-game-flow';
 import type { Move } from '../src/game/engine';
+import { initialGameState } from '../src/game/session/state';
+import { POWERUPS_V1 } from '../src/game/variant/config/profiles';
+import { powerupsRules } from '../src/game/variant/types';
 
 test('online flow presents authoritative rolls and moves before adopting them', () => {
   const controller = new GameController();
@@ -21,7 +24,10 @@ test('online flow presents authoritative rolls and moves before adopting them', 
     },
   };
   const dice: OnlineDice = {
-    play: (values) => calls.push(`dice-${values.join('-')}`),
+    play: (values, rerolledDie) =>
+      calls.push(
+        `dice-${values.join('-')}${rerolledDie === undefined ? '' : `-only-${rerolledDie}`}`,
+      ),
     reset: () => calls.push('dice-reset'),
   };
   const flow = createOnlineGameFlow(controller, scene, dice);
@@ -37,6 +43,10 @@ test('online flow presents authoritative rolls and moves before adopting them', 
   assert.equal(calls.at(-1), 'dice-2-3');
   flow.presentedRoll();
   assert.equal(controller.state.active, 1);
+
+  flow.receive({ state: controller.state, canUndo: false, dice: [4, 3], rerolledDie: 0 });
+  assert.equal(calls.at(-1), 'dice-4-3-only-0');
+  flow.presentedRoll();
 
   const ready = structuredClone(controller.state);
   ready.active = 0;
@@ -102,4 +112,19 @@ test('interrupted remote presentation adopts once and ignores a late completion'
   const afterInterruption = presents;
   done();
   assert.equal(presents, afterInterruption);
+});
+
+test('online join rejects a state without its matching rules snapshot', () => {
+  const controller = new GameController();
+  const scene: OnlineScene = {
+    faceSeat() {},
+    presentState() {},
+    playRemoteMove() {},
+  };
+  const dice: OnlineDice = { play() {}, reset() {} };
+  const flow = createOnlineGameFlow(controller, scene, dice);
+  const state = initialGameState(powerupsRules(POWERUPS_V1));
+
+  assert.throws(() => flow.join(0, () => {}, state, false, null), /do not agree/);
+  assert.doesNotThrow(() => flow.join(0, () => {}, state, false, POWERUPS_V1));
 });

@@ -223,6 +223,24 @@ dialog h2 {
 dialog p {
   color: #d2c5a9;
 }
+dialog h3 {
+  margin: 30px 0 10px;
+  color: #efd59e;
+}
+dialog .ability-help {
+  padding-left: 20px;
+}
+dialog .ability-help li {
+  margin: 0 0 12px;
+  color: #d2c5a9;
+}
+dialog .ability-help small {
+  margin-left: 5px;
+  color: #d6af72;
+  font: 9px monospace;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
 dialog .eyebrow {
   font: 10px monospace;
   color: #d6af72;
@@ -563,6 +581,25 @@ footer #roll {
 .match-controls button {
   padding: 8px 15px;
   margin-top: 14px;
+}
+
+.playtest-analysis {
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px solid rgba(215, 189, 136, 0.35);
+}
+
+.playtest-analysis output {
+  display: block;
+  margin-top: 14px;
+  padding: 12px;
+  max-height: 240px;
+  overflow: auto;
+  white-space: pre-wrap;
+  border: 1px solid rgba(215, 189, 136, 0.25);
+  background: rgba(4, 10, 21, 0.55);
+  color: #e5d1a2;
+  font: 12px/1.5 monospace;
 }
 @media (max-width: 1000px) {
   .sidebar {

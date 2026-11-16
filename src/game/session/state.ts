@@ -1,4 +1,11 @@
 import { initialPosition, type Outcome, type Player, type Position } from '../rules/position';
+import {
+  CLASSIC_RULES,
+  type PowerupsState,
+  type DiceModifier,
+  type RulesContext,
+  type Ruleset,
+} from '../variant/types';
 import type { Phase } from './phase';
 
 export type GameState = Position & {
@@ -10,11 +17,16 @@ export type GameState = Position & {
   outcome: Outcome | null;
   message: string;
   opening: boolean;
+  ruleset: Ruleset;
+  variantConfigHash: string | null;
+  powerups: PowerupsState | null;
+  diceModifiers: DiceModifier[];
+  rollSource: 'loadedKnuckles' | null;
 };
 
 export type Session = { state: GameState; history: GameState[] };
 
-export function initialGameState(): GameState {
+export function initialGameState(rules: RulesContext = CLASSIC_RULES): GameState {
   return {
     ...initialPosition(),
     phase: 'OPENING_ROLL',
@@ -25,5 +37,28 @@ export function initialGameState(): GameState {
     outcome: null,
     message: '',
     opening: true,
+    ruleset: rules.ruleset,
+    variantConfigHash: rules.variantConfig?.hash ?? null,
+    powerups: rules.variantConfig ? initialPowerupsState() : null,
+    diceModifiers: [],
+    rollSource: null,
+  };
+}
+
+function initialPowerupsState(): PowerupsState {
+  return {
+    completedRounds: 0,
+    actedThisRound: [false, false],
+    loadouts: [
+      { powerups: [], passives: [] },
+      { powerups: [], passives: [] },
+    ],
+    activeEffects: [],
+    passiveCounters: [{}, {}],
+    passivePolicies: [{}, {}],
+    powerupsUsedThisTurn: 0,
+    checkerMovedThisTurn: false,
+    nextAbilityInstance: 1,
+    draft: null,
   };
 }

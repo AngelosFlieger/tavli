@@ -1,6 +1,7 @@
 import { PATHS } from '../points';
 import { outcome } from './outcome';
 import { applyMove, canBearOff, owner, type Move, type Player, type Position } from './position';
+import { moveAllowedByActiveEffects } from '../variant/move-policy';
 
 export function rawMoves(position: Position, player: Player, die: number): Move[] {
   const path = PATHS[player],
@@ -48,16 +49,20 @@ export function legalMoves(position: Position, player: Player, dice: number[]): 
     if (cached !== undefined) return cached;
     let best = 0;
     for (const die of new Set(left))
-      for (const move of rawMoves(pos, player, die))
+      for (const move of rawMoves(pos, player, die).filter((candidate) =>
+        moveAllowedByActiveEffects(pos, player, candidate),
+      ))
         best = Math.max(best, 1 + count(applyMove(pos, player, move), spendDie(left, die)));
     memo.set(key, best);
     return best;
   }
   const candidates = [...new Set(dice)].flatMap((die) =>
-    rawMoves(position, player, die).map((move) => {
-      const next = applyMove(position, player, move);
-      return { move, winning: !!outcome(next), count: 1 + count(next, spendDie(dice, die)) };
-    }),
+    rawMoves(position, player, die)
+      .filter((move) => moveAllowedByActiveEffects(position, player, move))
+      .map((move) => {
+        const next = applyMove(position, player, move);
+        return { move, winning: !!outcome(next), count: 1 + count(next, spendDie(dice, die)) };
+      }),
   );
   const max = Math.max(0, ...candidates.map((c) => c.count));
   let allowed = candidates.filter((c) => c.winning || c.count === max);

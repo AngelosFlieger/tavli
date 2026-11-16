@@ -1,7 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
+import { legalMoves } from '../src/game/rules/moves';
+import { initialPresentedSession } from '../src/game/session/messages';
 import { initialGameState } from '../src/game/session/state';
+import { createPowerupsV1Input } from '../src/game/variant/config/profiles/v1';
+import { resolveVariantConfig } from '../src/game/variant/config/schema';
+import { powerupsRules } from '../src/game/variant/types';
 import { openStore } from '../server/store';
 import { createTables } from '../server/tables';
 
@@ -14,6 +19,8 @@ test('a live match is found by either seat without loading every match', async (
         id: 'live',
         seats: ['crimson', 'ivory'],
         session,
+        variantConfig: null,
+        lastUpdate: null,
         revision: 0,
         away: [null, null],
         endedAt: null,
@@ -28,7 +35,39 @@ test('a live match is found by either seat without loading every match', async (
   }
 });
 
-test('two processes pair through MongoDB and both see the same roll', async () => {
+test('a stored configuration snapshot restores without a registered profile', async () => {
+  const store = await openStore({ name: `plakoto-test-${randomUUID()}` });
+  const input = createPowerupsV1Input();
+  input.id = 'stored-balance-test';
+  input.draft.intervalRounds = 2;
+  const config = resolveVariantConfig(input);
+  const tables = createTables(store, () => 1);
+  try {
+    assert.equal(
+      await store.insertMatch({
+        id: 'configured-live',
+        seats: ['crimson', 'ivory'],
+        session: initialPresentedSession(powerupsRules(config)),
+        variantConfig: config,
+        lastUpdate: null,
+        revision: 0,
+        away: [null, null],
+        endedAt: null,
+        winner: null,
+      }),
+      true,
+    );
+    const message = (await tables.connect('crimson'))[0]?.message;
+    assert.equal(message?.type, 'resume');
+    if (message?.type !== 'resume') return;
+    assert.equal(message.variantConfig?.hash, config.hash);
+    assert.equal(message.state.variantConfigHash, config.hash);
+  } finally {
+    await store.drop();
+  }
+});
+
+test('two processes preserve exact roll and move revision metadata', async () => {
   const store = await openStore({ name: `plakoto-test-${randomUUID()}` });
   const rolls = [6, 1, 4, 4];
   let roll = 0;
@@ -54,8 +93,48 @@ test('two processes pair through MongoDB and both see the same roll', async () =
     assert.equal(update?.type, 'update');
     if (update?.type !== 'update') return;
     assert.deepEqual(update.dice, [6, 1]);
+    assert.deepEqual(update.events, rolled[0].message.events);
+
+    const opening = await second.act('basil', { type: 'roll' });
+    const openingUpdate = opening[0]?.message;
+    assert.equal(openingUpdate?.type, 'update');
+    if (openingUpdate?.type !== 'update') return;
+    const openingFollowed = (await first.sync()).find((event) => event.userId === 'ada')?.message;
+    assert.equal(openingFollowed?.type, 'update');
+    if (openingFollowed?.type !== 'update') return;
+    assert.deepEqual(openingFollowed.events, openingUpdate.events);
+
+    const movement = await second.act('basil', { type: 'roll' });
+    const movementUpdate = movement[0]?.message;
+    assert.equal(movementUpdate?.type, 'update');
+    if (movementUpdate?.type !== 'update') return;
+    const movementFollowed = (await first.sync()).find((event) => event.userId === 'ada')?.message;
+    assert.equal(movementFollowed?.type, 'update');
+    if (movementFollowed?.type !== 'update') return;
+    assert.deepEqual(movementFollowed.dice, movementUpdate.dice);
+    assert.deepEqual(movementFollowed.events, movementUpdate.events);
+
+    const player = movementUpdate.state.active;
+    assert.notEqual(player, null);
+    if (player === null) return;
+    const move = legalMoves(movementUpdate.state, player, movementUpdate.state.remaining)[0];
+    assert.ok(move);
+    const moved = await second.act('basil', { type: 'move', sequence: [move] });
+    const movedUpdate = moved[0]?.message;
+    assert.equal(movedUpdate?.type, 'update');
+    if (movedUpdate?.type !== 'update') return;
+    const moveFollowed = (await first.sync()).find((event) => event.userId === 'ada')?.message;
+    assert.equal(moveFollowed?.type, 'update');
+    if (moveFollowed?.type !== 'update') return;
+    assert.deepEqual(moveFollowed.sequence, [move]);
+    assert.deepEqual(moveFollowed.events, movedUpdate.events);
 
     await first.disconnect('ada');
+    const awayRevision = (await second.sync()).find((event) => event.userId === 'basil')?.message;
+    assert.equal(awayRevision?.type, 'update');
+    if (awayRevision?.type !== 'update') return;
+    assert.equal(awayRevision.sequence, undefined);
+    assert.equal(awayRevision.events, undefined);
     now += 40_000;
     assert.equal((await first.connect('ada'))[0]?.message.type, 'resume');
     now += 45_001;
@@ -74,6 +153,42 @@ test('two processes pair through MongoDB and both see the same roll', async () =
     assert.equal(kept?.winner, 'basil');
     assert.notEqual(kept?.endedAt, null);
     assert.equal(kept?.session.state.phase, live.session.state.phase);
+  } finally {
+    await store.drop();
+  }
+});
+
+test('MongoDB matchmaking keeps rulesets and balance profiles in separate queues', async () => {
+  const store = await openStore({ name: `plakoto-test-${randomUUID()}` });
+  const tables = createTables(store, () => 1);
+  const standard = { ruleset: 'POWERUPS_V1', profileId: 'powerups-v1' } as const;
+  const fast = { ruleset: 'POWERUPS_V1', profileId: 'fast-balance' } as const;
+  try {
+    await Promise.all(
+      ['classic-1', 'classic-2', 'standard-1', 'standard-2', 'fast-1', 'fast-2'].map((id) =>
+        tables.connect(id),
+      ),
+    );
+    assert.equal((await tables.find('classic-1'))[0]?.message.type, 'waiting');
+    assert.equal((await tables.find('standard-1', standard))[0]?.message.type, 'waiting');
+    assert.equal((await tables.find('fast-1', fast))[0]?.message.type, 'waiting');
+
+    const classic = await tables.find('classic-2');
+    const standardMatch = await tables.find('standard-2', standard);
+    const fastMatch = await tables.find('fast-2', fast);
+
+    const matchedState = (events: Awaited<ReturnType<typeof tables.find>>) => {
+      const message = events.find((event) => event.message.type === 'matched')?.message;
+      assert.equal(message?.type, 'matched');
+      return message?.type === 'matched' ? message.state : null;
+    };
+    assert.equal(matchedState(classic)?.ruleset, 'CLASSIC');
+    assert.equal(matchedState(standardMatch)?.ruleset, 'POWERUPS_V1');
+    assert.equal(matchedState(fastMatch)?.ruleset, 'POWERUPS_V1');
+    assert.notEqual(
+      matchedState(standardMatch)?.variantConfigHash,
+      matchedState(fastMatch)?.variantConfigHash,
+    );
   } finally {
     await store.drop();
   }

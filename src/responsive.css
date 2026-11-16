@@ -431,3 +431,49 @@
     margin-top: 24px;
   }
 }
+@media (max-aspect-ratio: 1/1) and (max-height: 600px) {
+  .on-title .logo {
+    top: 6%;
+    width: min(260px, 70vw);
+  }
+  .on-title .start-menu {
+    top: 29%;
+  }
+  .ruleset-picker {
+    gap: 6px;
+    margin-bottom: 10px;
+    padding: 6px;
+  }
+  .ruleset-picker label {
+    gap: 6px;
+    padding: 5px;
+  }
+  .ruleset-picker strong {
+    font-size: 12px;
+  }
+  .ruleset-picker small {
+    font-size: 8px;
+  }
+  .mode-button {
+    height: 68px;
+    font-size: clamp(21px, 7vw, 28px);
+  }
+  .online-mode {
+    margin-bottom: 14px;
+  }
+  .on-title .start-options {
+    margin-top: 15px;
+  }
+  .start-options button {
+    width: 92px;
+    min-height: 54px;
+    padding: 6px 9px;
+    font-size: 15px;
+  }
+  .start-options .settings-icon,
+  .rules-icon {
+    width: 20px;
+    height: 20px;
+    margin-bottom: 3px;
+  }
+}

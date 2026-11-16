@@ -3,6 +3,8 @@ export type Phase =
   | 'WAITING_FOR_ROLL'
   | 'WAITING_FOR_MOVE'
   | 'TURN_COMPLETE'
+  | 'DRAFT_ORDER'
+  | 'DRAFT_PICK'
   | 'GAME_OVER';
 
 export type PhaseAction =
@@ -29,6 +31,8 @@ const transitions: Record<Phase, Partial<Record<PhaseAction, Phase>>> = {
     gameFinished: 'GAME_OVER',
   },
   TURN_COMPLETE: { endTurn: 'WAITING_FOR_ROLL' },
+  DRAFT_ORDER: {},
+  DRAFT_PICK: {},
   GAME_OVER: {},
 };
 

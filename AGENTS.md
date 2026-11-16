@@ -2,7 +2,7 @@
 
 ## Project intent
 
-Tavli is currently a two-player Plakoto game. The longer-term goal is a variant with random events, powerups, and abilities. Those systems are **not implemented or specified yet**. Treat the existing rules as the baseline and record any variant rule explicitly before changing it.
+Tavli is a two-player Plakoto game with a Classic ruleset and a configurable Powerups variant. Treat Classic as the baseline and record every variant rule explicitly before changing it.
 
 Read [docs/game-spec.md](docs/game-spec.md) for implemented rules, [docs/architecture.md](docs/architecture.md) for the current code map, and [docs/refactor-plan.md](docs/refactor-plan.md) for the staged target structure. Keep the current-state documents aligned with behavior changes.
 

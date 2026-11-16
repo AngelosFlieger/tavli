@@ -1,5 +1,8 @@
 import { MongoClient, type Db } from 'mongodb';
 import type { Session } from '../src/game/session/state';
+import { resolveVariantConfig } from '../src/game/variant/config/schema';
+import type { ResolvedVariantConfig } from '../src/game/variant/types';
+import type { Update } from '../src/net/messages';
 
 export type StoredUser = {
   id: string;
@@ -12,12 +15,21 @@ export type StoredMatch = {
   id: string;
   seats: [string, string];
   session: Session;
+  /** Immutable rules snapshot used to restore this match after balance profiles change. */
+  variantConfig: ResolvedVariantConfig | null;
+  /** Presentation/event metadata for the accepted action that produced this revision. */
+  lastUpdate: StoredRevisionUpdate | null;
   revision: number;
   away: [number | null, number | null];
   /** Set when the match is finished. Null while it is still being played. */
   endedAt: number | null;
   /** Account id of the winner. Null for a draw, or while the match is still being played. */
   winner: string | null;
+};
+
+export type StoredRevisionUpdate = {
+  revision: number;
+  details: Omit<Update, 'state' | 'canUndo'>;
 };
 
 export type Store = {
@@ -37,10 +49,10 @@ export type Store = {
   /** Starts a new match for the same two accounts and leaves the finished one in place. */
   followOn(previousId: string, match: StoredMatch): Promise<boolean>;
   release(id: string): Promise<void>;
-  claimOpponent(userId: string): Promise<string | null>;
+  claimOpponent(userId: string, matchKey: string): Promise<string | null>;
   leaveQueue(userId: string): Promise<void>;
   queued(userId: string): Promise<boolean>;
-  wait(userId: string): Promise<void>;
+  wait(userId: string, matchKey: string): Promise<void>;
   expireAway(before: number): Promise<{ match: StoredMatch; released: string[] }[]>;
   close(): Promise<void>;
   drop(): Promise<void>;
@@ -48,7 +60,7 @@ export type Store = {
 
 type StoreOptions = { url?: string; name?: string };
 
-const schemaVersion = 2;
+const schemaVersion = 3;
 const usernameCollation = { locale: 'en', strength: 2 };
 
 export async function openStore(options: StoreOptions = {}): Promise<Store> {
@@ -73,8 +85,12 @@ export async function openStore(options: StoreOptions = {}): Promise<Store> {
   const matches = db.collection<MatchDocument>('matches');
   const playing = db.collection<PlayingDocument>('playing');
   const queue = db.collection<QueueDocument>('queue');
-  const joinQueue = (userId: string) =>
-    queue.updateOne({ _id: userId }, { $setOnInsert: { joinedAt: new Date() } }, { upsert: true });
+  const joinQueue = (userId: string, matchKey: string) =>
+    queue.updateOne(
+      { _id: userId },
+      { $set: { matchKey }, $setOnInsert: { joinedAt: new Date() } },
+      { upsert: true },
+    );
 
   return {
     async createUser(user) {
@@ -200,16 +216,17 @@ export async function openStore(options: StoreOptions = {}): Promise<Store> {
     async release(id) {
       await playing.deleteMany({ matchId: id });
     },
-    async wait(userId) {
-      await joinQueue(userId);
+    async wait(userId, matchKey) {
+      await joinQueue(userId, matchKey);
     },
-    async claimOpponent(userId) {
-      await joinQueue(userId);
+    async claimOpponent(userId, matchKey) {
+      await joinQueue(userId, matchKey);
       const me = await queue.findOne({ _id: userId });
       if (!me) return null;
       const claimed = await queue.findOneAndDelete(
         {
           _id: { $ne: userId },
+          matchKey,
           $or: [
             { joinedAt: { $lt: me.joinedAt } },
             { joinedAt: me.joinedAt, _id: { $lt: userId } },
@@ -306,6 +323,8 @@ type MatchDocument = {
   _id: string;
   seats: [string, string];
   session: Session;
+  variantConfig?: ResolvedVariantConfig | null;
+  lastUpdate?: StoredRevisionUpdate | null;
   revision: number;
   away: [Date | null, Date | null];
   endedAt: Date | null;
@@ -313,7 +332,7 @@ type MatchDocument = {
 };
 
 type PlayingDocument = { _id: string; matchId: string };
-type QueueDocument = { _id: string; joinedAt: Date };
+type QueueDocument = { _id: string; joinedAt: Date; matchKey?: string };
 
 async function ensureSchema(db: Db) {
   const meta = db.collection<{ _id: string; version: number }>('meta');
@@ -346,6 +365,8 @@ async function ensureSchema(db: Db) {
       _id: { bsonType: 'string' },
       seats: { bsonType: 'array', minItems: 2, maxItems: 2, items: { bsonType: 'string' } },
       session: { bsonType: 'object' },
+      variantConfig: { bsonType: ['object', 'null'] },
+      lastUpdate: { bsonType: ['object', 'null'] },
     },
   });
   const users = db.collection('users');
@@ -360,7 +381,11 @@ async function ensureSchema(db: Db) {
   await createCollection(db, 'queue', {
     bsonType: 'object',
     required: ['_id', 'joinedAt'],
-    properties: { _id: { bsonType: 'string' }, joinedAt: { bsonType: 'date' } },
+    properties: {
+      _id: { bsonType: 'string' },
+      joinedAt: { bsonType: 'date' },
+      matchKey: { bsonType: 'string' },
+    },
   });
   await db.collection('queue').createIndex({ joinedAt: 1 });
   await meta.updateOne({ _id: 'schema' }, { $set: { version: schemaVersion } }, { upsert: true });
@@ -374,6 +399,8 @@ function liveFields(match: StoredMatch) {
   return {
     seats: match.seats,
     session: match.session,
+    variantConfig: match.variantConfig,
+    lastUpdate: match.lastUpdate,
     revision: match.revision + 1,
     away: dates(match.away),
   };
@@ -384,6 +411,8 @@ function matchDocument(match: StoredMatch): MatchDocument {
     _id: match.id,
     seats: match.seats,
     session: match.session,
+    variantConfig: match.variantConfig,
+    lastUpdate: match.lastUpdate,
     revision: 0,
     away: [null, null],
     endedAt: null,
@@ -400,10 +429,25 @@ function forfeitWinner(match: StoredMatch, before: number): string | null {
 function readMatch(document: MatchDocument): StoredMatch | null {
   const session = readSession(document.session);
   if (!session || document.seats[0] === document.seats[1]) return null;
+  let variantConfig: ResolvedVariantConfig | null = null;
+  try {
+    if (document.variantConfig != null)
+      variantConfig = resolveVariantConfig(document.variantConfig);
+  } catch {
+    return null;
+  }
+  if (
+    variantConfig &&
+    (session.state.ruleset !== 'POWERUPS_V1' ||
+      session.state.variantConfigHash !== variantConfig.hash)
+  )
+    return null;
   return {
     id: document._id,
     seats: document.seats,
     session,
+    variantConfig,
+    lastUpdate: readRevisionUpdate(document.lastUpdate),
     revision: document.revision,
     away: [
       document.away?.[0] ? document.away[0].getTime() : null,
@@ -411,6 +455,22 @@ function readMatch(document: MatchDocument): StoredMatch | null {
     ],
     endedAt: document.endedAt ? document.endedAt.getTime() : null,
     winner: document.winner ?? null,
+  };
+}
+
+function readRevisionUpdate(value: unknown): StoredRevisionUpdate | null {
+  if (!value || typeof value !== 'object') return null;
+  const envelope = value as { revision?: unknown; details?: unknown };
+  if (
+    !Number.isSafeInteger(envelope.revision) ||
+    Number(envelope.revision) < 1 ||
+    !envelope.details ||
+    typeof envelope.details !== 'object'
+  )
+    return null;
+  return {
+    revision: Number(envelope.revision),
+    details: structuredClone(envelope.details) as StoredRevisionUpdate['details'],
   };
 }
 

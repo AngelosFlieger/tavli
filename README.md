@@ -2,7 +2,9 @@
 
 Two-player [Plakoto](https://en.wikipedia.org/wiki/Plakoto). Three.js, TypeScript, and Vite.
 
-The current release implements the core Plakoto game. Random events, powerups, and abilities are planned but have no rules or code yet. See the [game specification](docs/game-spec.md), [architecture map](docs/architecture.md), [refactor plan](docs/refactor-plan.md), and [agent guidelines](AGENTS.md) for the current behavior and development conventions.
+The title screen offers two rulesets: core Plakoto and a configurable Powerups mode. Powerups has authoritative drafts, public inventories, six initial expendable powers (Frost Seal, Bastion, Jinx, Clear Skies, Recast, and Nudge), and four passives (Loaded Knuckles, Quartermaster, Home Guard, and Opportunist). See the [game specification](docs/game-spec.md), [powerups implementation plan](docs/powerups-plan.md), [ability catalog](docs/ability-catalog.md), [architecture map](docs/architecture.md), [refactor plan](docs/refactor-plan.md), and [agent guidelines](AGENTS.md) for the current behavior, proposals, and development conventions.
+
+Ability inventories appear as overlapping cards beside each player. Select a card to inspect its full rules, then press **Use** when its timing window is available. Draft order is presented once when the dialog opens, with one animated, player-colored die per avatar; after the decisive roll, the current picker’s avatar remains beside the choices. Recast highlights the two physical dice so its owner can click the die to reroll, and only that die is thrown again. Temporary board effects make Frost Seal and Bastion visible during balance testing.
 
 ## Run
 
@@ -17,13 +19,15 @@ Open http://localhost:3000. Vite also prints a Network address: anyone on the sa
 
 ```sh
 npm test
-npm run test:browser # local and two-seat online smoke test; requires Chrome or Chromium
+npm run test:browser # local play plus two-seat online drafts/ability smoke test; requires Chrome or Chromium
 npm run build
 npm start          # serve dist/ and the game server on port 3000
 npm run format:check
 ```
 
 The browser smoke test finds Chrome in the common Linux locations. Set `PLAKOTO_CHROME_PATH` when using another compatible executable.
+
+Development builds also show local balance-playtest controls. Leave the seed blank for fresh cryptographic randomness on every new game, or enter an unsigned 32-bit seed when a balance run must be reproducible. The same profile and explicit seed reproduce dice, draft offers/order, passive probability checks, and powerup rerolls. During that game, Settings can download an in-memory JSON report with semantic events, public effect snapshots, picks, uses, stalled turns, and the result. Settings can also import multiple reports, show a compact comparison, and download aggregate JSON. Aggregation keeps distinct configuration hashes separate and distinguishes completed hold times from unfinished, censored observations. Production builds do not expose these controls, and no report data is sent anywhere.
 
 Stop `npm run dev` before `npm start`. Both want port 3000.
 
@@ -33,7 +37,7 @@ Accounts, login sessions, and live matches are stored in MongoDB. The game uses 
 
 The page asks you to create an account or sign in before the menu. Email and username both have to be unique. The browser keeps an HttpOnly cookie for 30 days, so a later visit skips the form. Sign out is in Settings.
 
-Click Multiplayer to wait. The next person who does the same joins you. The first person plays crimson and takes the first opening roll; the higher opening total decides who takes the first turn. The server rolls the dice and checks every move; the clients show the result. Use Cancel to stop searching. A dropped connection can resume for 45 seconds. Finished games stay in the database with the final position and the winner.
+Choose Classic or Powerups, then click Multiplayer to wait. The next person searching for the same ruleset and balance profile joins you; Classic and Powerups players never share a queue. The first person plays crimson and takes the first opening roll; the higher opening total decides who takes the first turn. The server rolls the dice, drafts, and ability randomness and checks every move; the browsers show the authoritative result. Use Cancel to stop searching. A dropped connection can resume for 45 seconds. Finished games stay in the database with the final position and the winner.
 
 To share the game running on this Mac, leave `npm run dev` or `npm start` going and start a tunnel:
 
@@ -50,6 +54,7 @@ Send the `https://….trycloudflare.com` address it prints. This Mac has to stay
 - `server` — the WebSocket server
 - `src/scene` — board, checkers, dice, and the WebGL frame
 - `src/ui` — start screen, rules, settings
+- `src/app/playtest-report.ts`, `playtest-analysis.ts` — local balance report recording and aggregation
 - `public/models` — the GLB files the game loads
 - `assets` — Blender source, textures, and FBX exports. `assets/source/build_assets.py` writes a fresh set to `assets/source/generated/` and does not replace `public/models`
 

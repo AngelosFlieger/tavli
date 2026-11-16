@@ -16,6 +16,100 @@
   width: min(48vw, 640px);
   pointer-events: auto;
 }
+.ruleset-picker {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin: 0 0 20px;
+  padding: 9px;
+  border: 1px solid #d7bd8888;
+  border-radius: 12px;
+  background: #09162be8;
+  box-shadow: 0 4px #050c1e;
+}
+
+.playtest-tools {
+  display: grid;
+  grid-template-columns: auto 1fr 1fr;
+  align-items: end;
+  gap: 0.45rem 0.7rem;
+  padding: 0.65rem 0.8rem;
+  border: 1px dashed rgba(244, 190, 79, 0.55);
+  color: var(--cream);
+  font-size: 0.72rem;
+}
+
+.playtest-tools > strong,
+.playtest-tools > small {
+  grid-column: 1 / -1;
+  letter-spacing: 0.08em;
+}
+
+.playtest-tools label {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.playtest-tools select,
+.playtest-tools input {
+  min-width: 0;
+  padding: 0.3rem;
+  border: 1px solid rgba(244, 190, 79, 0.4);
+  background: rgba(4, 10, 21, 0.82);
+  color: inherit;
+}
+
+@media (max-width: 480px) and (max-height: 650px) {
+  .playtest-tools {
+    display: none;
+  }
+}
+.ruleset-picker legend {
+  padding: 0 8px;
+  color: #d9bd84;
+  font: 10px monospace;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+.ruleset-picker label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 9px 12px;
+  border: 1px solid #b99d6866;
+  border-radius: 8px;
+  background: #14233a;
+  cursor: pointer;
+}
+.ruleset-picker label:has(input:checked) {
+  border-color: #f0d391;
+  background: linear-gradient(120deg, #61243d, #263751);
+  box-shadow: inset 0 0 0 1px #f0d39155;
+}
+.ruleset-picker input {
+  flex: 0 0 auto;
+  margin: 0;
+}
+.ruleset-picker span {
+  min-width: 0;
+}
+.ruleset-picker strong,
+.ruleset-picker small {
+  display: block;
+}
+.ruleset-picker strong {
+  color: #f4dfb1;
+  font-size: 16px;
+}
+.ruleset-picker small {
+  margin-top: 2px;
+  color: #aeb8c8;
+  font: 10px monospace;
+}
+.ruleset-picker:disabled {
+  opacity: 0.55;
+}
 .mode-button {
   display: flex;
   align-items: center;
@@ -187,6 +281,15 @@ dialog {
     height: 75px;
     padding: 0 17px;
     font-size: 24px;
+  }
+  .ruleset-picker {
+    margin-bottom: 16px;
+  }
+  .ruleset-picker label {
+    padding: 8px;
+  }
+  .ruleset-picker strong {
+    font-size: 14px;
   }
   .mode-star {
     font-size: 18px;

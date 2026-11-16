@@ -18,7 +18,13 @@ export function prepareAnimationStages(
   let before = start;
   return sequence.map((move, index) => {
     const destination = move.to < 0 ? [] : before.board[move.to];
-    const pinPoint = destination.length === 1 && owner(destination[0]) !== player ? move.to : null;
+    // A combined move may pass over an enemy singleton and immediately leave it again. The
+    // intermediate position still has to be legal, but the pin impact belongs only to a pin that
+    // remains at the end of the selected action.
+    const pinPoint =
+      index === sequence.length - 1 && destination.length === 1 && owner(destination[0]) !== player
+        ? move.to
+        : null;
     const position = positions?.[index] ?? applyMove(before, player, move);
     before = position;
     return { position, pinPoint };

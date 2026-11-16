@@ -6,11 +6,12 @@ import { networkInterfaces } from 'node:os';
 import { extname, join, normalize, sep } from 'node:path';
 import { WebSocket, WebSocketServer, type WebSocket as Socket } from 'ws';
 import type { PlayerId } from '../src/net/lobby';
-import { isCommand, type ServerMessage } from '../src/net/messages';
+import { isCommand, isMatchSelection, type ServerMessage } from '../src/net/messages';
 import { createAccounts } from './accounts';
 import { handleAuth, sessionToken } from './routes';
 import { openStore } from './store';
 import { createTables } from './tables';
+import { createSeededRandomInt, parseOptionalSeed } from '../src/game/random';
 
 const production = process.argv.includes('--static');
 const port = Number(process.env.PORT) || (production ? 3000 : 3001);
@@ -20,7 +21,17 @@ const store = await openStore().catch((error: unknown) => {
   process.exit(1);
 });
 const accounts = createAccounts(store);
-const tables = createTables(store, () => randomInt(1, 7));
+const testSeed = parseOptionalSeed(process.env.PLAKOTO_TEST_RANDOM_SEED ?? '');
+const authorityRandomInt =
+  testSeed === undefined
+    ? (maximum: number) => randomInt(maximum)
+    : createSeededRandomInt(testSeed);
+const tables = createTables(
+  store,
+  () => randomInt(1, 7),
+  () => Date.now(),
+  authorityRandomInt,
+);
 const sockets = new Map<PlayerId, Socket>();
 const owners = new Map<Socket, PlayerId>();
 const replaced = new WeakSet<Socket>();
@@ -87,7 +98,8 @@ async function handleCommand(socket: Socket, data: unknown) {
   const userId = owners.get(socket);
   if (!userId) return;
   if (message.type === 'find') {
-    deliver(await tables.find(userId));
+    if (!('selection' in message) || !isMatchSelection(message.selection)) return;
+    deliver(await tables.find(userId, message.selection));
     return;
   }
   if (message.type === 'cancel') {

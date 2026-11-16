@@ -3,6 +3,7 @@ import './gameplay-hud.css';
 import './title.css';
 import './responsive.css';
 import './waiting.css';
+import './draft.css';
 import { preferences } from './ui/preferences';
 import {
   enablePlay,
@@ -27,6 +28,7 @@ import { GameController } from './app/game-controller';
 import { createGameplayActions } from './app/gameplay-actions';
 import { createOnlineGameFlow } from './app/online-game-flow';
 import { createMatchSession } from './app/match-session';
+import { PlaytestRecorder } from './app/playtest-report';
 
 const host = document.querySelector<HTMLElement>('#scene')!;
 const boardFrame = document.querySelector<HTMLElement>('#board-frame')!;
@@ -39,6 +41,7 @@ const session: Session = {
   onLocal() {},
   onMultiplayer() {},
   onSignOut() {},
+  playtestReport: () => null,
 };
 let reconnect = () => {};
 initShell(session);
@@ -54,6 +57,8 @@ void restoreSession().then((signedIn) => {
 async function start() {
   const stage = await createStage(host, boardFrame);
   const controller = new GameController();
+  const playtest = new PlaytestRecorder();
+  controller.setEventSink((events, state) => playtest.record(events, state));
   let actions: ReturnType<typeof createGameplayActions>;
   let dice: Awaited<ReturnType<typeof createDice>> | undefined;
   const gameplay = await createGameplay(
@@ -69,9 +74,14 @@ async function start() {
       onMove: (sequence) => actions.move(sequence),
       onUndo: () => actions.undo(),
       onRestart: () => actions.restart(),
+      onRollAbility: (option) => actions.playRollAbility(option),
+      onBeforeRollAbility: (target) => actions.playBeforeRollAbility(target),
     },
   );
-  actions = createGameplayActions(controller, gameplay, { reset: () => dice?.reset() });
+  actions = createGameplayActions(controller, gameplay, {
+    reset: () => dice?.reset(),
+    play: (values, rerolledDie) => dice?.play(values, rerolledDie),
+  });
   session.onNewGame = () => actions.restart();
   session.canNewGame = () => actions.canRestart();
 
@@ -104,14 +114,34 @@ async function start() {
     else actions.finishInterruptedMove();
     dice?.resize();
   });
-  dice = await createDice(stage.root, stage.center, reducedMotion, stage.layout, {
-    canRoll: () => actions.beginRoll(),
-    finish: () => actions.finishTurn(),
-    player: () => controller.throwingPlayer,
-    settled: (values) => actions.receiveRoll(values),
-    scripted: () => controller.scripted,
-    presented: () => onlineFlow?.presentedRoll(),
-  });
+  dice = await createDice(
+    stage.root,
+    stage.camera,
+    stage.canvas,
+    stage.center,
+    reducedMotion,
+    stage.layout,
+    {
+      canRoll: () => actions.beginRoll(),
+      finish: () => actions.finishTurn(),
+      player: () => controller.throwingPlayer,
+      settled: (values) => actions.receiveRoll(values),
+      scripted: () => controller.scripted,
+      forced: () => controller.takeForcedLocalRoll(),
+      presented: () => onlineFlow?.presentedRoll(),
+      selectableDice: () =>
+        controller.selectedAbility?.abilityId === 'recast'
+          ? controller.rollAbilityOptions().map((option) => option.target.index)
+          : [],
+      selectDie: (index) => {
+        if (controller.selectedAbility?.abilityId !== 'recast') return;
+        const option = controller
+          .rollAbilityOptions()
+          .find((candidate) => candidate.target.index === index);
+        if (option) actions.playRollAbility(option);
+      },
+    },
+  );
   onlineFlow = createOnlineGameFlow(controller, gameplay, dice);
 
   const match = createMatchSession(
@@ -130,8 +160,24 @@ async function start() {
     },
     connectTable,
   );
-  session.onLocal = match.startLocal;
-  session.onMultiplayer = match.toggleSearch;
+  session.onLocal = (selection, seed) => {
+    const accepted = match.startLocal(selection, seed);
+    if (!accepted || seed === undefined) {
+      playtest.clear();
+      return;
+    }
+    playtest.start({
+      mode: 'LOCAL',
+      selection,
+      seed,
+      configHash: controller.state.variantConfigHash,
+    });
+  };
+  session.onMultiplayer = (selection) => {
+    playtest.clear();
+    match.toggleSearch(selection);
+  };
+  session.playtestReport = () => playtest.snapshot();
   session.onSignOut = () => {
     match.signOut();
     void logout();

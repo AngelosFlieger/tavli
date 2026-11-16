@@ -1,14 +1,26 @@
 import { socketUrl } from './account';
-import type { ClientPacket, ServerMessage, Update } from './messages';
+import {
+  CLASSIC_SELECTION,
+  type ClientPacket,
+  type MatchSelection,
+  type ServerMessage,
+  type Update,
+} from './messages';
 import type { GameState, Player } from '../game/engine';
+import type { ResolvedVariantConfig } from '../game/variant/types';
 
 export type TableEvents = {
   onReady: (name: string) => void;
-  onResume: (you: Player, state: GameState, canUndo: boolean) => void;
+  onResume: (
+    you: Player,
+    state: GameState,
+    canUndo: boolean,
+    variantConfig: ResolvedVariantConfig | null,
+  ) => void;
   onRejected: () => void;
   onReconnect: () => void;
   onWaiting: () => void;
-  onMatched: (you: Player, state: GameState) => void;
+  onMatched: (you: Player, state: GameState, variantConfig: ResolvedVariantConfig | null) => void;
   onUpdate: (update: Update) => void;
   onLeft: () => void;
   onClose: () => void;
@@ -59,7 +71,12 @@ export function connectTable(events: TableEvents) {
         authed = true;
         retry = 0;
         queued.length = 0;
-        events.onResume(message.you, message.state, message.canUndo === true);
+        events.onResume(
+          message.you,
+          message.state,
+          message.canUndo === true,
+          message.variantConfig,
+        );
         return;
       }
       if (message.type === 'waiting') events.onWaiting();
@@ -68,7 +85,7 @@ export function connectTable(events: TableEvents) {
         (message.you === 0 || message.you === 1) &&
         message.state
       )
-        events.onMatched(message.you, message.state);
+        events.onMatched(message.you, message.state, message.variantConfig);
       else if (message.type === 'update' && message.state) events.onUpdate(message);
       else if (message.type === 'left') events.onLeft();
     };
@@ -105,7 +122,7 @@ export function connectTable(events: TableEvents) {
 
   return {
     connect: open,
-    find: () => send({ type: 'find' }),
+    find: (selection: MatchSelection = CLASSIC_SELECTION) => send({ type: 'find', selection }),
     cancel: () => send({ type: 'cancel' }),
     send,
     abandon() {

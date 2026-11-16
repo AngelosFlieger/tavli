@@ -1,6 +1,8 @@
 import type { GameState, Move, Player } from '../game/engine';
 import type { Command, Update } from '../net/messages';
 import type { GameController } from './game-controller';
+import { rulesForState } from '../game/variant/rules-context';
+import type { ResolvedVariantConfig } from '../game/variant/types';
 
 export type OnlineScene = {
   faceSeat: () => void;
@@ -9,7 +11,7 @@ export type OnlineScene = {
 };
 
 export type OnlineDice = {
-  play: (values: [number, number]) => void;
+  play: (values: [number, number], rerolledDie?: 0 | 1) => void;
   reset: () => void;
 };
 
@@ -31,8 +33,16 @@ export function createOnlineGameFlow(
   }
 
   return {
-    join(you: Player, send: (command: Command) => void, state: GameState, canUndo = false) {
-      controller.join(you, send);
+    join(
+      you: Player,
+      send: (command: Command) => void,
+      state: GameState,
+      canUndo = false,
+      variantConfig: ResolvedVariantConfig | null = null,
+    ) {
+      const rules = rulesForState(state, variantConfig);
+      if (!controller.configure(rules)) throw new Error('controller could not adopt match rules');
+      controller.join(you, send, rules);
       controller.adopt(state, canUndo);
       scene.faceSeat();
       scene.presentState();
@@ -45,11 +55,12 @@ export function createOnlineGameFlow(
       scene.presentState(true);
     },
     receive(update: Update) {
+      controller.recordAuthoritativeEvents(update.events, update.state);
       if (update.resetDice) {
         adopt(update.state, update.canUndo, true);
       } else if (update.dice) {
         controller.queueRoll(update.state, update.canUndo);
-        dice.play(update.dice);
+        dice.play(update.dice, update.rerolledDie);
       } else if (update.sequence) {
         const checker = controller.beginRemoteMove(update.sequence, update.state, update.canUndo);
         if (checker === null) adopt(update.state, update.canUndo);

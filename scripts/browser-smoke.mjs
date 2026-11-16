@@ -10,6 +10,7 @@ const host = '127.0.0.1';
 const webPort = 4173;
 const gamePort = 4174;
 const url = `http://${host}:${webPort}`;
+const headed = process.argv.includes('--headed');
 
 function start(command, args, options = {}) {
   const output = [];
@@ -91,6 +92,46 @@ async function openReadyPage(browser, label, errors) {
     reducedMotion: 'reduce',
   });
   watchErrors(page, label, errors);
+  await page.addInitScript((testProfileId) => {
+    const NativeWebSocket = window.WebSocket;
+    const smoke = { sockets: [], latest: null, variantConfig: null, revision: 0 };
+    Object.defineProperty(window, '__plakotoSmoke', { value: smoke });
+    window.WebSocket = new Proxy(NativeWebSocket, {
+      construct(target, argumentsList) {
+        const socket = Reflect.construct(target, argumentsList);
+        smoke.sockets.push(socket);
+        if (new URL(socket.url).pathname === '/ws') {
+          const send = socket.send.bind(socket);
+          socket.send = (data) => {
+            if (typeof data !== 'string') return send(data);
+            try {
+              const message = JSON.parse(data);
+              if (message.type === 'find' && message.selection?.ruleset === 'POWERUPS_V1') {
+                message.selection.profileId = testProfileId;
+                return send(JSON.stringify(message));
+              }
+            } catch {
+              // Forward non-JSON data unchanged and let the application protocol ignore it.
+            }
+            return send(data);
+          };
+        }
+        socket.addEventListener('message', (event) => {
+          if (typeof event.data !== 'string') return;
+          try {
+            const message = JSON.parse(event.data);
+            if (!message.state) return;
+            smoke.latest = message.state;
+            if (message.type === 'matched') smoke.variantConfig = message.variantConfig;
+            smoke.revision++;
+          } catch {
+            // The application owns protocol validation; the smoke harness observes valid state only.
+          }
+        });
+        return socket;
+      },
+    });
+  }, 'fast-balance');
   await page.goto(url, { waitUntil: 'domcontentloaded' });
   await page.locator('#auth-screen:not([hidden])').waitFor();
   return page;
@@ -107,6 +148,43 @@ async function signUp(page, username) {
   );
 }
 
+async function smokeSnapshot(page) {
+  return page.evaluate(() => {
+    const smoke = window.__plakotoSmoke;
+    return {
+      revision: smoke.revision,
+      latest: structuredClone(smoke.latest),
+      variantConfig: structuredClone(smoke.variantConfig),
+    };
+  });
+}
+
+async function waitForSmokeRevision(page, revision) {
+  await page.waitForFunction((previous) => window.__plakotoSmoke.revision > previous, revision);
+}
+
+async function actAndWait(pages, action) {
+  const revisions = await Promise.all(
+    pages.map(async (page) => (await smokeSnapshot(page)).revision),
+  );
+  await action();
+  await Promise.all(pages.map((page, index) => waitForSmokeRevision(page, revisions[index])));
+  const states = await Promise.all(pages.map(async (page) => (await smokeSnapshot(page)).latest));
+  assert.deepEqual(states[1], states[0], 'online seats received different authoritative states');
+  return states[0];
+}
+
+async function sendSocketCommand(page, command) {
+  await page.evaluate((next) => {
+    const socket = window.__plakotoSmoke.sockets.find(
+      (candidate) =>
+        candidate.readyState === WebSocket.OPEN && new URL(candidate.url).pathname === '/ws',
+    );
+    if (!socket) throw new Error('the smoke harness has no open game socket');
+    socket.send(JSON.stringify(next));
+  }, command);
+}
+
 async function waitForRoll(page) {
   await page.waitForFunction(() => document.querySelector('#roll')?.hasAttribute('aria-busy'));
   await page.waitForFunction(() => !document.querySelector('#roll')?.hasAttribute('aria-busy'));
@@ -120,6 +198,217 @@ async function boardState(page) {
   };
 }
 
+async function authoritativeState(page) {
+  const { latest } = await smokeSnapshot(page);
+  assert.ok(latest, 'no authoritative online state was observed');
+  return latest;
+}
+
+async function legalMovesFor(page, state) {
+  return page.evaluate(async (current) => {
+    const { legalMoves } = await import('/src/game/rules/moves.ts');
+    return legalMoves(current, current.active, current.remaining);
+  }, state);
+}
+
+async function waitForPresentedState(pages, state) {
+  await Promise.all(
+    pages.map((page) =>
+      page.waitForFunction(
+        (expected) => {
+          const canvas = document.querySelector('#scene canvas');
+          return (
+            canvas?.dataset.phase === expected.phase &&
+            canvas?.dataset.active === String(expected.active) &&
+            canvas?.dataset.remaining === expected.remaining.join(',')
+          );
+        },
+        { phase: state.phase, active: state.active, remaining: state.remaining },
+      ),
+    ),
+  );
+}
+
+async function rollOnline(pages) {
+  const before = await authoritativeState(pages[0]);
+  assert.equal(before.phase, 'WAITING_FOR_ROLL');
+  const active = before.active;
+  assert.ok(active === 0 || active === 1, 'movement roll has no active player');
+  const rolled = actAndWait(pages, () => pages[active].locator('#roll').click());
+  await Promise.all(pages.map(waitForRoll));
+  return rolled;
+}
+
+async function exhaustOnlineMoves(pages) {
+  let state = await authoritativeState(pages[0]);
+  while (state.phase === 'WAITING_FOR_MOVE') {
+    const active = state.active;
+    assert.ok(active === 0 || active === 1, 'movement state has no active player');
+    const moves = await legalMovesFor(pages[active], state);
+    assert.ok(moves.length, 'authoritative movement phase has no legal move');
+    state = await actAndWait(pages, () =>
+      sendSocketCommand(pages[active], { type: 'move', sequence: [moves[0]] }),
+    );
+    await waitForPresentedState(pages, state);
+  }
+  assert.equal(state.phase, 'TURN_COMPLETE');
+  return state;
+}
+
+async function endOnlineTurn(pages) {
+  const before = await authoritativeState(pages[0]);
+  assert.equal(before.phase, 'TURN_COMPLETE');
+  const active = before.active;
+  assert.ok(active === 0 || active === 1, 'completed turn has no active player');
+  await pages[active].waitForFunction(
+    () => !document.querySelector('#roll')?.hasAttribute('disabled'),
+  );
+  const state = await actAndWait(pages, () => pages[active].locator('#roll').click());
+  if (state.active !== null && !['DRAFT_ORDER', 'DRAFT_PICK', 'GAME_OVER'].includes(state.phase)) {
+    await Promise.all(
+      pages.map(async (page) => {
+        const incoming = page.locator(`.ability-tray.is-current[data-player="${state.active}"]`);
+        await incoming.waitFor({ state: 'visible' });
+        assert.equal(
+          await page.locator(`.ability-tray.is-current[data-player="${active}"]`).count(),
+          0,
+          'outgoing player tray remained current after turn change',
+        );
+      }),
+    );
+  }
+  return state;
+}
+
+async function advanceToRound(pages, targetRound) {
+  for (let turn = 0; turn < 30; turn++) {
+    let state = await authoritativeState(pages[0]);
+    if (state.powerups.completedRounds >= targetRound) return state;
+    if (state.phase === 'WAITING_FOR_ROLL') state = await rollOnline(pages);
+    if (state.phase === 'WAITING_FOR_MOVE') state = await exhaustOnlineMoves(pages);
+    if (state.phase === 'TURN_COMPLETE') {
+      state = await endOnlineTurn(pages);
+      console.log(
+        `Powerups browser path: round ${state.powerups.completedRounds}, phase ${state.phase}`,
+      );
+    }
+  }
+  assert.fail(`powerup match did not reach round ${targetRound}`);
+}
+
+async function pickDraftCard(pages, player, selector) {
+  const card = pages[player].locator(selector).first();
+  await card.waitFor({ state: 'visible' });
+  assert.equal(await card.isEnabled(), true, `Player ${player + 1} cannot pick ${selector}`);
+  return actAndWait(pages, () => card.click());
+}
+
+async function replaceDraftCard(pages, player, abilityId) {
+  const page = pages[player];
+  await page.locator(`.draft-card[data-ability="${abilityId}"]`).click();
+  const prompt = page.locator('#draft-replacement');
+  await prompt.getByText(/slots are full/i).waitFor();
+  const replacement = prompt.getByRole('button', { name: /^Replace / }).first();
+  assert.equal(await replacement.isEnabled(), true);
+  return actAndWait(pages, () => replacement.click());
+}
+
+async function activateDraftedPower(pages, owner, ability) {
+  for (let attempt = 0; attempt < 5; attempt++) {
+    let state = await authoritativeState(pages[0]);
+    while (state.active !== owner) {
+      if (state.phase === 'WAITING_FOR_ROLL') state = await rollOnline(pages);
+      if (state.phase === 'WAITING_FOR_MOVE') state = await exhaustOnlineMoves(pages);
+      if (state.phase === 'TURN_COMPLETE') state = await endOnlineTurn(pages);
+    }
+
+    if (state.phase === 'WAITING_FOR_ROLL') state = await rollOnline(pages);
+    if (ability.abilityId === 'recast' || ability.abilityId === 'nudge') {
+      const chip = pages[owner].locator(
+        `button.ability-slot[data-instance="${ability.instanceId}"]`,
+      );
+      if (!(await chip.isVisible())) {
+        state = await exhaustOnlineMoves(pages);
+        state = await endOnlineTurn(pages);
+        continue;
+      }
+      await chip.click();
+      const use = pages[owner].locator('.ability-focus-card .ability-use');
+      await use.waitFor({ state: 'visible' });
+      assert.equal(await use.isEnabled(), true);
+      await use.click();
+      assert.equal(await chip.getAttribute('aria-pressed'), 'true');
+      const option =
+        ability.abilityId === 'recast'
+          ? pages[owner].locator('.die-target:not([hidden])').first()
+          : pages[owner]
+              .locator('#move-choices button')
+              .filter({ hasNotText: 'Cancel ability' })
+              .first();
+      await option.waitFor({ state: 'visible' });
+      const rerolledDie = await option.getAttribute('data-die');
+      state = await actAndWait(pages, async () => {
+        if (ability.abilityId !== 'recast') {
+          await option.click();
+          return;
+        }
+        await option.dispatchEvent('pointerdown', { pointerType: 'mouse', button: 0 });
+      });
+      if (ability.abilityId === 'recast') {
+        assert.match(rerolledDie ?? '', /^[01]$/);
+        await pages[owner].waitForFunction(
+          (index) => document.querySelector('canvas')?.dataset.lastRollingDice === index,
+          rerolledDie,
+        );
+      }
+      assert.ok(
+        state.diceModifiers.some((modifier) => modifier.abilityId === ability.abilityId),
+        `${ability.abilityId} did not create a public dice modifier`,
+      );
+      return state;
+    }
+
+    if (state.phase === 'WAITING_FOR_MOVE') state = await exhaustOnlineMoves(pages);
+    const chip = pages[owner].locator(`button.ability-slot[data-instance="${ability.instanceId}"]`);
+    await chip.waitFor({ state: 'visible' });
+    await chip.click();
+    const use = pages[owner].locator('.ability-focus-card .ability-use');
+    await use.waitFor({ state: 'visible' });
+    assert.equal(await use.isEnabled(), true);
+    await use.click();
+    if (ability.abilityId === 'jinx') {
+      assert.match((await pages[owner].locator('#roll').textContent()) ?? '', /USE & END/);
+      state = await actAndWait(pages, () => pages[owner].locator('#roll').click());
+    } else {
+      const { variantConfig } = await smokeSnapshot(pages[owner]);
+      const target = await pages[owner].evaluate(
+        async ({ current, instanceId, config }) => {
+          const { endTurnAbilityTargets } = await import('/src/game/variant/activation.ts');
+          return endTurnAbilityTargets(current, current.active, instanceId, config)[0];
+        },
+        { current: state, instanceId: ability.instanceId, config: variantConfig },
+      );
+      assert.ok(target, `${ability.abilityId} has no legal end-turn target`);
+      await pages[owner]
+        .locator('#move-choices')
+        .getByText(/Choose a highlighted point/)
+        .waitFor();
+      state = await actAndWait(pages, () =>
+        sendSocketCommand(pages[owner], {
+          type: 'end',
+          ability: { instanceId: ability.instanceId, target },
+        }),
+      );
+    }
+    assert.ok(
+      state.powerups.activeEffects.some((effect) => effect.abilityId === ability.abilityId),
+      `${ability.abilityId} did not create a public active effect`,
+    );
+    return state;
+  }
+  assert.fail(`could not reach a playable window for ${ability.abilityId}`);
+}
+
 async function localSmoke(browser, errors) {
   const page = await openReadyPage(browser, 'local', errors);
   await signUp(page, 'Local');
@@ -129,12 +418,29 @@ async function localSmoke(browser, errors) {
     () => !document.querySelector('#start-local')?.hasAttribute('disabled'),
   );
   assert.equal(await page.locator('#start-screen').getAttribute('hidden'), null);
+  assert.equal(
+    await page.locator('input[name="ruleset"][value="CLASSIC"]').isChecked(),
+    true,
+    'Classic should be the default ruleset',
+  );
+  await page.setViewportSize({ width: 320, height: 568 });
+  const compactOptions = await page.locator('.start-options').boundingBox();
+  assert.ok(compactOptions, 'compact title options are not visible');
+  assert.ok(
+    compactOptions.y + compactOptions.height <= 568,
+    'compact title options overflow the viewport',
+  );
+  await page.setViewportSize({ width: 1280, height: 720 });
+  assert.equal(await page.locator('.playtest-tools').isVisible(), true);
+  await page.locator('#playtest-seed').fill('24680');
   await page.locator('#start-local').click();
   await page.waitForFunction(() => !document.body.classList.contains('on-title'));
   await page.waitForFunction(() => !document.querySelector('#roll')?.hasAttribute('disabled'));
 
   const canvas = page.locator('#scene canvas');
   await canvas.waitFor({ state: 'visible' });
+  assert.equal(await canvas.getAttribute('data-ruleset'), 'CLASSIC');
+  assert.equal(await page.locator('#ruleset-badge').isHidden(), true);
   for (let rollCount = 0; ; rollCount++) {
     const phase = await canvas.getAttribute('data-phase');
     if (phase !== 'OPENING_ROLL') break;
@@ -172,6 +478,19 @@ async function localSmoke(browser, errors) {
   await page.locator('#undo').click();
   await page.waitForFunction(() => document.querySelector('#undo')?.hasAttribute('disabled'));
   assert.equal(await canvas.getAttribute('data-phase'), 'WAITING_FOR_MOVE');
+  await page.locator('.top-actions [data-open="settings"]').click();
+  assert.equal(await page.locator('#download-playtest').isEnabled(), true);
+  const [playtestDownload] = await Promise.all([
+    page.waitForEvent('download'),
+    page.locator('#download-playtest').click(),
+  ]);
+  const playtestPath = await playtestDownload.path();
+  assert.ok(playtestPath, 'playtest report download has no local path');
+  await page.locator('#playtest-files').setInputFiles(playtestPath);
+  await page.waitForFunction(() =>
+    document.querySelector('#playtest-analysis-output')?.textContent?.includes('1 valid report'),
+  );
+  assert.equal(await page.locator('#download-analysis').isEnabled(), true);
   await page.close();
 }
 
@@ -186,8 +505,17 @@ async function onlineSmoke(browser, errors) {
   ]);
   await signIn(first, 'Ada');
   await signIn(second, 'Basil');
+  await Promise.all(
+    [first, second].map((page) =>
+      page.locator('input[name="ruleset"][value="POWERUPS_V1"]').check(),
+    ),
+  );
   await first.locator('#start-multiplayer').click();
   await first.locator('#waiting-screen:not([hidden])').waitFor();
+  assert.match(
+    (await first.locator('#waiting-ruleset').textContent()) ?? '',
+    /Powerups · powerups-v1 v1/,
+  );
   await second.locator('#start-multiplayer').click();
   await Promise.all(
     [first, second].map((page) =>
@@ -198,12 +526,22 @@ async function onlineSmoke(browser, errors) {
     await first.locator('.player.red').evaluate((panel) => panel.classList.contains('you')),
     true,
   );
+
+  for (const page of [first, second]) {
+    const canvas = page.locator('#scene canvas');
+    assert.equal(await canvas.getAttribute('data-ruleset'), 'POWERUPS_V1');
+    assert.match((await page.locator('#ruleset-badge').textContent()) ?? '', /fast-balance v1/);
+    assert.equal(await page.locator('#ruleset-badge').isVisible(), true);
+  }
   assert.equal(
     await second.locator('.player.ivory').evaluate((panel) => panel.classList.contains('you')),
     true,
   );
 
   const pages = [first, second];
+  const { variantConfig } = await smokeSnapshot(first);
+  assert.equal(variantConfig.id, 'fast-balance');
+  const draftInterval = variantConfig.draft.intervalRounds;
   for (let rollCount = 0; ; rollCount++) {
     const state = await boardState(first);
     assert.deepEqual(await boardState(second), state, 'online seats disagree about turn state');
@@ -235,6 +573,134 @@ async function onlineSmoke(browser, errors) {
     await second.locator('#dice-result').getAttribute('aria-label'),
     'online seats received different movement dice',
   );
+
+  let powerupState = await advanceToRound(pages, draftInterval);
+  console.log('Powerups browser path: first draft opened');
+  assert.equal(powerupState.phase, 'DRAFT_PICK');
+  await Promise.all(
+    pages.map((page) => page.locator('#draft-panel').waitFor({ state: 'visible' })),
+  );
+  await Promise.all(
+    pages.map(async (page) => {
+      await page.locator('.draft-contestant.is-picker').waitFor({ state: 'visible' });
+      assert.equal(
+        await page.locator('#draft-contestants').getAttribute('data-roll-presentations'),
+        '1',
+        'draft order should be presented exactly once when the dialog opens',
+      );
+      assert.equal(
+        await page.locator('.draft-die-cube').count(),
+        0,
+        'draft dice should throw once, then leave only the chooser avatar',
+      );
+      assert.doesNotMatch((await page.locator('#draft-status').textContent()) ?? '', /Player \d/);
+    }),
+  );
+  const powerPriority = ['recast', 'nudge', 'jinx', 'frostSeal', 'bastion'];
+  const firstPower = powerPriority.find((abilityId) =>
+    powerupState.powerups.draft.offer.includes(abilityId),
+  );
+  assert.ok(firstPower, 'the first draft did not offer a usable powerup');
+  const firstPicker = powerupState.powerups.draft.pickOrder[0];
+  powerupState = await pickDraftCard(
+    pages,
+    firstPicker,
+    `.draft-card[data-ability="${firstPower}"]`,
+  );
+  const draftedPower = powerupState.powerups.loadouts[firstPicker].powerups.find(
+    (instance) => instance.abilityId === firstPower,
+  );
+  assert.ok(draftedPower, `${firstPower} was not added to Player ${firstPicker + 1}'s inventory`);
+
+  const passiveIds = new Set(['loadedKnuckles', 'quartermaster', 'homeGuard', 'opportunist']);
+  const draftedPassiveId = powerupState.powerups.draft.offer.find((abilityId) =>
+    passiveIds.has(abilityId),
+  );
+  assert.ok(draftedPassiveId, 'the first draft did not retain its passive for the second picker');
+  const passiveOwner =
+    powerupState.powerups.draft.pickOrder[powerupState.powerups.draft.currentPick];
+  powerupState = await pickDraftCard(
+    pages,
+    passiveOwner,
+    `.draft-card[data-ability="${draftedPassiveId}"]`,
+  );
+  assert.equal(powerupState.phase, 'WAITING_FOR_ROLL');
+  const draftedPassive = powerupState.powerups.loadouts[passiveOwner].passives.find(
+    (instance) => instance.abilityId === draftedPassiveId,
+  );
+  assert.ok(draftedPassive, 'the drafted passive was not added to inventory');
+  const activeTrayPlayer = powerupState.active;
+  assert.ok(activeTrayPlayer === 0 || activeTrayPlayer === 1, 'resumed turn has no active tray');
+  for (const page of pages) {
+    assert.equal(
+      await page.locator('.player .ability-loadout').count(),
+      0,
+      'ability cards should not be mounted inside player avatars',
+    );
+    const placement = await page
+      .locator(`.ability-slot[data-instance="${draftedPower.instanceId}"]`)
+      .evaluate((card) => ({
+        inBottomTray: card.closest('#ability-trays') !== null,
+        player: card.closest('.ability-tray')?.getAttribute('data-player'),
+      }));
+    assert.equal(placement.inBottomTray, true, 'ability card is outside the bottom tray');
+    assert.equal(placement.player, String(firstPicker), 'ability card is in the wrong player tray');
+    const currentTrays = page.locator('.ability-tray.is-current');
+    assert.equal(await currentTrays.count(), 1, 'only one player tray should be current');
+    assert.equal(
+      await currentTrays.getAttribute('data-player'),
+      String(activeTrayPlayer),
+      'the visible tray does not belong to the active player',
+    );
+    assert.equal(
+      await page
+        .locator(`.ability-tray[data-player="${1 - activeTrayPlayer}"]`)
+        .getAttribute('aria-hidden'),
+      'true',
+      'inactive player tray should be hidden',
+    );
+  }
+
+  powerupState = await activateDraftedPower(pages, firstPicker, draftedPower);
+  console.log(`Powerups browser path: activated ${draftedPower.abilityId}`);
+  assert.equal(
+    powerupState.powerups.loadouts[firstPicker].powerups.some(
+      (instance) => instance.instanceId === draftedPower.instanceId,
+    ),
+    false,
+    'activated powerup remained in inventory',
+  );
+
+  powerupState = await advanceToRound(pages, draftInterval * 2);
+  console.log('Powerups browser path: replacement draft opened');
+  assert.equal(powerupState.phase, 'DRAFT_PICK');
+  const replacementPassive = powerupState.powerups.draft.offer.find((abilityId) =>
+    passiveIds.has(abilityId),
+  );
+  assert.ok(replacementPassive, 'the second draft did not offer a passive');
+  const secondDraftFirst = powerupState.powerups.draft.pickOrder[0];
+  if (secondDraftFirst === passiveOwner) {
+    powerupState = await replaceDraftCard(pages, passiveOwner, replacementPassive);
+    const other = powerupState.powerups.draft.pickOrder[powerupState.powerups.draft.currentPick];
+    powerupState = await pickDraftCard(pages, other, '.draft-card[data-kind="POWERUP"]');
+  } else {
+    powerupState = await pickDraftCard(pages, secondDraftFirst, '.draft-card[data-kind="POWERUP"]');
+    powerupState = await replaceDraftCard(pages, passiveOwner, replacementPassive);
+  }
+  assert.equal(powerupState.phase, 'WAITING_FOR_ROLL');
+  assert.equal(
+    powerupState.powerups.loadouts[passiveOwner].passives.some(
+      (instance) => instance.instanceId === draftedPassive.instanceId,
+    ),
+    false,
+    'replaced passive remained in inventory',
+  );
+  assert.ok(
+    powerupState.powerups.loadouts[passiveOwner].passives.some(
+      (instance) => instance.abilityId === replacementPassive,
+    ),
+    'replacement passive was not added to inventory',
+  );
   await Promise.all(pages.map((page) => page.close()));
 }
 
@@ -252,6 +718,7 @@ try {
       PORT: String(gamePort),
       PLAKOTO_MONGO_URL: mongoUrl,
       PLAKOTO_DB_NAME: databaseName,
+      PLAKOTO_TEST_RANDOM_SEED: '2',
     },
   });
   webServer = start(
@@ -265,7 +732,7 @@ try {
   ]);
   browser = await chromium.launch({
     executablePath: await chromePath(),
-    headless: true,
+    headless: !headed,
     args: ['--no-sandbox', '--disable-dev-shm-usage', '--enable-webgl'],
   });
   const browserErrors = [];
@@ -273,7 +740,7 @@ try {
   await onlineSmoke(browser, browserErrors);
   assert.deepEqual(browserErrors, [], `browser errors:\n${browserErrors.join('\n')}`);
   console.log(
-    'Browser smoke passed: local pickup/placement/undo and authoritative two-seat rolls.',
+    'Browser smoke passed: local play plus authoritative online drafts, replacement, and ability use.',
   );
 } finally {
   await browser?.close();
