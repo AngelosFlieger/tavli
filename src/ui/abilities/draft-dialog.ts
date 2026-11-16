@@ -1,8 +1,10 @@
 import type { GameController } from '../../app/game-controller';
-import { abilityRegistry, describeConfiguredAbility } from '../../game/variant/abilities/registry';
+import { abilityRegistry } from '../../game/variant/abilities/registry';
 import type { AbilityId, AbilityInstance, PlayerLoadout } from '../../game/variant/types';
 import { portrait } from '../portraits';
+import { t } from '../i18n';
 import { createAbilityCardContent } from './card-content';
+import { localizedAbilityCopy } from './copy';
 
 type DraftDialogActions = {
   pickAbility: (abilityId: AbilityId, replaceInstanceId?: string) => boolean;
@@ -45,7 +47,7 @@ export function createAbilityDraftDialog(
     const draft = powerups.draft;
     if (draft.stage !== 'PICKING') {
       panel.dataset.stage = 'ROLLING';
-      status.textContent = 'Drawing the ability cards…';
+      status.textContent = t('draft.drawing');
       order.textContent = '';
       contestants.replaceChildren();
       cards.replaceChildren();
@@ -78,13 +80,13 @@ export function createAbilityDraftDialog(
     }
     panel.dataset.stage = revealingOrder ? 'ROLLING' : 'PICKING';
     status.textContent = revealingOrder
-      ? 'Rolling for first choice'
+      ? t('draft.rolling')
       : canPick
-        ? 'Choose one ability'
-        : 'Waiting for a choice';
+        ? t('draft.choose')
+        : t('draft.waiting');
     order.textContent = revealingOrder
-      ? 'Highest die chooses first'
-      : `Choice ${draft.currentPick + 1} of ${draft.pickOrder.length}`;
+      ? t('draft.highestChooses')
+      : t('draft.choice', { current: draft.currentPick + 1, total: draft.pickOrder.length });
     renderContestants(picker, lastRoll, revealingOrder);
 
     if (revealingOrder) {
@@ -112,16 +114,17 @@ export function createAbilityDraftDialog(
         card.setAttribute(
           'aria-label',
           rolling
-            ? `Player ${player + 1} rolled ${roll?.[player] ?? ''}`
+            ? t('draft.rolled', { player: player + 1, roll: roll?.[player] ?? '' })
             : player === picker
-              ? `Player ${player + 1} chooses now`
-              : `Player ${player + 1} waits`,
+              ? t('draft.choosesNow', { player: player + 1 })
+              : t('draft.waits', { player: player + 1 }),
         );
         const avatar = document.createElement('div');
         avatar.className = 'draft-avatar';
         avatar.innerHTML = portrait(player === 1);
         const caption = document.createElement('span');
-        caption.textContent = player === picker && !rolling ? 'Choose' : `P${player + 1}`;
+        caption.textContent =
+          player === picker && !rolling ? t('draft.chooseShort') : `P${player + 1}`;
         card.append(avatar, caption);
         if (roll && rolling) card.append(draftDie(roll[player], player));
         return card;
@@ -131,14 +134,14 @@ export function createAbilityDraftDialog(
 
   function abilityCard(abilityId: AbilityId, picker: 0 | 1, canPick: boolean) {
     const config = controller.variantConfig!;
-    const copy = describeConfiguredAbility(abilityId, config);
+    const copy = localizedAbilityCopy(abilityId, config);
     const button = document.createElement('button');
     button.className = 'draft-card';
     button.dataset.kind = abilityRegistry[abilityId].kind;
     button.dataset.ability = abilityId;
     button.classList.toggle('selected', pendingAbility === abilityId);
     button.disabled = !canPick;
-    button.setAttribute('aria-label', `Choose ${copy.name}`);
+    button.setAttribute('aria-label', t('draft.chooseAbilityName', { name: copy.name }));
     button.append(createAbilityCardContent(abilityId, config, 'DRAFT'));
     button.onclick = () => choose(abilityId, picker);
     return button;
@@ -161,15 +164,23 @@ export function createAbilityDraftDialog(
     replacement.replaceChildren();
     if (!pendingAbility) return;
     const config = controller.variantConfig!;
-    const pendingCopy = describeConfiguredAbility(pendingAbility, config);
+    const pendingCopy = localizedAbilityCopy(pendingAbility, config);
     const prompt = document.createElement('p');
-    prompt.textContent = `Your ${abilityRegistry[pendingAbility].kind === 'POWERUP' ? 'powerup' : 'passive'} slots are full. Replace one to take ${pendingCopy.name}:`;
+    prompt.textContent = t('draft.slotsFull', {
+      kind:
+        abilityRegistry[pendingAbility].kind === 'POWERUP'
+          ? t('draft.kind.powerup')
+          : t('draft.kind.passive'),
+      name: pendingCopy.name,
+    });
     const choices = document.createElement('div');
     choices.className = 'draft-replacement-choices';
     for (const instance of inventoryFor(powerupsLoadout(player), pendingAbility)) {
       const button = document.createElement('button');
       button.disabled = !canPick;
-      button.textContent = `Replace ${describeConfiguredAbility(instance.abilityId, config).name}`;
+      button.textContent = t('draft.replace', {
+        name: localizedAbilityCopy(instance.abilityId, config).name,
+      });
       button.onclick = () => {
         if (actions.pickAbility(pendingAbility!, instance.instanceId)) {
           pendingAbility = null;
@@ -180,7 +191,7 @@ export function createAbilityDraftDialog(
     }
     const cancel = document.createElement('button');
     cancel.className = 'draft-replacement-cancel';
-    cancel.textContent = 'Choose another card';
+    cancel.textContent = t('draft.chooseAnother');
     cancel.onclick = () => {
       pendingAbility = null;
       requestRender();

@@ -6,6 +6,7 @@ import { createMoveAnimator, prepareAnimationStages } from './move-animation';
 import { createMovePreview } from './move-preview';
 import * as THREE from 'three';
 import { preferences } from '../ui/preferences';
+import { t } from '../ui/i18n';
 import { createGameplayHud } from '../ui/gameplay-hud';
 import { owner, type Move, type Position } from '../game/engine';
 import { GameController, type LocalMoveRequest } from '../app/game-controller';
@@ -70,12 +71,12 @@ export async function createGameplay(
     canvas.setAttribute(
       'aria-label',
       waiting
-        ? 'Decorative original Plakoto dice and checkers'
+        ? t('scene.aria.waiting')
         : title && portrait
-          ? 'Scattered original Plakoto checkers'
+          ? t('scene.aria.titlePortrait')
           : title
-            ? 'Original Plakoto board without checkers'
-            : 'Plakoto board with red and ivory checkers',
+            ? t('scene.aria.title')
+            : t('scene.aria.board'),
     );
   }
   updatePresentation();

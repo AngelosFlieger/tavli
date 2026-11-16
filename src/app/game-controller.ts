@@ -1,6 +1,6 @@
 import { legalMoves } from '../game/rules/moves';
 import type { Move, Player, Position } from '../game/rules/position';
-import { initialPresentedSession, sessionMessage } from '../game/session/messages';
+import { initialPresentedSession, sessionMessageParts } from '../game/session/messages';
 import type { GameState, Session } from '../game/session/state';
 import {
   transitionSession,
@@ -167,8 +167,12 @@ export class GameController {
     const result = transitionSession(this.session, command, this.rules);
     if (!result.ok) return result;
     this.session = result.session;
-    const message = sessionMessage(this.state, result.events);
-    if (message !== null) this.state.message = message;
+    const parts = sessionMessageParts(this.state, result.events);
+    if (parts) {
+      this.state.message = parts.text;
+      this.state.messageKey = parts.key;
+      this.state.messageParams = parts.params;
+    }
     this.eventSink?.(result.events, this.state);
     return result;
   }

@@ -10,7 +10,9 @@ import {
   type VariantProfileId,
 } from '../game/variant/config/profiles';
 import { ABILITY_IDS } from '../game/variant/types';
-import { abilityRegistry, describeConfiguredAbility } from '../game/variant/abilities/registry';
+import { abilityRegistry } from '../game/variant/abilities/registry';
+import { localizedAbilityCopy } from './abilities/copy';
+import { getLocale, pluralSuffix, setLocale, t, translateDOM, type Locale } from './i18n';
 import type { PlaytestReport } from '../app/playtest-report';
 import { parseOptionalSeed } from '../game/random';
 import {
@@ -61,7 +63,7 @@ export function initShell(next: Session) {
     button.addEventListener('click', () => {
       opener = button;
       const name = button.dataset.open;
-      content.innerHTML = name === 'settings' ? settingsMarkup : helpMarkup;
+      content.innerHTML = name === 'settings' ? settingsMarkup() : helpMarkup();
       if (name === 'settings') wireSettings(content, dialog);
       dialog.showModal();
     }),
@@ -164,7 +166,7 @@ export function setSearching(on: boolean) {
   window.dispatchEvent(new Event('resize'));
   if (on) document.querySelector<HTMLButtonElement>('#waiting-cancel')!.focus();
   else if (document.body.classList.contains('on-title')) multiplayerButton.focus();
-  matchLabel.textContent = on ? 'Searching…' : 'Multiplayer';
+  matchLabel.textContent = on ? t('menu.searching') : t('menu.multiplayer');
   multiplayerButton.setAttribute('aria-pressed', String(on));
   localButton.disabled = on || !playEnabled;
   rulesetPicker.disabled = on;
@@ -206,11 +208,11 @@ function installPlaytestControls(): void {
   if (!import.meta.env.DEV) return;
   const tools = document.createElement('section');
   tools.className = 'playtest-tools';
-  tools.setAttribute('aria-label', 'Development playtest controls');
+  tools.setAttribute('aria-label', t('playtest.aria'));
   const profileOptions = VARIANT_PROFILE_IDS.map(
     (id) => `<option value="${id}">${id}</option>`,
   ).join('');
-  tools.innerHTML = `<strong>Balance playtest</strong><label>Profile <select id="playtest-profile">${profileOptions}</select></label><label>Seed <input id="playtest-seed" type="number" min="0" max="4294967295" step="1" placeholder="Random"></label><small>Local only · leave blank for fresh randomness, or enter a seed to reproduce dice, drafts, and abilities.</small>`;
+  tools.innerHTML = `<strong>${t('playtest.title')}</strong><label>${t('playtest.profile')} <select id="playtest-profile">${profileOptions}</select></label><label>${t('playtest.seed')} <input id="playtest-seed" type="number" min="0" max="4294967295" step="1" placeholder="${t('playtest.seedPlaceholder')}"></label><small>${t('playtest.note')}</small>`;
   rulesetPicker.insertAdjacentElement('afterend', tools);
   playtestProfile = tools.querySelector('#playtest-profile');
   playtestSeed = tools.querySelector('#playtest-seed');
@@ -223,20 +225,46 @@ function updateRulesetCopy() {
   if (playtestProfile) playtestProfile.disabled = !powerups;
   waitingRuleset.textContent = powerups
     ? `Powerups · ${POWERUPS_V1.id} v${POWERUPS_V1.version}`
-    : 'Classic matchmaking';
+    : t('menu.classic.matchmaking');
   document.body.dataset.ruleset = selection.ruleset;
 }
 
-const abilityHelp = ABILITY_IDS.map((abilityId) => {
-  const copy = describeConfiguredAbility(abilityId, POWERUPS_V1);
-  const kind = abilityRegistry[abilityId].kind === 'POWERUP' ? 'Powerup' : 'Passive';
-  const details = [copy.summary, copy.benefit, copy.drawback].filter(Boolean).join(' ');
-  return `<li><strong>${copy.name}</strong> <small>${kind}</small><br>${details}</li>`;
-}).join('');
+function abilityHelp(): string {
+  return ABILITY_IDS.map((abilityId) => {
+    const copy = localizedAbilityCopy(abilityId, POWERUPS_V1);
+    const kind =
+      abilityRegistry[abilityId].kind === 'POWERUP'
+        ? t('help.ability.powerup')
+        : t('help.ability.passive');
+    const details = [copy.summary, copy.benefit, copy.drawback].filter(Boolean).join(' ');
+    return `<li><strong>${copy.name}</strong> <small>${kind}</small><br>${details}</li>`;
+  }).join('');
+}
 
-const helpMarkup = `<p class="eyebrow">THE ART OF THE PIN</p><h2>How to play</h2><p>Plakoto is a backgammon variant for two players, with 15 checkers each. Players travel in opposite directions toward their home boards, then bear off. First to bear off all 15 wins.</p><p>A lone opposing checker can be pinned beneath yours. It stays pinned until your checker leaves. Points occupied by two opposing checkers, or an opposing checker pinning yours, are blocked.</p><p>To start, Player 1 rolls both dice, then Player 2. The higher total starts; ties repeat. The starter rolls again for their first turn.</p><p>Use both dice where possible; doubles give four moves. Click highlighted checkers to pick up several, then place them in pickup order. Each picked checker must have a legal move with the remaining dice. The held checkers follow your pointer, and a ghost shows the next landing. Use Put back last or Escape to release a pickup. Shift-click a source if it is also a destination. You may combine dice if intermediate landings are legal and later pickups remain placeable. Undo reverts a placement until End Turn.</p><p>Bear off only when all remaining checkers are home and none are pinned. Pinning the last checker on the opponent’s starting point wins when your own starting checkers have left. Two pinned mothers mean a draw.</p><h3>Powerups mode</h3><p>Every ${POWERUPS_V1.draft.intervalRounds} completed rounds, ${POWERUPS_V1.draft.offer.powerups + POWERUPS_V1.draft.offer.passives} cards appear: ${POWERUPS_V1.draft.offer.powerups} powerups and ${POWERUPS_V1.draft.offer.passives} passive. Both players roll for first pick. Each player normally holds ${POWERUPS_V1.inventory.powerupSlots} powerups and ${POWERUPS_V1.inventory.passiveSlots} passive, and may spend ${POWERUPS_V1.inventory.powerupsPerTurn} powerup per turn.</p><ul class="ability-help">${abilityHelp}</ul>`;
+function helpMarkup(): string {
+  return `<p class="eyebrow">${t('help.eyebrow')}</p><h2>${t('help.title')}</h2><p>${t('help.intro')}</p><p>${t('help.pin')}</p><p>${t('help.opening')}</p><p>${t('help.movement')}</p><p>${t('help.bearing')}</p><h3>${t('help.powerups.title')}</h3><p>${t(
+    'help.powerups.intro',
+    {
+      rounds: POWERUPS_V1.draft.intervalRounds,
+      cards: POWERUPS_V1.draft.offer.powerups + POWERUPS_V1.draft.offer.passives,
+      powerups: POWERUPS_V1.draft.offer.powerups,
+      passives: POWERUPS_V1.draft.offer.passives,
+      slots: POWERUPS_V1.inventory.powerupSlots,
+      passiveSlots: POWERUPS_V1.inventory.passiveSlots,
+      perTurn: POWERUPS_V1.inventory.powerupsPerTurn,
+    },
+  )}</p><ul class="ability-help">${abilityHelp()}</ul>`;
+}
 
-const settingsMarkup = `<p class="eyebrow">MAKE YOURSELF AT HOME</p><h2>Settings</h2><label>Ambient motion <input type="checkbox" data-pref="motion"></label><label>Retro grain & scanlines <input type="checkbox" data-pref="texture"></label><label>Sound <input type="checkbox" data-pref="sound"></label><p class="note">Sound covers the music and button clicks. Preferences are saved on this device. Motion also respects your system’s reduced-motion preference.</p><div class="match-controls"><button type="button" id="new-game">New game</button>${import.meta.env.DEV ? '<button type="button" id="download-playtest">Download playtest JSON</button>' : ''}<button type="button" id="sign-out">Sign out</button></div>${import.meta.env.DEV ? '<section class="playtest-analysis"><h3>Balance report analysis</h3><p class="note">Select multiple playtest JSON files. Analysis stays on this device and keeps different configuration hashes separate.</p><div class="match-controls"><button type="button" id="analyze-playtests">Select reports</button><button type="button" id="download-analysis" disabled>Download analysis</button><input type="file" id="playtest-files" accept="application/json,.json" multiple hidden></div><output id="playtest-analysis-output" aria-live="polite">No reports selected.</output></section>' : ''}`;
+function settingsMarkup(): string {
+  const languageOptions = (['en', 'el'] as Locale[])
+    .map(
+      (locale) =>
+        `<option value="${locale}"${getLocale() === locale ? ' selected' : ''}>${locale === 'en' ? 'English' : 'Ελληνικά'}</option>`,
+    )
+    .join('');
+  return `<p class="eyebrow">${t('settings.eyebrow')}</p><h2>${t('settings.title')}</h2><label>${t('settings.motion')} <input type="checkbox" data-pref="motion"></label><label>${t('settings.texture')} <input type="checkbox" data-pref="texture"></label><label>${t('settings.sound')} <input type="checkbox" data-pref="sound"></label><label>${t('settings.language')} <select id="language-select">${languageOptions}</select></label><p class="note">${t('settings.note')}</p><div class="match-controls"><button type="button" id="new-game">${t('settings.newGame')}</button>${import.meta.env.DEV ? `<button type="button" id="download-playtest">${t('settings.downloadPlaytest')}</button>` : ''}<button type="button" id="sign-out">${t('settings.signOut')}</button></div>${import.meta.env.DEV ? `<section class="playtest-analysis"><h3>${t('settings.analysis')}</h3><p class="note">${t('settings.analysis.note')}</p><div class="match-controls"><button type="button" id="analyze-playtests">${t('settings.selectReports')}</button><button type="button" id="download-analysis" disabled>${t('settings.downloadAnalysis')}</button><input type="file" id="playtest-files" accept="application/json,.json" multiple hidden></div><output id="playtest-analysis-output" aria-live="polite">${t('settings.noReports')}</output></section>` : ''}`;
+}
 
 function applyMotionClass() {
   document.body.classList.toggle('still', !preferences.motion);
@@ -252,6 +280,13 @@ function wireSettings(root: HTMLElement, dialog: HTMLDialogElement) {
       if (key === 'motion') applyMotionClass();
       if (key === 'sound') syncMusic();
     });
+  });
+  const language = root.querySelector<HTMLSelectElement>('#language-select');
+  language?.addEventListener('change', () => {
+    setLocale(language.value as Locale);
+    translateDOM();
+    root.innerHTML = settingsMarkup();
+    wireSettings(root, dialog);
   });
   const restart = root.querySelector<HTMLButtonElement>('#new-game')!;
   restart.disabled = searching || !session.canNewGame();
@@ -315,9 +350,9 @@ function downloadJson(filename: string, value: unknown): void {
 }
 
 function describeAnalysis(analysis: BalanceAnalysis): string {
-  const heading = `${analysis.reportCount} valid report${analysis.reportCount === 1 ? '' : 's'}${analysis.rejectedCount ? ` · ${analysis.rejectedCount} rejected` : ''}`;
+  const heading = `${t('analysis.report', { count: analysis.reportCount, s: pluralSuffix(analysis.reportCount) })}${analysis.rejectedCount ? `${t('analysis.separator')}${t('analysis.rejected', { count: analysis.rejectedCount })}` : ''}`;
   const groups = analysis.groups.map((group) => {
-    const identity = group.profileId ?? 'classic';
+    const identity = group.profileId ?? t('analysis.identity.classic');
     const activeAbilities = ABILITY_IDS.map((abilityId) => ({
       abilityId,
       metrics: group.abilities[abilityId],
@@ -326,13 +361,22 @@ function describeAnalysis(analysis: BalanceAnalysis): string {
       .sort((left, right) => right.metrics.picked - left.metrics.picked)
       .slice(0, 5)
       .map(({ abilityId, metrics }) => {
-        const name = describeConfiguredAbility(abilityId, POWERUPS_V1).name;
-        return `${name}: ${metrics.picked} picks (${formatPercent(metrics.offerPickRate)} of offers), ${formatMetric(metrics.usesPerPick)} uses/pick`;
+        const name = localizedAbilityCopy(abilityId, POWERUPS_V1).name;
+        return t('analysis.picks', {
+          name,
+          picks: metrics.picked,
+          rate: formatPercent(metrics.offerPickRate),
+          uses: formatMetric(metrics.usesPerPick),
+        });
       });
     return [
-      `${identity} · ${group.configHash ?? 'no config hash'}`,
-      `${group.completedGames}/${group.reports} completed · ${formatMetric(group.averageTurnsPerCompletedGame)} average turns`,
-      `opening winner win rate ${formatPercent(group.openingWinnerWinRate)} · draft-first win rate ${formatPercent(group.draftFirstPickWinRate)}`,
+      `${identity} · ${group.configHash ?? t('analysis.noHash')}`,
+      t('analysis.completed', {
+        completed: group.completedGames,
+        reports: group.reports,
+      }) +
+        `${t('analysis.separator')}${t('analysis.averageTurns', { turns: formatMetric(group.averageTurnsPerCompletedGame) })}`,
+      `${t('analysis.openingWin', { rate: formatPercent(group.openingWinnerWinRate) })} · ${t('analysis.draftFirstWin', { rate: formatPercent(group.draftFirstPickWinRate) })}`,
       ...activeAbilities,
     ].join('\n');
   });
@@ -340,9 +384,9 @@ function describeAnalysis(analysis: BalanceAnalysis): string {
 }
 
 function formatMetric(value: number | null): string {
-  return value === null ? 'n/a' : value.toFixed(1);
+  return value === null ? t('analysis.none') : value.toFixed(1);
 }
 
 function formatPercent(value: number | null): string {
-  return value === null ? 'n/a' : `${(value * 100).toFixed(1)}%`;
+  return value === null ? t('analysis.none') : `${(value * 100).toFixed(1)}%`;
 }

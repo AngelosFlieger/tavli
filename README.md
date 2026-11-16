@@ -67,7 +67,7 @@ Send the `https://….trycloudflare.com` address it prints. This Mac has to stay
 
 ## Play
 
-Local Game is two players on one device. Rules and Settings open from the menu; New game is in Settings.
+Local Game is two players on one device. Rules and Settings open from the menu; New game is in Settings. The interface is available in English and Greek; choose a language in Settings and it is remembered on this device.
 
 Each player rolls two dice. The higher total starts, ties are replayed, and the starter rolls again for the first turn. Click highlighted checkers to pick up one or more, then place them in pickup order. A regular roll can hold up to two and doubles up to four, provided each can still make a legal move. A ghost shows the next landing position while you hover over a legal point. Use **Put back last** or Escape to release a pickup; Shift-click a source when it is also a destination. A combined move is one action when every step along the way is legal and still leaves queued checkers placeable. Undo takes back the last action. End Turn is available once every required move has been played, including when a roll has no legal move.
 
