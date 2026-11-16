@@ -19,15 +19,19 @@ import { handleAuth, sessionToken } from './routes';
 import { openStore } from './store';
 import { createTables } from './tables';
 import { createSeededRandomInt, parseOptionalSeed } from '../src/game/random';
-import { clockConfigFromEnv } from '../src/game/clock';
+import { boundedBucket, type TokenBucket } from '../src/net/rate-limit';
+import { loadServerConfig } from './config';
 
-const production = process.argv.includes('--static');
-const port = Number(process.env.PORT) || (production ? 3000 : 3001);
+const config = loadServerConfig(process.env, process.argv);
+const production = config.production;
+const port = config.port;
 const root = join(process.cwd(), 'dist');
-const store = await openStore().catch((error: unknown) => {
-  console.error(error instanceof Error ? error.message : error);
-  process.exit(1);
-});
+const store = await openStore({ url: config.mongoUrl, name: config.databaseName }).catch(
+  (error: unknown) => {
+    console.error(error instanceof Error ? error.message : error);
+    process.exit(1);
+  },
+);
 const accounts = createAccounts(store);
 const testSeed = parseOptionalSeed(process.env.PLAKOTO_TEST_RANDOM_SEED ?? '');
 const authorityRandomInt =
@@ -39,12 +43,15 @@ const tables = createTables(
   () => randomInt(1, 7),
   () => Date.now(),
   authorityRandomInt,
-  clockConfigFromEnv(process.env),
+  config.clock,
 );
 await tables.start();
 const sockets = new Map<PlayerId, Socket>();
 const owners = new Map<Socket, PlayerId>();
 const replaced = new WeakSet<Socket>();
+const socketBuckets = new Map<Socket, TokenBucket>();
+const httpBuckets = new Map<string, TokenBucket>();
+const maxSocketPayload = 64 * 1024;
 let syncing = false;
 
 const types: Record<string, string> = {
@@ -92,6 +99,15 @@ async function attach(socket: Socket, request: IncomingMessage) {
   handshakeTimer.unref();
 
   socket.on('message', (data) => {
+    if (Buffer.byteLength(String(data)) > maxSocketPayload) {
+      socket.close(1009, 'payload too large');
+      return;
+    }
+    const bucket = boundedBucket(socketBuckets, socket, 20, 40, Date.now());
+    if (!bucket.take(Date.now())) {
+      socket.close(1008, 'rate limit');
+      return;
+    }
     void (async () => {
       if (ready) {
         await handleCommand(socket, data);
@@ -122,6 +138,7 @@ async function attach(socket: Socket, request: IncomingMessage) {
   socket.on('error', () => {});
   socket.on('close', () => {
     clearTimeout(handshakeTimer);
+    socketBuckets.delete(socket);
     if (replaced.has(socket)) return;
     const userId = owners.get(socket);
     owners.delete(socket);
@@ -190,6 +207,22 @@ process.once('SIGINT', () => void shutdown());
 process.once('SIGTERM', () => void shutdown());
 
 async function route(request: IncomingMessage, response: ServerResponse) {
+  applySecurityHeaders(request, response);
+  const url = new URL(request.url ?? '/', 'http://localhost');
+  if (url.pathname === '/healthz') {
+    sendJson(response, 200, { ok: true, uptime: Math.round(process.uptime()) });
+    return;
+  }
+  if (url.pathname === '/readyz') {
+    const ready = await store.ping();
+    sendJson(response, ready ? 200 : 503, { ok: ready });
+    return;
+  }
+  const remote = request.socket.remoteAddress ?? 'unknown';
+  if (!boundedBucket(httpBuckets, remote, 30, 60, Date.now()).take(Date.now())) {
+    sendJson(response, 429, { error: 'Too many requests' });
+    return;
+  }
   if (await handleAuth(request, response, accounts)) return;
   if (!production) {
     response.writeHead(404);
@@ -197,6 +230,28 @@ async function route(request: IncomingMessage, response: ServerResponse) {
     return;
   }
   await serveStatic(request, response);
+}
+
+function applySecurityHeaders(request: IncomingMessage, response: ServerResponse) {
+  response.setHeader('X-Content-Type-Options', 'nosniff');
+  response.setHeader('X-Frame-Options', 'DENY');
+  response.setHeader('Referrer-Policy', 'no-referrer');
+  response.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+  response.setHeader(
+    'Content-Security-Policy',
+    "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; font-src 'self'; connect-src 'self' ws: wss:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'",
+  );
+  const forwarded = request.headers['x-forwarded-proto'];
+  if (forwarded === 'https' || (request.socket as { encrypted?: boolean }).encrypted)
+    response.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+}
+
+function sendJson(response: ServerResponse, status: number, body: unknown) {
+  response.writeHead(status, {
+    'content-type': 'application/json; charset=utf-8',
+    'cache-control': 'no-store',
+  });
+  response.end(JSON.stringify(body));
 }
 
 function deliver(events: { userId: string; message: ServerMessage }[]) {
@@ -256,7 +311,15 @@ async function serveStatic(request: IncomingMessage, response: ServerResponse) {
   try {
     const info = await stat(file);
     if (!info.isFile()) throw new Error('not a file');
-    response.writeHead(200, { 'content-type': types[extname(file)] ?? 'application/octet-stream' });
+    const hashedAsset = file.includes(`${sep}assets${sep}`);
+    response.writeHead(200, {
+      'content-type': types[extname(file)] ?? 'application/octet-stream',
+      'cache-control': hashedAsset
+        ? 'public, max-age=31536000, immutable'
+        : file.endsWith('.html')
+          ? 'no-store'
+          : 'public, max-age=86400',
+    });
     createReadStream(file).pipe(response);
   } catch {
     response.writeHead(404);
