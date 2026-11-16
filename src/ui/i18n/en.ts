@@ -84,6 +84,18 @@ export const en: Catalog = {
   'settings.selectReports': 'Select reports',
   'settings.downloadAnalysis': 'Download analysis',
   'settings.noReports': 'No reports selected.',
+  'settings.history.save': 'Save match history',
+  'settings.history.title': 'Match history',
+  'settings.history.empty': 'No completed games yet.',
+  'settings.history.clear': 'Clear history',
+  'settings.history.clearAll': 'Clear all saved data',
+  'settings.history.mode.local': 'Local',
+  'settings.history.mode.online': 'Online',
+  'settings.history.result.win': 'Player {player} won',
+  'settings.history.result.draw': 'Draw',
+  'settings.history.ruleset.classic': 'Classic',
+  'settings.history.ruleset.powerups': 'Powerups',
+  'settings.history.rounds': '{rounds} rounds',
 
   // Playtest controls (development)
   'playtest.aria': 'Development playtest controls',
@@ -166,6 +178,7 @@ export const en: Catalog = {
   'outcome.MOTHER_VICTORY': 'mother pinned',
   'outcome.DRAW': 'both mothers pinned — draw',
   'outcome.BEAR_OFF': 'bear off',
+  'outcome.MARS': 'mars',
   'unit.turn': 'turn',
   'unit.opponentTurn': 'opponent turn',
 

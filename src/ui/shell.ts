@@ -15,6 +15,7 @@ import { localizedAbilityCopy } from './abilities/copy';
 import { getLocale, pluralSuffix, setLocale, t, translateDOM, type Locale } from './i18n';
 import type { PlaytestReport } from '../app/playtest-report';
 import { parseOptionalSeed } from '../game/random';
+import { clearHistory, loadHistory, type HistoryEntry } from '../app/history';
 import {
   analyzePlaytestReports,
   parsePlaytestReport,
@@ -263,11 +264,44 @@ function settingsMarkup(): string {
         `<option value="${locale}"${getLocale() === locale ? ' selected' : ''}>${locale === 'en' ? 'English' : 'Ελληνικά'}</option>`,
     )
     .join('');
-  return `<p class="eyebrow">${t('settings.eyebrow')}</p><h2>${t('settings.title')}</h2><label>${t('settings.motion')} <input type="checkbox" data-pref="motion"></label><label>${t('settings.texture')} <input type="checkbox" data-pref="texture"></label><label>${t('settings.sound')} <input type="checkbox" data-pref="sound"></label><label>${t('settings.language')} <select id="language-select">${languageOptions}</select></label><p class="note">${t('settings.note')}</p><div class="match-controls"><button type="button" id="new-game">${t('settings.newGame')}</button>${import.meta.env.DEV ? `<button type="button" id="download-playtest">${t('settings.downloadPlaytest')}</button>` : ''}<button type="button" id="sign-out">${t('settings.signOut')}</button></div>${import.meta.env.DEV ? `<section class="playtest-analysis"><h3>${t('settings.analysis')}</h3><p class="note">${t('settings.analysis.note')}</p><div class="match-controls"><button type="button" id="analyze-playtests">${t('settings.selectReports')}</button><button type="button" id="download-analysis" disabled>${t('settings.downloadAnalysis')}</button><input type="file" id="playtest-files" accept="application/json,.json" multiple hidden></div><output id="playtest-analysis-output" aria-live="polite">${t('settings.noReports')}</output></section>` : ''}`;
+  return `<p class="eyebrow">${t('settings.eyebrow')}</p><h2>${t('settings.title')}</h2><label>${t('settings.motion')} <input type="checkbox" data-pref="motion"></label><label>${t('settings.texture')} <input type="checkbox" data-pref="texture"></label><label>${t('settings.sound')} <input type="checkbox" data-pref="sound"></label><label>${t('settings.language')} <select id="language-select">${languageOptions}</select></label><label>${t('settings.history.save')} <input type="checkbox" data-pref="history"></label><p class="note">${t('settings.note')}</p><div class="match-controls"><button type="button" id="new-game">${t('settings.newGame')}</button>${import.meta.env.DEV ? `<button type="button" id="download-playtest">${t('settings.downloadPlaytest')}</button>` : ''}<button type="button" id="sign-out">${t('settings.signOut')}</button></div><section class="match-history"><h3>${t('settings.history.title')}</h3><ul id="match-history-list"></ul><div class="match-controls"><button type="button" id="clear-history">${t('settings.history.clear')}</button><button type="button" id="clear-all-data">${t('settings.history.clearAll')}</button></div></section>${import.meta.env.DEV ? `<section class="playtest-analysis"><h3>${t('settings.analysis')}</h3><p class="note">${t('settings.analysis.note')}</p><div class="match-controls"><button type="button" id="analyze-playtests">${t('settings.selectReports')}</button><button type="button" id="download-analysis" disabled>${t('settings.downloadAnalysis')}</button><input type="file" id="playtest-files" accept="application/json,.json" multiple hidden></div><output id="playtest-analysis-output" aria-live="polite">${t('settings.noReports')}</output></section>` : ''}`;
 }
 
 function applyMotionClass() {
   document.body.classList.toggle('still', !preferences.motion);
+}
+
+function renderHistoryList(root: HTMLElement) {
+  const list = root.querySelector<HTMLUListElement>('#match-history-list');
+  if (!list) return;
+  const entries = loadHistory();
+  list.replaceChildren();
+  if (!entries.length) {
+    const empty = document.createElement('li');
+    empty.className = 'history-empty';
+    empty.textContent = t('settings.history.empty');
+    list.append(empty);
+    return;
+  }
+  for (const entry of entries) list.append(historyItem(entry));
+}
+
+function historyItem(entry: HistoryEntry): HTMLElement {
+  const item = document.createElement('li');
+  const mode =
+    entry.mode === 'LOCAL' ? t('settings.history.mode.local') : t('settings.history.mode.online');
+  const ruleset =
+    entry.ruleset === 'CLASSIC'
+      ? t('settings.history.ruleset.classic')
+      : t('settings.history.ruleset.powerups');
+  const result =
+    entry.winner === null
+      ? t('settings.history.result.draw')
+      : t('settings.history.result.win', { player: entry.winner + 1 });
+  const date = new Date(entry.at).toLocaleDateString();
+  const rounds = t('settings.history.rounds', { rounds: entry.rounds });
+  item.textContent = `${date} · ${mode} · ${ruleset} · ${result} · ${rounds}`;
+  return item;
 }
 
 function wireSettings(root: HTMLElement, dialog: HTMLDialogElement) {
@@ -284,6 +318,23 @@ function wireSettings(root: HTMLElement, dialog: HTMLDialogElement) {
   const language = root.querySelector<HTMLSelectElement>('#language-select');
   language?.addEventListener('change', () => {
     setLocale(language.value as Locale);
+    translateDOM();
+    root.innerHTML = settingsMarkup();
+    wireSettings(root, dialog);
+  });
+  renderHistoryList(root);
+  root.querySelector<HTMLButtonElement>('#clear-history')?.addEventListener('click', () => {
+    clearHistory();
+    renderHistoryList(root);
+  });
+  root.querySelector<HTMLButtonElement>('#clear-all-data')?.addEventListener('click', () => {
+    clearHistory();
+    preferences.motion = true;
+    preferences.texture = true;
+    preferences.sound = true;
+    preferences.history = true;
+    savePreferences();
+    setLocale('en');
     translateDOM();
     root.innerHTML = settingsMarkup();
     wireSettings(root, dialog);
