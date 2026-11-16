@@ -17,6 +17,8 @@ export type GameState = Position & {
   openingRolls: [number[] | null, number[] | null];
   outcome: Outcome | null;
   message: string;
+  messageKey?: string;
+  messageParams?: Record<string, string | number>;
   opening: boolean;
   ruleset: Ruleset;
   variantConfigHash: string | null;

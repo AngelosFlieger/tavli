@@ -1,6 +1,6 @@
 import type { Player } from '../game/rules/position';
 import type { Outcome } from '../game/rules/position';
-import { initialPresentedSession, sessionMessage } from '../game/session/messages';
+import { initialPresentedSession, sessionMessageParts } from '../game/session/messages';
 import type { GameState, Session } from '../game/session/state';
 import {
   transitionSession,
@@ -161,12 +161,15 @@ class Match {
 
   end(outcome: Outcome): Update {
     const events: SessionEvent[] = [{ type: 'GameEnded', outcome }];
+    const parts = sessionMessageParts(this.session.state, events);
     this.session = {
       state: {
         ...structuredClone(this.session.state),
         phase: 'GAME_OVER',
         outcome: structuredClone(outcome),
-        message: sessionMessage(this.session.state, events) ?? outcome.reason,
+        message: parts?.text ?? outcome.reason,
+        messageKey: parts?.key,
+        messageParams: parts?.params,
         clock: null,
       },
       history: [],
@@ -180,8 +183,12 @@ class Match {
   ): Extract<SessionResult, { ok: true }> | null {
     const result = transitionSession(input, command, this.rules);
     if (!result.ok) return null;
-    const message = sessionMessage(result.session.state, result.events);
-    if (message !== null) result.session.state.message = message;
+    const parts = sessionMessageParts(result.session.state, result.events);
+    if (parts) {
+      result.session.state.message = parts.text;
+      result.session.state.messageKey = parts.key;
+      result.session.state.messageParams = parts.params;
+    }
     return result;
   }
 

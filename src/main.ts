@@ -6,6 +6,7 @@ import './waiting.css';
 import './draft.css';
 import './water-preview.css';
 import { preferences } from './ui/preferences';
+import { loadLocalePreference, t, translateDOM } from './ui/i18n';
 import {
   enablePlay,
   enterTable,
@@ -46,6 +47,8 @@ const session: Session = {
   onSignOut() {},
   playtestReport: () => null,
 };
+loadLocalePreference();
+translateDOM();
 let reconnect = () => {};
 initShell(session);
 initAuthScreen({
@@ -207,7 +210,7 @@ async function start() {
 
   stage.canvas.addEventListener('webglcontextlost', (event) => {
     event.preventDefault();
-    status.textContent = 'Graphics connection lost. Reload the page to restore the board.';
+    status.textContent = t('main.graphicsLost');
     status.hidden = false;
   });
 
@@ -228,6 +231,5 @@ async function start() {
 start().catch((error: unknown) => {
   console.error(error);
   status.hidden = false;
-  status.textContent =
-    'The 3D board could not load. Check WebGL support and that public/models/Board.glb is present, then reload.';
+  status.textContent = t('main.boardLoadFailed');
 });

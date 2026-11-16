@@ -2,6 +2,7 @@ import type { GameController } from '../../app/game-controller';
 import type { Player } from '../../game/rules/position';
 import { abilityRegistry } from '../../game/variant/abilities/registry';
 import type { AbilityInstance } from '../../game/variant/types';
+import { t } from '../i18n';
 import { createAbilityCardContent } from './card-content';
 
 type FocusedAbilityActions = {
@@ -31,7 +32,7 @@ export function createFocusedAbilityCard(
   const close = document.createElement('button');
   close.className = 'ability-focus-close';
   close.type = 'button';
-  close.setAttribute('aria-label', 'Close ability details');
+  close.setAttribute('aria-label', t('ability.close'));
   close.textContent = '×';
   close.onclick = () => {
     if (controller.selectedAbility?.instanceId === instance.instanceId) actions.cancelAbility();
@@ -46,12 +47,12 @@ export function createFocusedAbilityCard(
   const passive = abilityRegistry[instance.abilityId].kind === 'PASSIVE';
   use.disabled = !canUse || selected;
   use.textContent = selected
-    ? 'Selected'
+    ? t('ability.selected')
     : canUse
-      ? 'Use'
+      ? t('ability.use')
       : passive
-        ? 'Always active'
-        : 'Not playable now';
+        ? t('ability.alwaysActive')
+        : t('ability.notPlayable');
   use.onclick = () => {
     if (actions.selectAbility(instance.instanceId)) requestRender();
   };

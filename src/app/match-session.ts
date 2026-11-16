@@ -5,6 +5,7 @@ import type { GameController } from './game-controller';
 import { rulesForSelection } from '../game/variant/rules-context';
 import type { ResolvedVariantConfig } from '../game/variant/types';
 import { createSeededRandomInt } from '../game/random';
+import { t } from '../ui/i18n';
 
 export type MatchEvents = {
   onReady: (name: string) => void;
@@ -55,18 +56,6 @@ export type MatchUi = {
   signedOut: () => void;
 };
 
-const errorCopy: Record<ClientErrorCode, string> = {
-  PROTOCOL: 'This client and server use different protocol versions. Reload to update.',
-  AUTH: 'Sign in again to play online.',
-  NOT_FOUND: 'That match is no longer available.',
-  NOT_YOUR_TURN: 'Wait for your turn.',
-  MATCH_ENDED: 'This match has ended.',
-  MATCH_NOT_FINISHED: 'Finish the current game before starting a rematch.',
-  WAITING_FOR_OPPONENT: 'Waiting for the other player to accept.',
-  INVALID_COMMAND: 'That move is not available.',
-  INTERNAL: 'The game server hit an error. Try again.',
-};
-
 /** Owns search, match, and disconnect sequencing behind transport and UI ports. */
 export function createMatchSession(
   controller: GameController,
@@ -83,7 +72,7 @@ export function createMatchSession(
       playing = false;
       flow.leave();
       ui.showTitle();
-      ui.showNote('The match ended while you were disconnected.');
+      ui.showNote(t('net.matchEndedDisconnected'));
     },
     onResume(you, state, canUndo, variantConfig) {
       searching = false;
@@ -104,10 +93,10 @@ export function createMatchSession(
         flow.leave();
         ui.showTitle();
       }
-      ui.showNote('Sign in again to play online.');
+      ui.showNote(t('net.signInAgain'));
     },
     onReconnect() {
-      if (searching || playing) ui.showNote('Reconnecting…');
+      if (searching || playing) ui.showNote(t('net.reconnecting'));
     },
     onWaiting() {
       if (!searching) return;
@@ -130,14 +119,10 @@ export function createMatchSession(
       flow.receive(update);
     },
     onError(code) {
-      ui.showNote(errorCopy[code]);
+      ui.showNote(t(`error.${code}`));
     },
     onRematch(status) {
-      ui.showNote(
-        status === 'OFFERED'
-          ? 'Your opponent wants a rematch. Press New game to accept.'
-          : 'The rematch offer was declined.',
-      );
+      ui.showNote(status === 'OFFERED' ? t('net.rematchOffered') : t('net.rematchDeclined'));
     },
     onLeft() {
       searching = false;
@@ -145,7 +130,7 @@ export function createMatchSession(
       ui.setSearching(false);
       flow.leave();
       ui.showTitle();
-      ui.showNote('Opponent left. Search again to play.');
+      ui.showNote(t('net.opponentLeft'));
     },
     onClose() {
       const wasPlaying = playing || controller.scripted;
@@ -156,7 +141,7 @@ export function createMatchSession(
         flow.leave();
         ui.showTitle();
       }
-      ui.showNote('Can’t reach the game server.');
+      ui.showNote(t('net.unreachable'));
     },
   });
 
