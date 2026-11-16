@@ -19,13 +19,14 @@ Open http://localhost:3000. Vite also prints a Network address: anyone on the sa
 
 ```sh
 npm test
+npm run typecheck
 npm run test:browser # local play plus two-seat online drafts/ability smoke test; requires Chrome or Chromium
 npm run build
 npm start          # serve dist/ and the game server on port 3000
 npm run format:check
 ```
 
-The browser smoke test finds Chrome in the common Linux locations. Set `PLAKOTO_CHROME_PATH` when using another compatible executable.
+GitHub Actions runs the type, unit, formatting, build, and browser checks. The browser smoke test finds Chrome in the common Linux locations. Set `PLAKOTO_CHROME_PATH` when using another compatible executable.
 
 Development builds also show local balance-playtest controls. Leave the seed blank for fresh cryptographic randomness on every new game, or enter an unsigned 32-bit seed when a balance run must be reproducible. The same profile and explicit seed reproduce dice, draft offers/order, passive probability checks, and powerup rerolls. During that game, Settings can download an in-memory JSON report with semantic events, public effect snapshots, picks, uses, stalled turns, and the result. Settings can also import multiple reports, show a compact comparison, and download aggregate JSON. Aggregation keeps distinct configuration hashes separate and distinguishes completed hold times from unfinished, censored observations. Production builds do not expose these controls, and no report data is sent anywhere.
 
