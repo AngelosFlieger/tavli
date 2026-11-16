@@ -22,6 +22,7 @@ export type TableEvents = {
   onRejected: () => void;
   onReconnect: () => void;
   onWaiting: () => void;
+  onRoom: (code: string) => void;
   onMatched: (you: Player, state: GameState, variantConfig: ResolvedVariantConfig | null) => void;
   onUpdate: (update: Update) => void;
   onError: (code: ClientErrorCode) => void;
@@ -98,6 +99,8 @@ export function connectTable(events: TableEvents) {
         retry = 0;
         flush();
         events.onWaiting();
+      } else if (message.type === 'room') {
+        events.onRoom(message.code);
       } else if (
         message.type === 'matched' &&
         (message.you === 0 || message.you === 1) &&
@@ -145,6 +148,9 @@ export function connectTable(events: TableEvents) {
   return {
     connect: open,
     find: (selection: MatchSelection = CLASSIC_SELECTION) => send({ type: 'find', selection }),
+    createRoom: (selection: MatchSelection = CLASSIC_SELECTION) =>
+      send({ type: 'createRoom', selection }),
+    joinRoom: (code: string) => send({ type: 'joinRoom', code }),
     cancel: () => send({ type: 'cancel' }),
     send,
     abandon() {
@@ -171,6 +177,7 @@ function parse(data: unknown): ServerMessage | null {
         message.type === 'rejected' ||
         message.type === 'error' ||
         message.type === 'waiting' ||
+        message.type === 'room' ||
         message.type === 'matched' ||
         message.type === 'resume' ||
         message.type === 'update' ||

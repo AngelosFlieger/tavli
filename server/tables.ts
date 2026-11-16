@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { randomUUID, randomBytes } from 'node:crypto';
 import { initialPresentedSession, sessionMessage } from '../src/game/session/messages';
 import { createLobby } from '../src/net/lobby';
 import { matchKey, rulesForSelection, rulesForState } from '../src/game/variant/rules-context';
@@ -17,6 +17,7 @@ import type { Store, StoredMatch, StoredRevisionUpdate } from './store';
 
 const reconnectGraceMs = 45_000;
 const noShowGraceMs = 20_000;
+const roomTtlMs = 10 * 60_000;
 
 export type TableEvent = { userId: string; message: ServerMessage };
 
@@ -36,6 +37,7 @@ export function createTables(
   const online = new Set<string>();
   const seen = new Map<string, string>();
   const rematchOffers = new Map<string, Set<string>>();
+  const rooms = new Map<string, { hostId: string; selection: MatchSelection; createdAt: number }>();
 
   function freshSession(rules: RulesContext) {
     const session = initialPresentedSession(rules);
@@ -73,6 +75,55 @@ export function createTables(
     }
     adopt(match);
     return match;
+  }
+
+  function roomCode(): string {
+    return randomBytes(3).toString('hex').toUpperCase();
+  }
+
+  function pruneRooms() {
+    const cutoff = now() - roomTtlMs;
+    for (const [code, room] of rooms) if (room.createdAt < cutoff) rooms.delete(code);
+  }
+
+  function leaveRooms(userId: string) {
+    for (const [code, room] of rooms) if (room.hostId === userId) rooms.delete(code);
+  }
+
+  async function pairRoom(hostId: string, joinerId: string, selection: MatchSelection) {
+    await store.leaveQueue(hostId);
+    await store.leaveQueue(joinerId);
+    waiting.delete(hostId);
+    waiting.delete(joinerId);
+    const rules = rulesForSelection(selection);
+    const match: StoredMatch = {
+      id: randomUUID(),
+      seats: [hostId, joinerId],
+      session: freshSession(rules),
+      variantConfig: rules.variantConfig,
+      lastUpdate: null,
+      revision: 0,
+      away: [online.has(hostId) ? null : now(), online.has(joinerId) ? null : now()],
+      connected: [online.has(hostId), online.has(joinerId)],
+      endedAt: null,
+      winner: null,
+    };
+    if (!(await store.insertMatch(match))) return fail(hostId, 'INTERNAL');
+    adopt(match);
+    const events: TableEvent[] = [];
+    for (const id of match.seats) {
+      const seat = lobby.seat(id);
+      if (!seat) continue;
+      events.push(
+        ...emit(id, `${match.id}:0`, {
+          type: 'matched',
+          you: seat.you,
+          state: seat.state,
+          variantConfig: rules.variantConfig,
+        }),
+      );
+    }
+    return events;
   }
 
   return {
@@ -187,6 +238,23 @@ export function createTables(
       }
       return events;
     },
+    async createRoom(userId: string, selection: MatchSelection = CLASSIC_SELECTION) {
+      if (await pull(userId)) return this.connect(userId);
+      pruneRooms();
+      leaveRooms(userId);
+      const code = roomCode();
+      rooms.set(code, { hostId: userId, selection, createdAt: now() });
+      return emit(userId, `room:${code}`, { type: 'room', code });
+    },
+    async joinRoom(userId: string, code: string) {
+      if (await pull(userId)) return this.connect(userId);
+      pruneRooms();
+      const room = rooms.get(code.toUpperCase());
+      if (!room) return fail(userId, 'ROOM_NOT_FOUND');
+      if (room.hostId === userId) return fail(userId, 'ROOM_OWNED');
+      rooms.delete(code);
+      return pairRoom(room.hostId, userId, room.selection);
+    },
     async act(userId: string, command: Command) {
       for (let attempt = 0; attempt < 3; attempt++) {
         const match = await pull(userId);
@@ -250,6 +318,7 @@ export function createTables(
     },
     async cancel(userId: string) {
       waiting.delete(userId);
+      leaveRooms(userId);
       await store.leaveQueue(userId);
       const match = await store.matchForUser(userId);
       if (!match) {
@@ -278,6 +347,7 @@ export function createTables(
     },
     async disconnect(userId: string) {
       online.delete(userId);
+      leaveRooms(userId);
       if (!lobby.seat(userId)) {
         waiting.delete(userId);
         await store.leaveQueue(userId);

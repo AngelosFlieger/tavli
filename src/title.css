@@ -154,6 +154,40 @@
   color: #f1dfb3;
   font: 14px/1.45 monospace;
 }
+.room-panel {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 18px;
+  color: #f1dfb3;
+  font: 14px/1.4 monospace;
+}
+.room-panel[hidden] {
+  display: none;
+}
+.room-panel input {
+  width: 110px;
+  padding: 8px 10px;
+  font: 16px/1 monospace;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  background: #0b1427;
+  color: #f1dfb3;
+  border: 1px solid #35415c;
+  border-radius: 6px;
+}
+.room-panel button {
+  font-size: 14px;
+  padding: 9px 16px;
+}
+#room-status {
+  flex-basis: 100%;
+  margin: 4px 0 0;
+  text-align: center;
+  color: #e9cd91;
+}
 .start-options button {
   font-size: 18px;
   font-style: italic;
@@ -275,36 +309,36 @@ dialog {
     width: min(340px, 78vw);
   }
   .start-menu {
-    width: 70vw;
+    width: 74vw;
   }
   .mode-button {
-    height: 75px;
-    padding: 0 17px;
-    font-size: 24px;
-  }
-  .ruleset-picker {
-    margin-bottom: 16px;
-  }
-  .ruleset-picker label {
-    padding: 8px;
-  }
-  .ruleset-picker strong {
-    font-size: 14px;
-  }
-  .mode-star {
+    height: 52px;
+    padding: 0 12px;
     font-size: 18px;
   }
+  .ruleset-picker {
+    margin-bottom: 12px;
+  }
+  .ruleset-picker label {
+    padding: 6px;
+  }
+  .ruleset-picker strong {
+    font-size: 12px;
+  }
+  .mode-star {
+    font-size: 16px;
+  }
   .online-mode {
-    margin-bottom: 20px;
+    margin-bottom: 10px;
   }
   .start-options {
-    gap: 12px;
-    margin-top: 25px;
+    gap: 10px;
+    margin-top: 14px;
   }
   .start-options button {
     min-width: 0;
-    padding: 9px 18px;
-    font-size: 16px;
+    padding: 8px 14px;
+    font-size: 14px;
   }
   .on-title .player {
     top: 24%;
@@ -371,10 +405,10 @@ dialog {
 }
 @media (max-aspect-ratio: 1/1) {
   .on-title .logo {
-    top: 10%;
+    top: 8%;
   }
   .start-menu {
-    top: 34%;
+    top: 27%;
   }
   .on-title #board-frame {
     top: 59%;

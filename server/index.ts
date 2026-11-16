@@ -162,6 +162,22 @@ async function handleCommand(socket: Socket, data: unknown) {
       deliver(await tables.find(userId, message.selection));
       return;
     }
+    if (message.type === 'createRoom') {
+      if (!('selection' in message) || !isMatchSelection(message.selection)) {
+        send(userId, { type: 'error', code: 'INVALID_COMMAND' });
+        return;
+      }
+      deliver(await tables.createRoom(userId, message.selection));
+      return;
+    }
+    if (message.type === 'joinRoom') {
+      if (typeof message.code !== 'string' || !/^[A-Z0-9]{4,8}$/i.test(message.code)) {
+        send(userId, { type: 'error', code: 'INVALID_COMMAND' });
+        return;
+      }
+      deliver(await tables.joinRoom(userId, message.code));
+      return;
+    }
     if (message.type === 'cancel') {
       deliver(await tables.cancel(userId));
       return;
@@ -269,7 +285,7 @@ function sendSocket(socket: Socket, message: ServerMessage) {
 
 function parse(data: unknown) {
   try {
-    return JSON.parse(String(data)) as { type?: unknown };
+    return JSON.parse(String(data)) as { type?: unknown; [key: string]: unknown };
   } catch {
     return null;
   }
