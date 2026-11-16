@@ -3,6 +3,7 @@ import type { Session } from '../src/game/session/state';
 import type { GameState } from '../src/game/session/state';
 import { isPhase } from '../src/game/session/phase';
 import type { Outcome, OutcomeKind } from '../src/game/rules/position';
+import type { GameClock } from '../src/game/clock';
 import { resolveVariantConfig } from '../src/game/variant/config/schema';
 import type { ResolvedVariantConfig } from '../src/game/variant/types';
 import type { Update } from '../src/net/messages';
@@ -516,6 +517,7 @@ const outcomeKinds: readonly OutcomeKind[] = [
   'DISCONNECT',
   'NO_SHOW',
   'ABANDONED',
+  'TIMEOUT',
 ];
 
 function readState(value: unknown): GameState | null {
@@ -548,7 +550,20 @@ function readState(value: unknown): GameState | null {
     return null;
   if (!Array.isArray(state.diceModifiers)) return null;
   if (state.rollSource !== null && state.rollSource !== 'loadedKnuckles') return null;
+  if (state.clock !== undefined && state.clock !== null && !isClock(state.clock)) return null;
+  if (state.clock === undefined) state.clock = null;
   return state as GameState;
+}
+
+function isClock(value: unknown): value is GameClock {
+  if (!value || typeof value !== 'object') return false;
+  const clock = value as Record<string, unknown>;
+  return (
+    Number.isFinite(clock.remainingMs) &&
+    Number(clock.remainingMs) >= 0 &&
+    typeof clock.running === 'boolean' &&
+    (clock.deadline === null || Number.isFinite(clock.deadline))
+  );
 }
 
 function isDice(value: unknown): value is number[] {

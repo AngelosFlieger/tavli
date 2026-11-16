@@ -10,7 +10,8 @@ export type OutcomeKind =
   | 'RESIGNATION'
   | 'DISCONNECT'
   | 'NO_SHOW'
-  | 'ABANDONED';
+  | 'ABANDONED'
+  | 'TIMEOUT';
 export type Outcome = {
   winner: Player | null;
   points: number;

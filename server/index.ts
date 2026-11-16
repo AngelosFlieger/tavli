@@ -19,6 +19,7 @@ import { handleAuth, sessionToken } from './routes';
 import { openStore } from './store';
 import { createTables } from './tables';
 import { createSeededRandomInt, parseOptionalSeed } from '../src/game/random';
+import { clockConfigFromEnv } from '../src/game/clock';
 
 const production = process.argv.includes('--static');
 const port = Number(process.env.PORT) || (production ? 3000 : 3001);
@@ -38,6 +39,7 @@ const tables = createTables(
   () => randomInt(1, 7),
   () => Date.now(),
   authorityRandomInt,
+  clockConfigFromEnv(process.env),
 );
 await tables.start();
 const sockets = new Map<PlayerId, Socket>();

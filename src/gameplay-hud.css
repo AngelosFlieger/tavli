@@ -1,4 +1,18 @@
 /* In-game status, turn controls, held-checker choices, and player state. */
+.game-clock {
+  align-self: center;
+  min-width: 4.5ch;
+  padding: 0.35rem 0.6rem;
+  border: 1px solid color-mix(in srgb, currentColor 22%, transparent);
+  border-radius: 999px;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.game-clock.is-low {
+  color: #ff9c8d;
+}
+
 .dice-announcement {
   position: absolute;
   width: 1px;

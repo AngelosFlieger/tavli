@@ -12,6 +12,7 @@ import {
 } from '../src/net/messages';
 import type { RulesContext } from '../src/game/variant/types';
 import type { Outcome } from '../src/game/rules/position';
+import { clockExpired, DISABLED_CLOCK, startClock, type ClockConfig } from '../src/game/clock';
 import type { Store, StoredMatch, StoredRevisionUpdate } from './store';
 
 const reconnectGraceMs = 45_000;
@@ -26,14 +27,21 @@ export function createTables(
   now = () => Date.now(),
   randomInt: (maximum: number) => number = (maximum) =>
     Math.min(maximum - 1, Math.floor(((rollDie() - 1) / 6) * maximum)),
+  clockConfig: ClockConfig = DISABLED_CLOCK,
 ) {
-  const lobby = createLobby(rollDie, randomInt);
+  const lobby = createLobby(rollDie, randomInt, clockConfig, now);
   const revision = new Map<string, number>();
   const away = new Map<string, [number | null, number | null]>();
   const waiting = new Set<string>();
   const online = new Set<string>();
   const seen = new Map<string, string>();
   const rematchOffers = new Map<string, Set<string>>();
+
+  function freshSession(rules: RulesContext) {
+    const session = initialPresentedSession(rules);
+    session.state.clock = startClock(clockConfig, session.state.phase, now());
+    return session;
+  }
 
   function adopt(match: StoredMatch) {
     const loaded = lobby.snapshot(match.seats[0]) ?? lobby.snapshot(match.seats[1]);
@@ -79,7 +87,22 @@ export function createTables(
           match = (await store.match(live.id)) ?? match;
           if (match.endedAt !== null) break;
         }
-        if (match.endedAt === null) adopt({ ...match, away: [now(), now()] });
+        if (match.endedAt === null) {
+          const clock = match.session.state.clock;
+          if (clock?.running)
+            match = {
+              ...match,
+              session: {
+                ...match.session,
+                state: {
+                  ...match.session.state,
+                  clock: { remainingMs: clock.remainingMs, deadline: null, running: false },
+                },
+              },
+            };
+          adopt(match);
+          lobby.pause(match.seats[0]);
+        }
       }
     },
     async connect(userId: string) {
@@ -108,6 +131,7 @@ export function createTables(
         else match = (await store.matchForUser(userId)) ?? match;
       }
       adopt(match);
+      lobby.resume(userId);
       const seat = lobby.seat(userId);
       if (!seat) return [];
       return emit(userId, `${match.id}:${match.revision}`, {
@@ -130,7 +154,7 @@ export function createTables(
       const match: StoredMatch = {
         id: randomUUID(),
         seats: [opponent, userId],
-        session: initialPresentedSession(rules),
+        session: freshSession(rules),
         variantConfig: rules.variantConfig,
         lastUpdate: null,
         revision: 0,
@@ -267,6 +291,7 @@ export function createTables(
         }
         const index = match.seats[0] === userId ? 0 : 1;
         adopt(match);
+        lobby.pause(userId);
         if (match.endedAt !== null) {
           await store.release(match.id);
           lobby.leave(userId);
@@ -286,6 +311,24 @@ export function createTables(
     async sync() {
       const events: TableEvent[] = [];
       const current = now();
+      const timed = new Set<string>();
+      for (const userId of online) {
+        const seat = lobby.seat(userId);
+        if (!seat || !clockExpired(seat.state.clock, current)) continue;
+        const match = await store.matchForUser(userId);
+        if (!match || timed.has(match.id) || match.endedAt !== null) continue;
+        timed.add(match.id);
+        if (seat.state.active !== seat.you) continue;
+        const winner: 0 | 1 = seat.you === 0 ? 1 : 0;
+        events.push(
+          ...(await finishMatch(match, {
+            winner,
+            points: 1,
+            reason: 'Turn time expired',
+            kind: 'TIMEOUT',
+          })),
+        );
+      }
       for (const { match, expired } of await store.staleMatches(
         current - reconnectGraceMs,
         current - noShowGraceMs,
@@ -454,7 +497,7 @@ export function createTables(
     const next: StoredMatch = {
       id: randomUUID(),
       seats: match.seats,
-      session: initialPresentedSession(rules),
+      session: freshSession(rules),
       variantConfig: rules.variantConfig,
       lastUpdate: null,
       revision: 0,

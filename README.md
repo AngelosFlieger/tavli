@@ -40,6 +40,8 @@ The page asks you to create an account or sign in before the menu. Email and use
 
 Choose Classic or Powerups, then click Multiplayer to wait. The next person searching for the same ruleset and balance profile joins you; Classic and Powerups players never share a queue. The first person plays crimson and takes the first opening roll; the higher opening total decides who takes the first turn. The server rolls the dice, drafts, and ability randomness and checks every move; the browsers show the authoritative result. Use Cancel to stop searching. A dropped connection can resume for 45 seconds; a paired opponent who never connects loses after 20 seconds. Either player can Resign, and a finished game offers a rematch only after both players accept. A completed game stays in the database with its final position, winner, and result kind.
 
+Online matches use a server-owned clock. Each opening roll gets 30 seconds, each turn gets 2 minutes, and a 15-second bank is added to every deadline. Draft phases pause the clock. The same values apply to every table on the server and can be changed with `PLAKOTO_CLOCK_OPENING_SECONDS`, `PLAKOTO_CLOCK_TURN_SECONDS`, and `PLAKOTO_CLOCK_BANK_SECONDS`; set `PLAKOTO_CLOCK=off` to disable clocks. When the active player's deadline expires, the opponent wins with a timeout result.
+
 To share the game running on this Mac, leave `npm run dev` or `npm start` going and start a tunnel:
 
 ```sh
