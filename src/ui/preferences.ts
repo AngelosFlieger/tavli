@@ -1,9 +1,10 @@
-export type PreferenceKey = 'motion' | 'texture' | 'sound';
+export type PreferenceKey = 'motion' | 'texture' | 'sound' | 'history';
 
 export const preferences: Record<PreferenceKey, boolean> = {
   motion: true,
   texture: true,
   sound: true,
+  history: true,
 };
 
 const storageKey = 'plakoto-preferences';

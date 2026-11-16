@@ -29,10 +29,12 @@ import { createStage } from './scene/stage';
 import { createWaterSweep } from './scene/water-sweep';
 import { createWaterPreview } from './ui/water-preview';
 import { GameController } from './app/game-controller';
+import type { GameState } from './game/session/state';
 import { createGameplayActions } from './app/gameplay-actions';
 import { createOnlineGameFlow } from './app/online-game-flow';
 import { createMatchSession } from './app/match-session';
 import { PlaytestRecorder } from './app/playtest-report';
+import { addHistoryEntry, createHistoryEntry, loadHistory, saveHistory } from './app/history';
 
 const host = document.querySelector<HTMLElement>('#scene')!;
 const boardFrame = document.querySelector<HTMLElement>('#board-frame')!;
@@ -69,7 +71,30 @@ async function start() {
   );
   const controller = new GameController();
   const playtest = new PlaytestRecorder();
-  controller.setEventSink((events, state) => playtest.record(events, state));
+  let historyMode: 'LOCAL' | 'ONLINE' = 'LOCAL';
+  let historyRecordedFor: GameState | null = null;
+  controller.setEventSink((events, state) => {
+    playtest.record(events, state);
+    if (
+      preferences.history &&
+      state.phase === 'GAME_OVER' &&
+      state.outcome &&
+      historyRecordedFor !== state
+    ) {
+      historyRecordedFor = state;
+      saveHistory(
+        addHistoryEntry(
+          loadHistory(),
+          createHistoryEntry({
+            mode: historyMode,
+            ruleset: state.ruleset,
+            outcome: state.outcome,
+            rounds: state.powerups?.completedRounds ?? 0,
+          }),
+        ),
+      );
+    }
+  });
   let actions: ReturnType<typeof createGameplayActions>;
   let dice: Awaited<ReturnType<typeof createDice>> | undefined;
   const gameplay = await createGameplay(
@@ -173,6 +198,7 @@ async function start() {
     connectTable,
   );
   session.onLocal = (selection, seed) => {
+    historyMode = 'LOCAL';
     const accepted = match.startLocal(selection, seed);
     if (!accepted || seed === undefined) {
       playtest.clear();
@@ -186,6 +212,7 @@ async function start() {
     });
   };
   session.onMultiplayer = (selection) => {
+    historyMode = 'ONLINE';
     playtest.clear();
     match.toggleSearch(selection);
   };
