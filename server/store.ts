@@ -62,6 +62,7 @@ export type Store = {
   wait(userId: string, matchKey: string): Promise<void>;
   clearQueue(): Promise<void>;
   liveMatches(): Promise<StoredMatch[]>;
+  ping(): Promise<boolean>;
   staleMatches(
     graceBefore: number,
     noShowBefore: number,
@@ -241,6 +242,14 @@ export async function openStore(options: StoreOptions = {}): Promise<Store> {
       return (await matches.find({ endedAt: null }).toArray())
         .map(readMatch)
         .filter((match): match is StoredMatch => match !== null);
+    },
+    async ping() {
+      try {
+        await db.command({ ping: 1 });
+        return true;
+      } catch {
+        return false;
+      }
     },
     async claimOpponent(userId, matchKey) {
       await joinQueue(userId, matchKey);
