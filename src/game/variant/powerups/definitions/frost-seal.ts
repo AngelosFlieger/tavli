@@ -72,10 +72,10 @@ export const frostSeal = defineAbility<'frostSeal', FrostSealConfig>({
         affectedPlayer: other(player),
         target: activation.target,
         tags: ['CONTROL'],
-        modifiers: {
-          blockLeaving: config.blockLeaving,
-          blockLanding: config.blockLanding,
-        },
+        constraints: [
+          ...(config.blockLeaving ? [{ kind: 'BLOCK_LEAVING' as const }] : []),
+          ...(config.blockLanding ? [{ kind: 'BLOCK_LANDING' as const }] : []),
+        ],
         duration: config.duration,
         remaining: config.duration.count,
       };

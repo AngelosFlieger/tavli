@@ -10,6 +10,25 @@ export type EffectDuration = { boundary: EffectBoundary; count: number };
 export type RollKind = 'ANY' | 'NON_DOUBLE';
 export type EffectTag = 'CONTROL' | 'DICE_PENALTY' | 'PROTECTION';
 
+/**
+ * Public, serializable effect data. Rules interpret these; the UI renders them. A new effect that
+ * reuses an existing kind needs no interpreter change, and adding a kind makes every interpreter
+ * exhaustiveness-check fail until it is handled.
+ */
+export type EffectConstraint =
+  | { kind: 'BLOCK_LEAVING' }
+  | { kind: 'BLOCK_LANDING' }
+  | { kind: 'ANCHOR_CHECKER'; checker: number }
+  | {
+      kind: 'DICE_PENALTY';
+      penalty: number;
+      minimumToken: number;
+      targetToken: 'HIGHEST' | 'LOWEST';
+      affectDoubles: boolean;
+      unaffectedDoubleConsumes: boolean;
+      doubleHandling: 'CHANGE_ONE_TOKEN' | 'CHANGE_MATCHING_TOKENS';
+    };
+
 export type AbilityConfigBase = {
   enabled: boolean;
   offerWeight: number;
@@ -40,19 +59,7 @@ export type ActiveEffect<Id extends string = string> = {
   affectedPlayer: Player;
   target: AbilityTarget;
   tags: EffectTag[];
-  modifiers: {
-    blockLeaving?: boolean;
-    blockLanding?: boolean;
-    anchorChecker?: number;
-    dicePenalty?: {
-      penalty: number;
-      minimumToken: number;
-      targetToken: 'HIGHEST' | 'LOWEST';
-      affectDoubles: boolean;
-      unaffectedDoubleConsumes: boolean;
-      doubleHandling: 'CHANGE_ONE_TOKEN' | 'CHANGE_MATCHING_TOKENS';
-    };
-  };
+  constraints: readonly EffectConstraint[];
   duration: EffectDuration;
   remaining: number;
 };

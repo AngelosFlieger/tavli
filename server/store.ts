@@ -5,7 +5,7 @@ import { isPhase } from '../src/game/session/phase';
 import type { Outcome, OutcomeKind } from '../src/game/rules/position';
 import type { GameClock } from '../src/game/clock';
 import { resolveVariantConfig } from '../src/game/variant/config/schema';
-import type { ResolvedVariantConfig } from '../src/game/variant/types';
+import type { EffectConstraint, ResolvedVariantConfig } from '../src/game/variant/types';
 import type { Update } from '../src/net/messages';
 
 export type StoredUser = {
@@ -557,11 +557,51 @@ function readState(value: unknown): GameState | null {
   if (state.variantConfigHash !== null && typeof state.variantConfigHash !== 'string') return null;
   if (state.powerups !== null && (!state.powerups || typeof state.powerups !== 'object'))
     return null;
+  if (state.powerups && !readPowerups(state.powerups)) return null;
   if (!Array.isArray(state.diceModifiers)) return null;
   if (state.rollSource !== null && state.rollSource !== 'loadedKnuckles') return null;
   if (state.clock !== undefined && state.clock !== null && !isClock(state.clock)) return null;
   if (state.clock === undefined) state.clock = null;
   return state as GameState;
+}
+
+/**
+ * Normalizes persisted effect snapshots. Matches written before public constraints replaced the
+ * modifier bag are migrated on read so a deploy cannot strand a live match.
+ */
+function readPowerups(powerups: NonNullable<GameState['powerups']>): boolean {
+  const effects = (powerups as unknown as { activeEffects?: unknown }).activeEffects;
+  if (!Array.isArray(effects)) return false;
+  const migrated: unknown[] = [];
+  for (const effect of effects) {
+    if (!effect || typeof effect !== 'object') return false;
+    const entry = effect as Record<string, unknown>;
+    const constraints = readConstraints(entry);
+    if (!constraints) return false;
+    migrated.push({ ...entry, constraints });
+  }
+  (powerups as unknown as { activeEffects: unknown[] }).activeEffects = migrated;
+  return true;
+}
+
+type LegacyEffectModifiers = {
+  blockLeaving?: boolean;
+  blockLanding?: boolean;
+  anchorChecker?: number;
+  dicePenalty?: Omit<Extract<EffectConstraint, { kind: 'DICE_PENALTY' }>, 'kind'>;
+};
+
+function readConstraints(effect: Record<string, unknown>): EffectConstraint[] | null {
+  if (Array.isArray(effect.constraints)) return effect.constraints as EffectConstraint[];
+  const modifiers = effect.modifiers as LegacyEffectModifiers | undefined;
+  if (!modifiers || typeof modifiers !== 'object') return null;
+  const constraints: EffectConstraint[] = [];
+  if (modifiers.blockLeaving) constraints.push({ kind: 'BLOCK_LEAVING' });
+  if (modifiers.blockLanding) constraints.push({ kind: 'BLOCK_LANDING' });
+  if (typeof modifiers.anchorChecker === 'number')
+    constraints.push({ kind: 'ANCHOR_CHECKER', checker: modifiers.anchorChecker });
+  if (modifiers.dicePenalty) constraints.push({ kind: 'DICE_PENALTY', ...modifiers.dicePenalty });
+  return constraints;
 }
 
 function isClock(value: unknown): value is GameClock {

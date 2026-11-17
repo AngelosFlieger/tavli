@@ -86,8 +86,9 @@ export const jinx = defineAbility<'jinx', JinxConfig>({
         affectedPlayer: other(player),
         target: activation.target,
         tags: ['DICE_PENALTY'],
-        modifiers: {
-          dicePenalty: {
+        constraints: [
+          {
+            kind: 'DICE_PENALTY',
             penalty: config.penalty,
             minimumToken: config.minimumToken,
             targetToken: config.targetToken,
@@ -95,7 +96,7 @@ export const jinx = defineAbility<'jinx', JinxConfig>({
             unaffectedDoubleConsumes: config.unaffectedDoubleConsumes,
             doubleHandling: config.doubleHandling,
           },
-        },
+        ],
         duration: config.duration,
         remaining: config.duration.count,
       };

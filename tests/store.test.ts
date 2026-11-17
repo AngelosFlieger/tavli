@@ -36,6 +36,53 @@ test('a live match is found by either seat without loading every match', async (
   }
 });
 
+test('a stored pre-constraint effect snapshot is migrated on read', async () => {
+  const store = await openStore({ name: `plakoto-test-${randomUUID()}` });
+  const config = resolveVariantConfig(createPowerupsV1Input());
+  try {
+    const session = initialPresentedSession(powerupsRules(config));
+    const powerups = session.state.powerups!;
+    powerups.activeEffects = [
+      {
+        instanceId: 'legacy-1',
+        abilityId: 'frostSeal',
+        source: 1,
+        affectedPlayer: 0,
+        target: { type: 'POINT', point: 12 },
+        tags: ['CONTROL'],
+        modifiers: { blockLeaving: true, blockLanding: true },
+        duration: { boundary: 'TARGET_TURN_END', count: 1 },
+        remaining: 1,
+      } as unknown as (typeof powerups.activeEffects)[number],
+    ];
+    assert.equal(
+      await store.insertMatch({
+        id: 'legacy-live',
+        seats: ['crimson', 'ivory'],
+        session,
+        variantConfig: config,
+        lastUpdate: null,
+        revision: 0,
+        away: [null, null],
+        connected: [true, false],
+        endedAt: null,
+        winner: null,
+      }),
+      true,
+    );
+    const tables = createTables(store, () => 1);
+    const message = (await tables.connect('crimson'))[0]?.message;
+    assert.equal(message?.type, 'resume');
+    if (message?.type !== 'resume') return;
+    assert.deepEqual(message.state.powerups?.activeEffects[0].constraints, [
+      { kind: 'BLOCK_LEAVING' },
+      { kind: 'BLOCK_LANDING' },
+    ]);
+  } finally {
+    await store.drop();
+  }
+});
+
 test('a stored configuration snapshot restores without a registered profile', async () => {
   const store = await openStore({ name: `plakoto-test-${randomUUID()}` });
   const input = createPowerupsV1Input();

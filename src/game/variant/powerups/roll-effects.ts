@@ -7,7 +7,10 @@ export type RollEffectResolution = {
   consumed: ActiveEffect[];
 };
 
-/** Applies delayed public effects to movement tokens while preserving the physical dice result. */
+/**
+ * Applies delayed public DICE_PENALTY constraints to movement tokens while preserving the physical
+ * dice result. The loop is constraint-driven, so another penalty ability needs no change here.
+ */
 export function resolvePendingRollEffects(state: GameState, player: Player): RollEffectResolution {
   const powerups = state.powerups;
   if (!powerups || state.roll.length !== 2) return { modifiers: [], consumed: [] };
@@ -16,8 +19,9 @@ export function resolvePendingRollEffects(state: GameState, player: Player): Rol
   const consumed: ActiveEffect[] = [];
   const consumedIds = new Set<string>();
   for (const effect of powerups.activeEffects) {
-    const penalty = effect.modifiers.dicePenalty;
-    if (effect.abilityId !== 'jinx' || effect.affectedPlayer !== player || !penalty) continue;
+    if (effect.affectedPlayer !== player) continue;
+    const penalty = effect.constraints.find((constraint) => constraint.kind === 'DICE_PENALTY');
+    if (!penalty) continue;
 
     const double = state.roll[0] === state.roll[1];
     if (double && !penalty.affectDoubles) {
@@ -37,7 +41,7 @@ export function resolvePendingRollEffects(state: GameState, player: Player): Rol
 
     const modifier: DiceModifier = {
       instanceId: effect.instanceId,
-      abilityId: 'jinx',
+      abilityId: effect.abilityId as DiceModifier['abilityId'],
       source: effect.source,
       dieIndex,
       before,

@@ -75,7 +75,7 @@ test('playtest recorder keeps semantic events, state snapshots, and balance summ
       affectedPlayer: 1,
       target: { type: 'POINT', point: 12 },
       tags: ['CONTROL'],
-      modifiers: { blockLeaving: true, blockLanding: true },
+      constraints: [{ kind: 'BLOCK_LEAVING' }, { kind: 'BLOCK_LANDING' }],
       duration: { boundary: 'TARGET_TURN_END', count: 2 },
       remaining: 1,
     },

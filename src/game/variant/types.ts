@@ -16,6 +16,7 @@ export type {
   AbilityKind,
   AbilityTarget,
   EffectBoundary,
+  EffectConstraint,
   EffectDuration,
   EffectTag,
   PowerTiming,

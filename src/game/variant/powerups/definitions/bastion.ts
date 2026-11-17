@@ -75,21 +75,21 @@ export const bastion = defineAbility<'bastion', BastionConfig>({
         affectedPlayer: other(player),
         target: activation.target,
         tags: ['PROTECTION'],
-        modifiers: {
-          blockLanding: config.blockLanding,
-          anchorChecker: state.board[point]?.at(-1),
-        },
+        constraints: [
+          ...(config.blockLanding ? [{ kind: 'BLOCK_LANDING' as const }] : []),
+          ...(state.board[point]?.at(-1) === undefined
+            ? []
+            : [{ kind: 'ANCHOR_CHECKER' as const, checker: state.board[point]!.at(-1)! }]),
+        ],
         duration: config.duration,
         remaining: config.duration.count,
       };
     },
     effectIsValid(position, effect) {
       if (effect.target.type !== 'POINT') return true;
-      const stack = position.board[effect.target.point];
-      return (
-        effect.modifiers.anchorChecker !== undefined &&
-        stack.includes(effect.modifiers.anchorChecker)
-      );
+      const anchor = effect.constraints.find((constraint) => constraint.kind === 'ANCHOR_CHECKER');
+      if (!anchor) return false;
+      return position.board[effect.target.point].includes(anchor.checker);
     },
   },
 });

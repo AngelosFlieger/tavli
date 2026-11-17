@@ -397,14 +397,20 @@ test('Jinx targets the opponent and modifies only the next effective movement to
   assert.equal(cast.ok, true);
   if (!cast.ok) return;
   assert.deepEqual(cast.session.state.powerups!.loadouts[0].powerups, []);
-  assert.deepEqual(cast.session.state.powerups!.activeEffects[0].modifiers.dicePenalty, {
-    penalty: 1,
-    minimumToken: 1,
-    targetToken: 'HIGHEST',
-    affectDoubles: false,
-    unaffectedDoubleConsumes: true,
-    doubleHandling: 'CHANGE_ONE_TOKEN',
-  });
+  assert.deepEqual(
+    cast.session.state.powerups!.activeEffects[0].constraints.find(
+      (constraint) => constraint.kind === 'DICE_PENALTY',
+    ),
+    {
+      kind: 'DICE_PENALTY',
+      penalty: 1,
+      minimumToken: 1,
+      targetToken: 'HIGHEST',
+      affectDoubles: false,
+      unaffectedDoubleConsumes: true,
+      doubleHandling: 'CHANGE_ONE_TOKEN',
+    },
+  );
 
   const rolled = transitionSession(cast.session, { type: 'receiveRoll', values: [2, 5] }, rules);
   assert.equal(rolled.ok, true);
@@ -638,7 +644,7 @@ test('Clear Skies respects configured tags, removal count, and positive-effect t
       affectedPlayer: 0,
       target: { type: 'PLAYER', player: 0 },
       tags: ['DICE_PENALTY'],
-      modifiers: {},
+      constraints: [],
       duration: { boundary: 'NEXT_DRAFT', count: 1 },
       remaining: 1,
     },
@@ -649,7 +655,7 @@ test('Clear Skies respects configured tags, removal count, and positive-effect t
       affectedPlayer: 0,
       target: { type: 'POINT', point: 0 },
       tags: ['CONTROL'],
-      modifiers: { blockLeaving: true, blockLanding: true },
+      constraints: [{ kind: 'BLOCK_LEAVING' }, { kind: 'BLOCK_LANDING' }],
       duration: { boundary: 'TARGET_TURN_END', count: 1 },
       remaining: 1,
     },
@@ -660,7 +666,7 @@ test('Clear Skies respects configured tags, removal count, and positive-effect t
       affectedPlayer: 0,
       target: { type: 'POINT', point: 18 },
       tags: ['PROTECTION'],
-      modifiers: { blockLanding: true },
+      constraints: [{ kind: 'BLOCK_LANDING' }],
       duration: { boundary: 'TARGET_TURN_END', count: 1 },
       remaining: 1,
     },
