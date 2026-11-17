@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 
-const pureRoots = ['src/game/rules', 'src/game/session'];
+const pureRoots = ['src/game/rules', 'src/game/session', 'src/game/variant'];
 const forbiddenImport =
   /from\s+['"](?:three|ws|mongodb|@capacitor\/[^'"]+|(?:\.\.\/)+(?:scene|ui|net|app|server)\/[^'"]*)['"]/;
 

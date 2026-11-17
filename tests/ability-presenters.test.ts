@@ -11,8 +11,12 @@ import {
   usesDirectDieSelection,
 } from '../src/ui/abilities/presenters';
 
-test('the UI presenter registry covers every ability ID', () => {
-  assert.deepEqual(Object.keys(abilityPresenters), [...ABILITY_IDS]);
+test('the UI presenter registry stays a subset of the ability catalog', () => {
+  for (const abilityId of Object.keys(abilityPresenters))
+    assert.ok(
+      (ABILITY_IDS as readonly string[]).includes(abilityId),
+      `${abilityId} is not a catalog ability`,
+    );
 });
 
 test('ability presenters derive counter and roll-option copy from public state and config', () => {

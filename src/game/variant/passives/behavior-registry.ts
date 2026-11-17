@@ -1,20 +1,29 @@
 import type { Move, Player, Position } from '../../rules/position';
 import type { GameState } from '../../session/state';
-import type { AbilityId, PassivePolicyState, PowerupsState, ResolvedVariantConfig } from '../types';
-import { homeGuardPassive } from './definitions/home-guard';
-import { loadedKnucklesPassive } from './definitions/loaded-knuckles';
-import { opportunistPassive } from './definitions/opportunist';
-import { quartermasterPassive } from './definitions/quartermaster';
+import { abilityDefinitions, type AbilityId, type DefinitionOf } from '../abilities/catalog';
+import type {
+  AbilityConfigMap,
+  PassivePolicyState,
+  PowerupsState,
+  ResolvedVariantConfig,
+} from '../types';
 import type { PassiveAbilityBehavior, PassiveLifecycleEvent } from './capabilities';
 
-export const passiveAbilityBehaviors = Object.freeze({
-  loadedKnuckles: loadedKnucklesPassive,
-  quartermaster: quartermasterPassive,
-  homeGuard: homeGuardPassive,
-  opportunist: opportunistPassive,
-});
+/** Passive capability IDs and their behaviors are derived from the catalog. */
+export type PassiveBehaviorId = {
+  [Id in AbilityId]: DefinitionOf<Id> extends { kind: 'PASSIVE' } ? Id : never;
+}[AbilityId];
 
-export type PassiveBehaviorId = keyof typeof passiveAbilityBehaviors;
+export const passiveAbilityBehaviors = Object.freeze(
+  Object.fromEntries(
+    Object.entries(abilityDefinitions)
+      .filter(([, definition]) => definition.kind === 'PASSIVE')
+      .map(([id, definition]) => [id, definition.kind === 'PASSIVE' ? definition.behavior : null]),
+  ),
+) as unknown as Record<
+  PassiveBehaviorId,
+  PassiveAbilityBehavior<PassiveBehaviorId, AbilityConfigMap[PassiveBehaviorId]>
+>;
 
 export function hasPassiveBehavior(id: AbilityId): id is PassiveBehaviorId {
   return id in passiveAbilityBehaviors;
@@ -185,9 +194,11 @@ function activeBehaviors(powerups: PowerupsState, player: Player): PassiveBehavi
   ];
 }
 
-/** Contains the only cast needed to preserve ID/config correlation in the heterogeneous registry. */
-function passiveBehavior<Id extends PassiveBehaviorId>(id: Id): PassiveAbilityBehavior<Id> {
-  return passiveAbilityBehaviors[id] as unknown as PassiveAbilityBehavior<Id>;
+/** Contains the only cast needed to preserve ID/config correlation in the derived registry. */
+function passiveBehavior<Id extends PassiveBehaviorId>(
+  id: Id,
+): PassiveAbilityBehavior<Id, AbilityConfigMap[Id]> {
+  return passiveAbilityBehaviors[id] as unknown as PassiveAbilityBehavior<Id, AbilityConfigMap[Id]>;
 }
 
 function checkedDie(value: number): number {

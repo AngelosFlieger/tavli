@@ -7,7 +7,7 @@ import {
   beforeRollAbilityBehaviors,
   endTurnAbilityBehaviors,
 } from '../src/game/variant/abilities/behavior-registry';
-import { abilityRegistry, describeAbility } from '../src/game/variant/abilities/registry';
+import { abilityRegistry, abilityCopy } from '../src/game/variant/abilities/registry';
 import { passiveAbilityBehaviors } from '../src/game/variant/passives/behavior-registry';
 import { resolveVariantConfig } from '../src/game/variant/config/schema';
 import { FAST_BALANCE, POWERUPS_V1 } from '../src/game/variant/config/profiles';
@@ -33,10 +33,10 @@ test('profile changes produce new hashes and config-derived card copy', () => {
   input.abilities.frostSeal.duration.count = 2;
   const tuned = resolveVariantConfig(input);
   assert.notEqual(tuned.hash, POWERUPS_V1.hash);
-  assert.equal(
-    describeAbility('frostSeal', tuned.abilities.frostSeal).summary,
-    'Freeze a point for 2 opponent turns.',
-  );
+  assert.deepEqual(abilityCopy('frostSeal', tuned.abilities), {
+    name: { key: 'ability.frostSeal.name' },
+    summary: { key: 'ability.frostSeal.summary', params: { count: 2 } },
+  });
   assert.equal(FAST_BALANCE.draft.intervalRounds, 1);
   assert.notEqual(FAST_BALANCE.hash, POWERUPS_V1.hash);
 });

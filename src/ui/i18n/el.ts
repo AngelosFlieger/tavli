@@ -271,9 +271,9 @@ export const el: Catalog = {
   'ability.chooseUse': 'Επιλέξτε πώς να χρησιμοποιήσετε {name}',
 
   'ability.frostSeal.name': 'Παγωνιά',
-  'ability.frostSeal.summary': 'Παγώνει ένα σημείο για {turns}.',
+  'ability.frostSeal.summary': 'Παγώνει ένα σημείο για {count} γύρους του αντιπάλου.',
   'ability.bastion.name': 'Προπύργιο',
-  'ability.bastion.summary': 'Προστατεύει ένα σημείο για {turns}.',
+  'ability.bastion.summary': 'Προστατεύει ένα σημείο για {count} γύρους του αντιπάλου.',
   'ability.jinx.name': 'Βασκανία',
   'ability.jinx.summary.highest': 'Μειώνει το μεγαλύτερο ζάρι του αντιπάλου κατά {penalty}.',
   'ability.jinx.summary.lowest': 'Μειώνει το μικρότερο ζάρι του αντιπάλου κατά {penalty}.',
@@ -291,7 +291,7 @@ export const el: Catalog = {
     'Ρίχνει διπλές πιο συχνά, αλλά δίνει λιγότερες διπλές κινήσεις.',
   'ability.quartermaster.name': 'Επιστάτης',
   'ability.quartermaster.benefit': 'Κρατά {count} επιπλέον ικανότητες.',
-  'ability.quartermaster.drawback': 'Η χρήση μίας ξεκινά επαναφόρτιση {turns}.',
+  'ability.quartermaster.drawback': 'Η χρήση μίας ξεκινά επαναφόρτιση {count} γύρων.',
   'ability.quartermaster.summary':
     'Κουβαλά περισσότερες ικανότητες, αλλά τις χρησιμοποιεί λιγότερο συχνά.',
   'ability.homeGuard.name': 'Φρουρός Βάσης',

@@ -224,3 +224,19 @@ This is enough variety to test control, protection, dice adjustment, counterplay
 6. Does Home Guard reduce pinning—the central Plakoto interaction—too much?
 7. Are players forced to replace cards often enough to create decisions, but not so often that rewards feel wasted?
 8. Does a three-round interval create two to four drafts in a typical game? If not, tune the interval before making individual cards stronger.
+
+## Adding an ability
+
+1. Write one module in `powerups/definitions` or `passives/definitions`: export its config type,
+   its validation, a `copy(config)` descriptor of catalog keys and numeric parameters, and the
+   behavior its kind and timing require. `defineAbility` overloads reject a missing capability.
+2. Add the module to `abilities/catalog.ts`. `AbilityId`, the config map, metadata, and every
+   capability map are derived from that object. The order is a public contract for seeded drafts
+   and downloaded reports.
+3. Add a balance entry to every profile in `config/profiles`. The compiler rejects a missing
+   ability, and changing values deliberately requires updating the frozen hash test.
+4. Add `ability.<id>.name` and an `ability.<id>.summary...` entry to `ui/i18n/en.ts` and
+   `ui/i18n/el.ts`. A presenter entry is optional and only needed when the shared prompt or die
+   label is not enough.
+5. Run `npm run verify`. `tests/ability-catalog.test.ts` freezes ID order, profile hashes, and
+   seeded draft offers; `tests/variant-imports.test.ts` keeps the runtime import graph acyclic.

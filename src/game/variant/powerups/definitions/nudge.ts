@@ -1,7 +1,5 @@
-import { defineAfterRollAbilityBehavior } from '../../abilities/capabilities';
 import { defineAbility } from '../../abilities/define';
 import { applyNumericAdjustment, numericAdjustmentOptions } from '../../abilities/roll-adjustment';
-import type { NudgeConfig } from '../../types';
 import {
   baseConfig,
   boolean,
@@ -11,6 +9,15 @@ import {
   record,
   uniqueList,
 } from '../../abilities/validation';
+import type { AbilityConfigBase, RollKind } from '../../base';
+
+export type NudgeConfig = AbilityConfigBase & {
+  adjustment: number;
+  directions: ('INCREASE' | 'DECREASE')[];
+  allowedRolls: RollKind;
+  allowBearingOff: boolean;
+  createdMatchBecomesDouble: boolean;
+};
 
 export const nudge = defineAbility<'nudge', NudgeConfig>({
   id: 'nudge',
@@ -45,39 +52,41 @@ export const nudge = defineAbility<'nudge', NudgeConfig>({
       ),
     };
   },
-  describe(config) {
+  copy(config) {
     const sign =
       config.directions.length === 2 ? '±' : config.directions[0] === 'INCREASE' ? '+' : '−';
-    return { name: 'Nudge', summary: `Adjust one movement die by ${sign}${config.adjustment}.` };
+    return {
+      name: { key: 'ability.nudge.name' },
+      summary: { key: 'ability.nudge.summary', params: { amount: `${sign}${config.adjustment}` } },
+    };
   },
-});
-
-export const nudgeAfterRoll = defineAfterRollAbilityBehavior({
-  id: 'nudge',
-  options(state, _player, availableDice, config) {
-    return numericAdjustmentOptions(state, availableDice, {
-      adjustment: config.adjustment,
-      directions: config.directions,
-      allowedRolls: config.allowedRolls,
-      allowBearingOff: config.allowBearingOff,
-      createdMatchBecomesDouble: config.createdMatchBecomesDouble,
-    });
-  },
-  randomCount() {
-    return 0;
-  },
-  apply(state, player, activation, _randomValues, config, resolvedConfig, services) {
-    return applyNumericAdjustment(
-      state,
-      activation,
-      {
+  behavior: {
+    id: 'nudge',
+    options(state, _player, availableDice, config) {
+      return numericAdjustmentOptions(state, availableDice, {
         adjustment: config.adjustment,
         directions: config.directions,
         allowedRolls: config.allowedRolls,
         allowBearingOff: config.allowBearingOff,
         createdMatchBecomesDouble: config.createdMatchBecomesDouble,
-      },
-      (after) => services.movementTokensForRoll(state, player, [after, after], resolvedConfig),
-    );
+      });
+    },
+    randomCount() {
+      return 0;
+    },
+    apply(state, player, activation, _randomValues, config, resolvedConfig, services) {
+      return applyNumericAdjustment(
+        state,
+        activation,
+        {
+          adjustment: config.adjustment,
+          directions: config.directions,
+          allowedRolls: config.allowedRolls,
+          allowBearingOff: config.allowBearingOff,
+          createdMatchBecomesDouble: config.createdMatchBecomesDouble,
+        },
+        (after) => services.movementTokensForRoll(state, player, [after, after], resolvedConfig),
+      );
+    },
   },
 });

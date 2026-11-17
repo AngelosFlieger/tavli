@@ -1,6 +1,4 @@
-import type { LoadedKnucklesConfig } from '../../types';
 import { defineAbility } from '../../abilities/define';
-import { definePassiveAbilityBehavior } from '../capabilities';
 import {
   baseConfig,
   exactKeys,
@@ -9,6 +7,13 @@ import {
   probability,
   record,
 } from '../../abilities/validation';
+import type { AbilityConfigBase, Probability } from '../../base';
+
+export type LoadedKnucklesConfig = AbilityConfigBase & {
+  matchChance: Probability;
+  nonMatchDistribution: 'UNIFORM';
+  doubleMoveTokens: number;
+};
 
 export const loadedKnuckles = defineAbility<'loadedKnuckles', LoadedKnucklesConfig>({
   id: 'loadedKnuckles',
@@ -31,34 +36,42 @@ export const loadedKnuckles = defineAbility<'loadedKnuckles', LoadedKnucklesConf
       doubleMoveTokens: integer(input.doubleMoveTokens, 'loadedKnuckles.doubleMoveTokens', 1),
     };
   },
-  describe(config) {
+  copy(config) {
     return {
-      name: 'Loaded Knuckles',
-      benefit: `Doubles chance becomes ${config.matchChance.numerator}/${config.matchChance.denominator}.`,
-      drawback: `Doubles grant ${config.doubleMoveTokens} movement tokens.`,
-      summary: 'Roll doubles more often, but receive fewer double moves.',
+      name: { key: 'ability.loadedKnuckles.name' },
+      summary: { key: 'ability.loadedKnuckles.summary' },
+      benefit: {
+        key: 'ability.loadedKnuckles.benefit',
+        params: {
+          numerator: config.matchChance.numerator,
+          denominator: config.matchChance.denominator,
+        },
+      },
+      drawback: {
+        key: 'ability.loadedKnuckles.drawback',
+        params: { tokens: config.doubleMoveTokens },
+      },
     };
   },
-});
+  behavior: {
+    id: 'loadedKnuckles',
+    roll: {
+      source: 'loadedKnuckles',
+      generate(_state, _player, config, rollDie, randomInt) {
+        const first = checkedDie(rollDie());
+        const chance = config.matchChance;
+        const chanceRoll = checkedRandom(randomInt(chance.denominator), chance.denominator);
+        if (chanceRoll < chance.numerator) return [first, first];
 
-export const loadedKnucklesPassive = definePassiveAbilityBehavior({
-  id: 'loadedKnuckles',
-  roll: {
-    source: 'loadedKnuckles',
-    generate(_state, _player, config, rollDie, randomInt) {
-      const first = checkedDie(rollDie());
-      const chance = config.matchChance;
-      const chanceRoll = checkedRandom(randomInt(chance.denominator), chance.denominator);
-      if (chanceRoll < chance.numerator) return [first, first];
-
-      const alternatives = [1, 2, 3, 4, 5, 6].filter((value) => value !== first);
-      return [
-        first,
-        alternatives[checkedRandom(randomInt(alternatives.length), alternatives.length)],
-      ];
-    },
-    movementTokens(_state, _player, values, config) {
-      return Array(config.doubleMoveTokens).fill(values[0]);
+        const alternatives = [1, 2, 3, 4, 5, 6].filter((value) => value !== first);
+        return [
+          first,
+          alternatives[checkedRandom(randomInt(alternatives.length), alternatives.length)],
+        ];
+      },
+      movementTokens(_state, _player, values, config) {
+        return Array(config.doubleMoveTokens).fill(values[0]);
+      },
     },
   },
 });

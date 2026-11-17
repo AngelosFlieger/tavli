@@ -289,9 +289,9 @@ export const en: Catalog = {
 
   // Ability names and descriptions
   'ability.frostSeal.name': 'Frost Seal',
-  'ability.frostSeal.summary': 'Freeze a point for {turns}.',
+  'ability.frostSeal.summary': 'Freeze a point for {count} opponent turn{s}.',
   'ability.bastion.name': 'Bastion',
-  'ability.bastion.summary': 'Protect one point for {turns}.',
+  'ability.bastion.summary': 'Protect one point for {count} opponent turn{s}.',
   'ability.jinx.name': 'Jinx',
   'ability.jinx.summary.highest': 'Reduce the opponent’s highest die by {penalty}.',
   'ability.jinx.summary.lowest': 'Reduce the opponent’s lowest die by {penalty}.',
@@ -307,7 +307,7 @@ export const en: Catalog = {
   'ability.loadedKnuckles.summary': 'Roll doubles more often, but receive fewer double moves.',
   'ability.quartermaster.name': 'Quartermaster',
   'ability.quartermaster.benefit': 'Hold {count} extra powerup{s}.',
-  'ability.quartermaster.drawback': 'Using one starts a {turns} cooldown.',
+  'ability.quartermaster.drawback': 'Using one starts a {count}-turn cooldown.',
   'ability.quartermaster.summary': 'Carry more powerups, but use them less frequently.',
   'ability.homeGuard.name': 'Home Guard',
   'ability.homeGuard.benefit': 'Your home singletons cannot be pinned.',
