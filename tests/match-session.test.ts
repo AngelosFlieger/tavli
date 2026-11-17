@@ -188,3 +188,55 @@ test('match session restarts the local random stream from an explicit playtest s
   assert.equal(controller.beginRoll(), true);
   assert.deepEqual(controller.takeForcedLocalRoll(), first);
 });
+
+test('leaving the table resets local play and abandons only an online seat', () => {
+  const controller = new GameController();
+  const calls: string[] = [];
+  let events!: MatchEvents;
+  const match = createMatchSession(
+    controller,
+    {
+      join(you, send) {
+        controller.join(you, send);
+        calls.push(`join-${you}`);
+      },
+      receive: () => calls.push('update'),
+      leave() {
+        controller.leaveOnline();
+        calls.push('leave');
+      },
+    },
+    { startSetup: () => calls.push('setup') },
+    {
+      setSearching: (on) => calls.push(`search-${on}`),
+      showNote: (note) => calls.push(`note-${note}`),
+      enterTable: () => calls.push('enter'),
+      showTitle: () => calls.push('title'),
+      signedOut: () => calls.push('signed-out'),
+    },
+    (next) => {
+      events = next;
+      return {
+        connect: () => {},
+        find: () => calls.push('find'),
+        cancel: () => {},
+        send: () => {},
+        abandon: () => calls.push('abandon'),
+      };
+    },
+  );
+
+  match.startLocal();
+  calls.length = 0;
+  match.exitGame();
+  assert.deepEqual(calls, ['search-false', 'leave', 'note-null', 'title']);
+  assert.equal(controller.state.phase, 'OPENING_ROLL');
+
+  match.toggleSearch();
+  events.onMatched(0, controller.state);
+  calls.length = 0;
+  match.exitGame();
+  assert.deepEqual(calls, ['search-false', 'abandon', 'leave', 'note-null', 'title']);
+  assert.equal(controller.scripted, false);
+  assert.equal(controller.state.phase, 'OPENING_ROLL');
+});

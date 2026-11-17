@@ -49,6 +49,7 @@ const session: Session = {
   onMultiplayer() {},
   onCreateRoom() {},
   onJoinRoom() {},
+  onExitGame() {},
   onSignOut() {},
   playtestReport: () => null,
 };
@@ -231,6 +232,7 @@ async function start() {
     match.joinRoom(code);
   };
   session.playtestReport = () => playtest.snapshot();
+  session.onExitGame = () => match.exitGame();
   session.onSignOut = () => {
     match.signOut();
     void logout();

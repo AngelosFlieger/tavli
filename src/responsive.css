@@ -48,13 +48,8 @@
     width: min(52vw, 720px);
   }
   .mode-button {
-    height: clamp(92px, 13vh, 128px);
+    height: clamp(82px, 11vh, 114px);
     font-size: clamp(28px, 3.2vw, 46px);
-  }
-  .start-options button {
-    min-width: 160px;
-    min-height: 58px;
-    font-size: 20px;
   }
 }
 @media (max-aspect-ratio: 1/1) {
@@ -228,7 +223,7 @@
     width: min(88vw, 520px);
   }
   .mode-button {
-    height: clamp(90px, 12.5dvh, 116px);
+    height: clamp(84px, 11.6dvh, 112px);
     font-size: clamp(28px, 7.8vw, 38px);
     padding: 0 20px;
     gap: 6px;
@@ -236,30 +231,6 @@
   .mode-button > .mode-star {
     font-size: 26px;
     width: 27px;
-  }
-  .online-mode {
-    margin-bottom: 25px;
-  }
-  .start-options {
-    gap: 22px;
-    margin-top: 32px;
-  }
-  .start-options button {
-    width: 108px;
-    min-height: 68px;
-    padding: 10px 14px;
-    font-size: 19px;
-  }
-  .start-options span {
-    display: block;
-    font-size: 27px;
-    margin: 0 auto 6px;
-  }
-  .rules-icon {
-    display: block;
-    width: 28px;
-    height: 28px;
-    margin: 0 auto 7px;
   }
   .on-title #board-frame {
     top: 76%;
@@ -277,15 +248,6 @@
   }
   .mode-button {
     height: 84px;
-  }
-  .online-mode {
-    margin-bottom: 20px;
-  }
-  .start-options {
-    margin-top: 24px;
-  }
-  .start-options button {
-    min-height: 74px;
   }
   .on-title #board-frame {
     top: 77%;
@@ -315,32 +277,20 @@
   pointer-events: none;
 }
 .settings-icon {
-  display: inline-block;
-  width: 32px;
-  height: 32px;
-  vertical-align: middle;
+  display: block;
+  width: 24px;
+  height: 24px;
   color: #e9cd91;
-}
-.start-options .settings-icon {
-  margin-right: 9px;
 }
 @media (min-aspect-ratio: 1/1) {
   .logo {
     width: 210px;
   }
-  .start-options button {
-    min-width: 178px;
-    min-height: 68px;
-    font-size: 24px;
-  }
-  .rules-icon {
-    width: 32px;
-    height: 32px;
-  }
   .top-actions button {
     width: 56px;
     height: 54px;
   }
+  .top-actions .rules-icon,
   .top-actions .settings-icon {
     width: 34px;
     height: 34px;
@@ -364,22 +314,10 @@
     width: 44px;
     height: 42px;
   }
+  .top-actions .rules-icon,
   .top-actions .settings-icon {
     width: 24px;
     height: 24px;
-  }
-  .start-options button {
-    width: 100px;
-    min-height: 68px;
-    padding: 8px 12px;
-    font-size: 17px;
-  }
-  .start-options .settings-icon,
-  .rules-icon {
-    display: block;
-    width: 24px;
-    height: 24px;
-    margin: 0 auto 5px;
   }
   .on-title #board-frame {
     top: 79%;
@@ -397,9 +335,6 @@
     top: calc(var(--safe-top) + 141px);
     bottom: calc(var(--safe-bottom) + 111px);
   }
-  .start-options button {
-    min-height: 68px;
-  }
   .on-title #board-frame {
     top: 81%;
   }
@@ -414,10 +349,7 @@
     width: min(340px, 78vw);
   }
   .on-title .start-menu {
-    top: 42%;
-  }
-  .on-title .start-options {
-    margin-top: 28px;
+    top: 36%;
   }
 }
 @media (max-aspect-ratio: 1/1) and (max-height: 720px) {
@@ -425,10 +357,7 @@
     top: 15%;
   }
   .on-title .start-menu {
-    top: 40%;
-  }
-  .on-title .start-options {
-    margin-top: 24px;
+    top: 34%;
   }
 }
 @media (max-aspect-ratio: 1/1) and (max-height: 600px) {
@@ -441,7 +370,6 @@
   }
   .ruleset-picker {
     gap: 6px;
-    margin-bottom: 10px;
     padding: 6px;
   }
   .ruleset-picker label {
@@ -457,23 +385,5 @@
   .mode-button {
     height: 68px;
     font-size: clamp(21px, 7vw, 28px);
-  }
-  .online-mode {
-    margin-bottom: 14px;
-  }
-  .on-title .start-options {
-    margin-top: 15px;
-  }
-  .start-options button {
-    width: 92px;
-    min-height: 54px;
-    padding: 6px 9px;
-    font-size: 15px;
-  }
-  .start-options .settings-icon,
-  .rules-icon {
-    width: 20px;
-    height: 20px;
-    margin-bottom: 3px;
   }
 }

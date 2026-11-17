@@ -18,7 +18,7 @@ import { createAccounts } from './accounts';
 import { handleAuth, sessionToken } from './routes';
 import { openStore } from './store';
 import { createTables } from './tables';
-import { createSeededRandomInt, parseOptionalSeed } from '../src/game/random';
+import { createSeededDie, createSeededRandomInt, parseOptionalSeed } from '../src/game/random';
 import { boundedBucket, type TokenBucket } from '../src/net/rate-limit';
 import { loadServerConfig } from './config';
 
@@ -38,13 +38,8 @@ const authorityRandomInt =
   testSeed === undefined
     ? (maximum: number) => randomInt(maximum)
     : createSeededRandomInt(testSeed);
-const tables = createTables(
-  store,
-  () => randomInt(1, 7),
-  () => Date.now(),
-  authorityRandomInt,
-  config.clock,
-);
+const rollDie = testSeed === undefined ? () => randomInt(1, 7) : createSeededDie(testSeed);
+const tables = createTables(store, rollDie, () => Date.now(), authorityRandomInt, config.clock);
 await tables.start();
 const sockets = new Map<PlayerId, Socket>();
 const owners = new Map<Socket, PlayerId>();
