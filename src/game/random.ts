@@ -23,3 +23,12 @@ export function createSeededRandomInt(seed: number): RandomInt {
     return Math.floor((unsigned / 0x1_0000_0000) * maximum);
   };
 }
+
+/**
+ * A reproducible die for seeded test matches. It advances its own stream so dice never
+ * shift draft, Recast, or passive draws taken from the same test seed.
+ */
+export function createSeededDie(seed: number): () => number {
+  const next = createSeededRandomInt((seed + 1) >>> 0);
+  return () => next(6) + 1;
+}

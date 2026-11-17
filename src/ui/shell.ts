@@ -30,6 +30,7 @@ export type Session = {
   onMultiplayer: (selection: MatchSelection) => void;
   onCreateRoom: (selection: MatchSelection) => void;
   onJoinRoom: (code: string) => void;
+  onExitGame: () => void;
   onSignOut: () => void;
   playtestReport: () => PlaytestReport | null;
 };
@@ -96,7 +97,6 @@ export function initShell(next: Session) {
   rulesetInputs = Array.from(
     rulesetPicker.querySelectorAll<HTMLInputElement>('input[name="ruleset"]'),
   );
-  installPlaytestControls();
   waitingRuleset = document.querySelector<HTMLElement>('#waiting-ruleset')!;
   rulesetInputs.forEach((input) => input.addEventListener('change', updateRulesetCopy));
   updateRulesetCopy();
@@ -175,8 +175,8 @@ let roomJoin: HTMLButtonElement;
 let roomCode: HTMLInputElement;
 let roomStatus: HTMLElement;
 let roomCancel: HTMLButtonElement;
-let playtestProfile: HTMLSelectElement | null = null;
-let playtestSeed: HTMLInputElement | null = null;
+let playtestProfileId: VariantProfileId = VARIANT_PROFILE_IDS[0];
+let playtestSeedValue = '';
 let playEnabled = false;
 let searching = false;
 
@@ -246,37 +246,44 @@ function selectedMatch(localPlaytest = false): MatchSelection {
   return rulesetInputs.some((input) => input.checked && input.value === 'POWERUPS_V1')
     ? {
         ruleset: 'POWERUPS_V1',
-        profileId:
-          (localPlaytest && (playtestProfile?.value as VariantProfileId | undefined)) ||
-          POWERUPS_V1_ID,
+        profileId: (localPlaytest && playtestProfileId) || POWERUPS_V1_ID,
       }
     : CLASSIC_SELECTION;
 }
 
 function selectedPlaytestSeed(): number | undefined {
-  if (!playtestSeed) return undefined;
-  return parseOptionalSeed(playtestSeed.value);
+  return parseOptionalSeed(playtestSeedValue);
 }
 
-function installPlaytestControls(): void {
-  if (!import.meta.env.DEV) return;
-  const tools = document.createElement('section');
-  tools.className = 'playtest-tools';
-  tools.setAttribute('aria-label', t('playtest.aria'));
+/**
+ * Development-only balance controls. They live in Settings rather than the title menu so the
+ * start screen stays focused on choosing a mode.
+ */
+function playtestToolsMarkup(): string {
+  if (!import.meta.env.DEV) return '';
+  const powerups = selectedMatch().ruleset === 'POWERUPS_V1';
   const profileOptions = VARIANT_PROFILE_IDS.map(
-    (id) => `<option value="${id}">${id}</option>`,
+    (id) => `<option value="${id}"${id === playtestProfileId ? ' selected' : ''}>${id}</option>`,
   ).join('');
-  tools.innerHTML = `<strong>${t('playtest.title')}</strong><label>${t('playtest.profile')} <select id="playtest-profile">${profileOptions}</select></label><label>${t('playtest.seed')} <input id="playtest-seed" type="number" min="0" max="4294967295" step="1" placeholder="${t('playtest.seedPlaceholder')}"></label><small>${t('playtest.note')}</small>`;
-  rulesetPicker.insertAdjacentElement('afterend', tools);
-  playtestProfile = tools.querySelector('#playtest-profile');
-  playtestSeed = tools.querySelector('#playtest-seed');
-  playtestProfile?.addEventListener('change', updateRulesetCopy);
+  return `<section class="playtest-tools" aria-label="${t('playtest.aria')}"><strong>${t('playtest.title')}</strong><label>${t('playtest.profile')} <select id="playtest-profile"${powerups ? '' : ' disabled'}>${profileOptions}</select></label><label>${t('playtest.seed')} <input id="playtest-seed" type="number" min="0" max="4294967295" step="1" placeholder="${t('playtest.seedPlaceholder')}" value="${playtestSeedValue}"></label><small>${t('playtest.note')}</small></section>`;
+}
+
+function wirePlaytestControls(root: HTMLElement): void {
+  const profile = root.querySelector<HTMLSelectElement>('#playtest-profile');
+  const seed = root.querySelector<HTMLInputElement>('#playtest-seed');
+  profile?.addEventListener('change', () => {
+    playtestProfileId = profile.value as VariantProfileId;
+  });
+  seed?.addEventListener('input', () => {
+    playtestSeedValue = seed.value;
+  });
 }
 
 function updateRulesetCopy() {
   const selection = selectedMatch();
   const powerups = selection.ruleset === 'POWERUPS_V1';
-  if (playtestProfile) playtestProfile.disabled = !powerups;
+  const profile = document.querySelector<HTMLSelectElement>('#playtest-profile');
+  if (profile) profile.disabled = !powerups;
   waitingRuleset.textContent = powerups
     ? `Powerups · ${POWERUPS_V1.id} v${POWERUPS_V1.version}`
     : t('menu.classic.matchmaking');
@@ -317,7 +324,7 @@ function settingsMarkup(): string {
         `<option value="${locale}"${getLocale() === locale ? ' selected' : ''}>${locale === 'en' ? 'English' : 'Ελληνικά'}</option>`,
     )
     .join('');
-  return `<p class="eyebrow">${t('settings.eyebrow')}</p><h2>${t('settings.title')}</h2><label>${t('settings.motion')} <input type="checkbox" data-pref="motion"></label><label>${t('settings.texture')} <input type="checkbox" data-pref="texture"></label><label>${t('settings.sound')} <input type="checkbox" data-pref="sound"></label><label>${t('settings.language')} <select id="language-select">${languageOptions}</select></label><label>${t('settings.history.save')} <input type="checkbox" data-pref="history"></label><p class="note">${t('settings.note')}</p><div class="match-controls"><button type="button" id="new-game">${t('settings.newGame')}</button>${import.meta.env.DEV ? `<button type="button" id="download-playtest">${t('settings.downloadPlaytest')}</button>` : ''}<button type="button" id="sign-out">${t('settings.signOut')}</button></div><section class="match-history"><h3>${t('settings.history.title')}</h3><ul id="match-history-list"></ul><div class="match-controls"><button type="button" id="clear-history">${t('settings.history.clear')}</button><button type="button" id="clear-all-data">${t('settings.history.clearAll')}</button></div></section>${import.meta.env.DEV ? `<section class="playtest-analysis"><h3>${t('settings.analysis')}</h3><p class="note">${t('settings.analysis.note')}</p><div class="match-controls"><button type="button" id="analyze-playtests">${t('settings.selectReports')}</button><button type="button" id="download-analysis" disabled>${t('settings.downloadAnalysis')}</button><input type="file" id="playtest-files" accept="application/json,.json" multiple hidden></div><output id="playtest-analysis-output" aria-live="polite">${t('settings.noReports')}</output></section>` : ''}`;
+  return `<p class="eyebrow">${t('settings.eyebrow')}</p><h2>${t('settings.title')}</h2><label>${t('settings.motion')} <input type="checkbox" data-pref="motion"></label><label>${t('settings.texture')} <input type="checkbox" data-pref="texture"></label><label>${t('settings.sound')} <input type="checkbox" data-pref="sound"></label><label>${t('settings.language')} <select id="language-select">${languageOptions}</select></label><label>${t('settings.history.save')} <input type="checkbox" data-pref="history"></label><p class="note">${t('settings.note')}</p><div class="match-controls"><button type="button" id="new-game">${t('settings.newGame')}</button><button type="button" id="exit-game">${t('settings.exitGame')}</button>${import.meta.env.DEV ? `<button type="button" id="download-playtest">${t('settings.downloadPlaytest')}</button>` : ''}<button type="button" id="sign-out">${t('settings.signOut')}</button></div>${playtestToolsMarkup()}<section class="match-history"><h3>${t('settings.history.title')}</h3><ul id="match-history-list"></ul><div class="match-controls"><button type="button" id="clear-history">${t('settings.history.clear')}</button><button type="button" id="clear-all-data">${t('settings.history.clearAll')}</button></div></section>${import.meta.env.DEV ? `<section class="playtest-analysis"><h3>${t('settings.analysis')}</h3><p class="note">${t('settings.analysis.note')}</p><div class="match-controls"><button type="button" id="analyze-playtests">${t('settings.selectReports')}</button><button type="button" id="download-analysis" disabled>${t('settings.downloadAnalysis')}</button><input type="file" id="playtest-files" accept="application/json,.json" multiple hidden></div><output id="playtest-analysis-output" aria-live="polite">${t('settings.noReports')}</output></section>` : ''}`;
 }
 
 function applyMotionClass() {
@@ -399,6 +406,13 @@ function wireSettings(root: HTMLElement, dialog: HTMLDialogElement) {
     session.onNewGame();
     dialog.close();
   });
+  const exit = root.querySelector<HTMLButtonElement>('#exit-game')!;
+  // There is no table to leave from the title screen.
+  exit.hidden = document.body.classList.contains('on-title');
+  exit.addEventListener('click', () => {
+    session.onExitGame();
+    dialog.close();
+  });
   const signOut = root.querySelector<HTMLButtonElement>('#sign-out')!;
   if (!sameOrigin()) signOut.hidden = true;
   else
@@ -440,6 +454,7 @@ function wireSettings(root: HTMLElement, dialog: HTMLDialogElement) {
   downloadAnalysis?.addEventListener('click', () => {
     if (analysis) downloadJson('plakoto-balance-analysis.json', analysis);
   });
+  wirePlaytestControls(root);
 }
 
 function downloadJson(filename: string, value: unknown): void {

@@ -84,6 +84,7 @@ export const en: Catalog = {
   'settings.note':
     'Sound covers the music and button clicks. Preferences are saved on this device. Motion also respects your system’s reduced-motion preference.',
   'settings.newGame': 'New game',
+  'settings.exitGame': 'Exit game',
   'settings.downloadPlaytest': 'Download playtest JSON',
   'settings.signOut': 'Sign out',
   'settings.analysis': 'Balance report analysis',

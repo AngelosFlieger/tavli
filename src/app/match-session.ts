@@ -168,6 +168,21 @@ export function createMatchSession(
         ui.showTitle();
       }
     },
+    /**
+     * Returns to the title screen from the table. An unfinished online match is cancelled through
+     * the same authoritative path as signing out: the opponent wins by abandonment and both seats
+     * are released, so a later search starts a fresh match instead of resuming the old one.
+     */
+    exitGame() {
+      const online = playing;
+      playing = false;
+      searching = false;
+      ui.setSearching(false);
+      if (online) table.abandon();
+      flow.leave();
+      ui.showNote(null);
+      ui.showTitle();
+    },
     startLocal(selection: MatchSelection = CLASSIC_SELECTION, seed?: number): boolean {
       const rules = rulesForSelection(selection);
       if (

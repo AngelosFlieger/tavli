@@ -79,6 +79,7 @@ export const el: Catalog = {
   'settings.note':
     'Ο ήχος καλύπτει τη μουσική και τα κλικ των κουμπιών. Οι προτιμήσεις αποθηκεύονται σε αυτή τη συσκευή. Η κίνηση σέβεται επίσης την προτίμηση μειωμένης κίνησης του συστήματός σας.',
   'settings.newGame': 'Νέο παιχνίδι',
+  'settings.exitGame': 'Έξοδος από το παιχνίδι',
   'settings.downloadPlaytest': 'Λήψη playtest JSON',
   'settings.signOut': 'Αποσύνδεση',
   'settings.analysis': 'Ανάλυση αναφορών ισορροπίας',

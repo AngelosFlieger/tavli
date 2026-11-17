@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { PlaytestRecorder } from '../src/app/playtest-report';
-import { createSeededRandomInt, parseOptionalSeed } from '../src/game/random';
+import { createSeededDie, createSeededRandomInt, parseOptionalSeed } from '../src/game/random';
 import { initialGameState } from '../src/game/session/state';
 import type { SessionEvent } from '../src/game/session/transition';
 import { POWERUPS_V1 } from '../src/game/variant/config/profiles';
@@ -27,6 +27,28 @@ test('seeded random integers are reproducible and stay within bounds', () => {
   );
   assert.throws(() => createSeededRandomInt(-1));
   assert.throws(() => first(0));
+});
+
+test('seeded dice are reproducible, stay on a die face, and keep their own stream', () => {
+  const first = createSeededDie(2);
+  const second = createSeededDie(2);
+  const rolls = Array.from({ length: 20 }, first);
+
+  assert.deepEqual(rolls, Array.from({ length: 20 }, second));
+  assert.equal(
+    rolls.every((roll) => Number.isInteger(roll) && roll >= 1 && roll <= 6),
+    true,
+  );
+  // Draft and passive draws keep the bare seed stream, so dice must not consume it.
+  const untouched = createSeededRandomInt(2);
+  const expectedDrafts = Array.from({ length: 20 }, () => untouched(6));
+  const draft = createSeededRandomInt(2);
+  const die = createSeededDie(2);
+  const interleavedDrafts = Array.from({ length: 20 }, () => {
+    die();
+    return draft(6);
+  });
+  assert.deepEqual(interleavedDrafts, expectedDrafts);
 });
 
 test('blank playtest seeds keep fresh randomness while explicit seeds remain reproducible', () => {
