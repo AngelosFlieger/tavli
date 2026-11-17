@@ -510,6 +510,35 @@ async function localSmoke(browser, errors) {
     true,
     'Exit game should be hidden on the title screen',
   );
+  // Dialog and action-row styling lives in its own stylesheets; make sure both still load.
+  const dialogStyle = await page.locator('#overlay').evaluate((element) => {
+    const style = getComputedStyle(element);
+    return {
+      padding: style.paddingTop,
+      radius: style.borderTopLeftRadius,
+      background: style.backgroundColor,
+      border: style.borderTopColor,
+    };
+  });
+  assert.deepEqual(
+    dialogStyle,
+    {
+      padding: '40px',
+      radius: '12px',
+      background: 'rgb(17, 30, 51)',
+      border: 'rgb(202, 177, 125)',
+    },
+    'the overlay should resolve the dialog stylesheet and its design tokens',
+  );
+  const exitStyle = await page.locator('#exit-game').evaluate((element) => {
+    const style = getComputedStyle(element);
+    return { padding: style.paddingLeft, marginTop: style.marginTop };
+  });
+  assert.deepEqual(
+    exitStyle,
+    { padding: '15px', marginTop: '14px' },
+    'the action row should use the settings stylesheet',
+  );
   await page.locator('#playtest-seed').fill('24680');
   await page.locator('#overlay .close').click();
   await page.locator('#start-local').click();

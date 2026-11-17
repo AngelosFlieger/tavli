@@ -55,6 +55,12 @@ export function createGameplayHud(
   undo.addEventListener('click', actions.undo);
   next.addEventListener('click', actions.restart);
   forfeit?.addEventListener('click', actions.forfeit);
+  // A short press animation acknowledges the click even while the dice are settling.
+  roll.addEventListener('click', () => {
+    roll.classList.remove('bounce');
+    void roll.offsetWidth;
+    roll.classList.add('bounce');
+  });
   const clockTimer = setInterval(() => {
     if (!clock) return;
     const stateClock = controller.state.clock;

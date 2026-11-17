@@ -1,0 +1,59 @@
+/* Sign-in screen and the chrome it hides while auth is pending or the session is signed out. */
+#auth-screen input {
+  width: min(280px, 52vw);
+  height: auto;
+  padding: 8px 10px;
+  color: var(--ink);
+  background: var(--surface-field);
+  border: 1px solid var(--line-gold);
+  border-radius: var(--radius-control);
+  font: inherit;
+}
+#auth-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: #070d18ee;
+}
+#auth-screen[hidden] {
+  display: none;
+}
+#auth-form {
+  width: min(420px, 100%);
+  padding: 28px 26px;
+  color: var(--ink);
+  background: var(--surface-form);
+  border: 1px solid var(--line-gold);
+  border-radius: var(--radius-panel);
+}
+#auth-form label {
+  display: grid;
+  justify-content: stretch;
+  gap: 6px;
+  margin: 14px 0;
+}
+#auth-form label[hidden] {
+  display: none;
+}
+body.auth-pending .sidebar,
+body.signed-out .sidebar,
+body.auth-pending .top-actions,
+body.signed-out .top-actions,
+body.auth-pending footer,
+body.signed-out footer {
+  visibility: hidden;
+}
+.account-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 8px;
+}
+.account-error {
+  min-height: 1.4em;
+  margin: 8px 0;
+  color: #e7a0a8;
+}
