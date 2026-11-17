@@ -31,7 +31,7 @@
   padding: 12px 12px 18px;
   background: #111d31ee;
   border: 2px solid #d9bb82;
-  border-radius: 8px;
+  border-radius: var(--radius-card);
   box-shadow: 6px 9px #060d1dcc;
 }
 .waiting-you {
@@ -152,7 +152,7 @@
   .waiting-card {
     min-height: 194px;
     padding: 7px 7px 13px;
-    border-radius: 7px;
+    border-radius: var(--radius-control);
   }
   .waiting-portrait {
     height: 130px;

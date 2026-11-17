@@ -2,6 +2,7 @@ import type { BoardLayout } from './layout';
 import * as THREE from 'three';
 import { loadModel } from './assets';
 import { createDieSelectionOverlay } from './die-selection-overlay';
+import { t } from '../ui/i18n';
 
 // Die.glb's modeled pips: Blender Z becomes glTF Y; Blender Y becomes glTF -Z.
 export const faces = [
@@ -61,7 +62,7 @@ export async function createDice(
   try {
     model = (await loadModel('Die')).scene;
   } catch (error) {
-    output.textContent = 'Dice unavailable · reload to retry';
+    output.textContent = t('dice.unavailable');
     console.error(error);
     return {
       update: (_dt: number) => {},
@@ -157,7 +158,11 @@ export async function createDice(
     output.textContent = `${values[0]}  ·  ${values[1]}`;
     output.setAttribute(
       'aria-label',
-      `Dice result: ${values[0]} and ${values[1]}${values[0] === values[1] ? ' — doubles' : ''}`,
+      t('dice.result', {
+        first: values[0],
+        second: values[1],
+        doubles: values[0] === values[1] ? t('dice.doubles') : '',
+      }),
     );
   }
   updateShadows();
@@ -174,7 +179,7 @@ export async function createDice(
     canvas.dataset.rollingDice = '';
     canvas.dataset.lastRollingDice = '';
     output.textContent = '— · —';
-    output.setAttribute('aria-label', 'No dice rolled yet');
+    output.setAttribute('aria-label', t('dice.none'));
   }
   const duration = 1.5;
   function startToss(forced?: [number, number], onlyDie?: 0 | 1) {
@@ -186,10 +191,11 @@ export async function createDice(
     timer = 0;
     button.disabled = true;
     button.setAttribute('aria-busy', 'true');
-    output.textContent = onlyDie === undefined ? 'Rolling…' : `Rerolling die ${onlyDie + 1}…`;
+    output.textContent =
+      onlyDie === undefined ? t('dice.rolling') : t('dice.rerolling', { die: onlyDie + 1 });
     output.setAttribute(
       'aria-label',
-      onlyDie === undefined ? 'Rolling two dice' : `Rerolling die ${onlyDie + 1}`,
+      onlyDie === undefined ? t('dice.rollingTwo') : t('dice.rerollOne', { die: onlyDie + 1 }),
     );
     const side = callbacks.player() === 0 ? -1 : 1;
     const place = (x: number, z: number, y: number) =>
@@ -229,8 +235,8 @@ export async function createDice(
     if (callbacks.scripted()) {
       button.disabled = true;
       button.setAttribute('aria-busy', 'true');
-      output.textContent = 'Rolling…';
-      output.setAttribute('aria-label', 'Rolling two dice');
+      output.textContent = t('dice.rolling');
+      output.setAttribute('aria-label', t('dice.rollingTwo'));
       return;
     }
     startToss(callbacks.forced() ?? undefined);

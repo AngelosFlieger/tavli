@@ -1,6 +1,6 @@
 import { legalMoves } from '../game/rules/moves';
 import type { Move, Player, Position } from '../game/rules/position';
-import { initialPresentedSession, sessionMessage } from '../game/session/messages';
+import { initialPresentedSession, sessionMessageParts } from '../game/session/messages';
 import type { GameState, Session } from '../game/session/state';
 import {
   transitionSession,
@@ -37,6 +37,7 @@ type ControllerOperation =
   | { type: 'MOVE'; authority: 'LOCAL' | 'ONLINE' }
   | { type: 'DRAFT_PICK' }
   | { type: 'END_TURN' }
+  | { type: 'FORFEIT' }
   | { type: 'ABILITY'; completion: 'ONLINE_UPDATE' | 'LOCAL_DICE_PRESENTATION' }
   | { type: 'REMOTE_MOVE'; result: RemoteState };
 
@@ -166,8 +167,12 @@ export class GameController {
     const result = transitionSession(this.session, command, this.rules);
     if (!result.ok) return result;
     this.session = result.session;
-    const message = sessionMessage(this.state, result.events);
-    if (message !== null) this.state.message = message;
+    const parts = sessionMessageParts(this.state, result.events);
+    if (parts) {
+      this.state.message = parts.text;
+      this.state.messageKey = parts.key;
+      this.state.messageParams = parts.params;
+    }
     this.eventSink?.(result.events, this.state);
     return result;
   }
@@ -494,7 +499,14 @@ export class GameController {
   }
 
   canRestart(locked = false): boolean {
-    return !locked && !this.busy;
+    if (locked || this.busy) return false;
+    return !this.online || this.state.phase === 'GAME_OVER';
+  }
+
+  forfeit(locked = false): boolean {
+    if (locked || this.busy || !this.online || this.state.phase === 'GAME_OVER') return false;
+    this.sendOnline({ type: 'forfeit' }, { type: 'FORFEIT' });
+    return true;
   }
 
   restart(locked = false): 'local' | 'sent' | null {

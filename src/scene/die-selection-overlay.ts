@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { t } from '../ui/i18n';
 
 export type DieIndex = 0 | 1;
 
@@ -22,7 +23,7 @@ export function createDieSelectionOverlay(
     target.type = 'button';
     target.className = 'die-target';
     target.dataset.die = String(index);
-    target.setAttribute('aria-label', `Reroll die ${index + 1}`);
+    target.setAttribute('aria-label', t('dice.rerollDie', { die: index + 1 }));
     target.hidden = true;
     target.addEventListener('pointerenter', () => (hovered = dieIndex));
     target.addEventListener('pointerleave', () => (hovered = null));

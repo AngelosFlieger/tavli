@@ -2,17 +2,20 @@ import type { GameController } from '../app/game-controller';
 import type { PickupView } from '../app/pickup-selection';
 import type { Move } from '../game/engine';
 import type { AbilityId, AbilityTarget, RollAbilityOption } from '../game/variant/types';
-import { describeConfiguredAbility } from '../game/variant/abilities/registry';
+import { localizedAbilityCopy } from './abilities/copy';
 import {
   rollAbilityOptionLabel,
   rollAbilityPrompt,
   usesDirectDieSelection,
 } from './abilities/presenters';
 import { createDraftPanel } from './draft-panel';
+import { formatClock } from '../game/clock';
+import { pluralSuffix, t } from '../ui/i18n';
 
 type GameplayHudActions = {
   undo: () => void;
   restart: () => void;
+  forfeit: () => void;
   releaseLast: () => void;
   bearOff: (sequence: Move[]) => void;
   pickAbility: (abilityId: AbilityId, replaceInstanceId?: string) => boolean;
@@ -33,8 +36,10 @@ export function createGameplayHud(
   const roll = document.querySelector<HTMLButtonElement>('#roll')!;
   const undo = document.querySelector<HTMLButtonElement>('#undo')!;
   const message = document.querySelector<HTMLElement>('#game-message')!;
+  const clock = document.querySelector<HTMLOutputElement>('#game-clock');
   const choices = document.querySelector<HTMLElement>('#move-choices')!;
   const next = document.querySelector<HTMLButtonElement>('#next-game')!;
+  const forfeit = document.querySelector<HTMLButtonElement>('#forfeit');
   const rulesetBadge = document.querySelector<HTMLElement>('#ruleset-badge')!;
   const panels = [
     document.querySelector<HTMLElement>('.player.red')!,
@@ -49,6 +54,23 @@ export function createGameplayHud(
 
   undo.addEventListener('click', actions.undo);
   next.addEventListener('click', actions.restart);
+  forfeit?.addEventListener('click', actions.forfeit);
+  // A short press animation acknowledges the click even while the dice are settling.
+  roll.addEventListener('click', () => {
+    roll.classList.remove('bounce');
+    void roll.offsetWidth;
+    roll.classList.add('bounce');
+  });
+  const clockTimer = setInterval(() => {
+    if (!clock) return;
+    const stateClock = controller.state.clock;
+    clock.hidden = !stateClock;
+    if (stateClock) {
+      clock.textContent = formatClock(stateClock, Date.now());
+      clock.classList.toggle('is-low', formatClock(stateClock, Date.now()).startsWith('0:'));
+    }
+  }, 250);
+  void clockTimer;
 
   function render({ queue, sequences }: PickupView) {
     const state = controller.state;
@@ -79,17 +101,28 @@ export function createGameplayHud(
       roll.innerHTML = ending
         ? selectedAbility
           ? selectedTarget
-            ? 'USE &amp; END <span>→</span>'
-            : 'SELECT POINT <span>↗</span>'
-          : 'END <span>→</span>'
-        : 'ROLL <span>↗</span>';
+            ? `${t('hud.useAndEnd')} <span>→</span>`
+            : `${t('hud.selectPoint')} <span>↗</span>`
+          : `${t('hud.end')} <span>→</span>`
+        : `${t('hud.roll')} <span>↗</span>`;
     }
     if (selectedAbility && !selectedTarget) roll.disabled = true;
     roll.setAttribute(
       'aria-label',
-      ending ? 'End turn' : state.opening ? `Player ${state.active! + 1} opening roll` : 'Roll',
+      ending
+        ? t('hud.endLabel')
+        : state.opening
+          ? t('hud.openingLabel', { player: state.active! + 1 })
+          : t('hud.rollLabel'),
     );
-    message.textContent = state.message;
+    message.textContent = state.messageKey
+      ? state.messageKey === 'status.winner' && state.outcome
+        ? t(state.messageKey, {
+            player: state.messageParams?.player ?? state.outcome.winner! + 1,
+            reason: t(`outcome.${state.outcome.kind}`),
+          })
+        : t(state.messageKey, state.messageParams)
+      : state.message;
     message.hidden = state.phase !== 'GAME_OVER';
     panels.forEach((panel, player) => {
       panel.classList.toggle('inactive', state.active !== null && state.active !== player);
@@ -97,31 +130,34 @@ export function createGameplayHud(
       panel.classList.toggle('you', controller.seat === player);
       panel.setAttribute(
         'aria-label',
-        `Player ${player + 1}${state.active === player ? ', active' : ''}${controller.seat === player ? ', you' : ''}`,
+        `${t('target.player', { player: player + 1 })}${state.active === player ? t('hud.panelActive') : ''}${controller.seat === player ? t('hud.panelYou') : ''}`,
       );
     });
     choices.replaceChildren();
     if (selectedAbility && state.phase === 'TURN_COMPLETE') {
       const copy = controller.variantConfig
-        ? describeConfiguredAbility(selectedAbility.abilityId, controller.variantConfig)
+        ? localizedAbilityCopy(selectedAbility.abilityId, controller.variantConfig)
         : null;
       const status = document.createElement('span');
       status.className = 'pickup-status';
       status.textContent = selectedTarget
-        ? `${copy?.name ?? 'Ability'} targets ${describeTarget(selectedTarget)}`
-        : `Choose a highlighted point for ${copy?.name ?? 'this ability'}`;
+        ? t('hud.targets', {
+            name: copy?.name ?? t('hud.ability'),
+            target: describeTarget(selectedTarget),
+          })
+        : t('hud.chooseTarget', { name: copy?.name ?? t('hud.thisAbility') });
       const cancel = document.createElement('button');
-      cancel.textContent = 'Cancel ability';
+      cancel.textContent = t('hud.cancelAbility');
       cancel.onclick = actions.cancelAbility;
       choices.append(status, cancel);
     }
     if (selectedAbility && state.phase === 'WAITING_FOR_ROLL') {
       const copy = controller.variantConfig
-        ? describeConfiguredAbility(selectedAbility.abilityId, controller.variantConfig)
+        ? localizedAbilityCopy(selectedAbility.abilityId, controller.variantConfig)
         : null;
       const status = document.createElement('span');
       status.className = 'pickup-status';
-      status.textContent = `Choose an effect for ${copy?.name ?? 'this ability'}`;
+      status.textContent = t('hud.chooseEffect', { name: copy?.name ?? t('hud.thisAbility') });
       choices.append(status);
       for (const target of controller.abilityTargets()) {
         if (target.type !== 'EFFECT') continue;
@@ -130,28 +166,31 @@ export function createGameplayHud(
         );
         if (!effect) continue;
         const effectCopy = controller.variantConfig
-          ? describeConfiguredAbility(effect.abilityId, controller.variantConfig)
+          ? localizedAbilityCopy(effect.abilityId, controller.variantConfig)
           : null;
         const button = document.createElement('button');
-        button.textContent = `Remove ${effectCopy?.name ?? effect.abilityId} · ${describeTarget(effect.target)}`;
+        button.textContent = t('hud.removeEffect', {
+          name: effectCopy?.name ?? effect.abilityId,
+          target: describeTarget(effect.target),
+        });
         button.onclick = () => actions.playBeforeRollAbility(target);
         choices.append(button);
       }
       const cancel = document.createElement('button');
-      cancel.textContent = 'Cancel ability';
+      cancel.textContent = t('hud.cancelAbility');
       cancel.onclick = actions.cancelAbility;
       choices.append(cancel);
     }
     if (selectedAbility && state.phase === 'WAITING_FOR_MOVE') {
       const copy = controller.variantConfig
-        ? describeConfiguredAbility(selectedAbility.abilityId, controller.variantConfig)
+        ? localizedAbilityCopy(selectedAbility.abilityId, controller.variantConfig)
         : null;
       const status = document.createElement('span');
       status.className = 'pickup-status';
       const directDieSelection = usesDirectDieSelection(selectedAbility.abilityId);
       status.textContent = rollAbilityPrompt(
         selectedAbility.abilityId,
-        copy?.name ?? 'this ability',
+        copy?.name ?? t('hud.thisAbility'),
       );
       choices.append(status);
       for (const option of controller.rollAbilityOptions()) {
@@ -167,7 +206,7 @@ export function createGameplayHud(
         choices.append(button);
       }
       const cancel = document.createElement('button');
-      cancel.textContent = 'Cancel ability';
+      cancel.textContent = t('hud.cancelAbility');
       cancel.onclick = actions.cancelAbility;
       choices.append(cancel);
     } else if (state.phase === 'WAITING_FOR_MOVE' && state.diceModifiers.length) {
@@ -176,9 +215,14 @@ export function createGameplayHud(
       modified.textContent = state.diceModifiers
         .map((modifier) => {
           const name = controller.variantConfig
-            ? describeConfiguredAbility(modifier.abilityId, controller.variantConfig).name
+            ? localizedAbilityCopy(modifier.abilityId, controller.variantConfig).name
             : modifier.abilityId;
-          return `${name} die ${modifier.dieIndex + 1}: ${modifier.before} → ${modifier.after}`;
+          return t('hud.dieModifier', {
+            name,
+            die: modifier.dieIndex + 1,
+            before: modifier.before,
+            after: modifier.after,
+          });
         })
         .join(' · ');
       choices.append(modified);
@@ -186,25 +230,32 @@ export function createGameplayHud(
     if (state.phase === 'WAITING_FOR_MOVE' && queue.length && !blocked) {
       const status = document.createElement('span');
       status.className = 'pickup-status';
-      status.textContent = `${queue.length} checker${queue.length === 1 ? '' : 's'} held`;
+      status.textContent = t('hud.checkersHeld', {
+        count: queue.length,
+        s: pluralSuffix(queue.length),
+      });
       choices.append(status);
       const release = document.createElement('button');
-      release.textContent = 'Put back last';
-      release.setAttribute('aria-label', 'Put back last picked-up checker');
+      release.textContent = t('hud.putBackLast');
+      release.setAttribute('aria-label', t('hud.putBackLastAria'));
       release.onclick = actions.releaseLast;
       choices.append(release);
       for (const sequence of sequences.filter((candidate) => candidate.at(-1)!.to === -1)) {
         const button = document.createElement('button');
-        button.textContent = `Bear off · ${sequence.map((move) => move.die).join(' + ')}`;
+        button.textContent = `${t('hud.bearOff')} · ${sequence.map((move) => move.die).join(' + ')}`;
         button.onclick = () => actions.bearOff(sequence);
         choices.append(button);
       }
     }
     next.hidden = state.phase !== 'GAME_OVER';
+    if (forfeit) {
+      forfeit.hidden = !controller.scripted || state.phase === 'GAME_OVER';
+      forfeit.disabled = blocked;
+    }
     const config = controller.variantConfig;
     rulesetBadge.hidden = !config;
     rulesetBadge.textContent = config ? `Powerups · ${config.id} v${config.version}` : '';
-    rulesetBadge.title = config ? `Configuration ${config.hash}` : '';
+    rulesetBadge.title = config ? t('hud.configuration', { hash: config.hash }) : '';
     draftPanel.render();
     canvas.dataset.phase = state.phase;
     canvas.dataset.active = String(state.active);
@@ -220,14 +271,14 @@ export function createGameplayHud(
 function describeTarget(target: NonNullable<GameController['selectedAbilityTarget']>): string {
   switch (target.type) {
     case 'PLAYER':
-      return `Player ${target.player + 1}`;
+      return t('target.player', { player: target.player + 1 });
     case 'POINT':
-      return `point ${target.point + 1}`;
+      return t('target.point', { point: target.point + 1 });
     case 'CHECKER':
-      return `checker ${target.checker + 1}`;
+      return t('target.checker', { checker: target.checker + 1 });
     case 'DIE':
-      return `die ${target.index + 1}`;
+      return t('target.die', { index: target.index + 1 });
     case 'EFFECT':
-      return `effect ${target.instanceId}`;
+      return t('target.effect', { instanceId: target.instanceId });
   }
 }

@@ -2,15 +2,43 @@ import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { access } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
+import { createServer } from 'node:net';
 import { MongoClient } from 'mongodb';
 import { MongoMemoryServer } from 'mongodb-memory-server';
 import { chromium } from 'playwright-core';
 
 const host = '127.0.0.1';
-const webPort = 4173;
-const gamePort = 4174;
-const url = `http://${host}:${webPort}`;
 const headed = process.argv.includes('--headed');
+// Presentation-only changes can skip the online path with --local.
+const localOnly = process.argv.includes('--local');
+const startedAt = Date.now();
+
+/** Log a stage with elapsed seconds so a slow phase is obvious without a profiler. */
+function mark(label) {
+  console.log(`[smoke ${((Date.now() - startedAt) / 1000).toFixed(1)}s] ${label}`);
+}
+
+/** Probe one port by binding it; a leftover server from a crashed run must not block a run. */
+function portIsFree(port) {
+  return new Promise((resolve) => {
+    const server = createServer();
+    server.once('error', () => resolve(false));
+    server.listen(port, host, () => server.close(() => resolve(true)));
+  });
+}
+
+/** Pick an adjacent web/game port pair so two checkouts can smoke concurrently. */
+async function findFreePorts() {
+  for (let candidate = 4173; candidate < 4213; candidate += 2) {
+    if ((await portIsFree(candidate)) && (await portIsFree(candidate + 1)))
+      return { webPort: candidate, gamePort: candidate + 1 };
+  }
+  throw new Error('no free port pair between 4173 and 4213 for the browser smoke');
+}
+
+const { webPort, gamePort } = await findFreePorts();
+const url = `http://${host}:${webPort}`;
+mark(`ports: web ${webPort}, game ${gamePort}`);
 
 function start(command, args, options = {}) {
   const output = [];
@@ -87,15 +115,33 @@ function watchErrors(page, label, errors) {
 }
 
 async function openReadyPage(browser, label, errors) {
+  // Software WebGL is the bottleneck: at full resolution the game renders ~3 fps in game and
+  // every Playwright action waits on frames (a single click costs ~4 s). The device scale
+  // factor only changes raster resolution, not CSS layout or pointer coordinates, so headless
+  // runs render a quarter of the pixels (≈22 fps here) while assertions stay identical.
+  // Headed runs are for looking at the result, so they keep full resolution.
   const page = await browser.newPage({
     viewport: { width: 1280, height: 720 },
+    deviceScaleFactor: headed ? 1 : 0.25,
     reducedMotion: 'reduce',
   });
   watchErrors(page, label, errors);
   await page.addInitScript((testProfileId) => {
     const NativeWebSocket = window.WebSocket;
-    const smoke = { sockets: [], latest: null, variantConfig: null, revision: 0 };
+    const smoke = { sockets: [], latest: null, variantConfig: null, revision: 0, rolls: 0 };
     Object.defineProperty(window, '__plakotoSmoke', { value: smoke });
+    // Count dice presentations: their aria-busy window is shorter than a slow frame, so
+    // polling for the attribute would race a fast reduced-motion roll.
+    const watchRollButton = () => {
+      const button = document.querySelector('#roll');
+      if (!button) return requestAnimationFrame(watchRollButton);
+      new MutationObserver(() => {
+        if (button.hasAttribute('aria-busy')) smoke.rolls += 1;
+      }).observe(button, { attributes: true, attributeFilter: ['aria-busy'] });
+    };
+    if (document.readyState === 'loading')
+      document.addEventListener('DOMContentLoaded', watchRollButton, { once: true });
+    else watchRollButton();
     window.WebSocket = new Proxy(NativeWebSocket, {
       construct(target, argumentsList) {
         const socket = Reflect.construct(target, argumentsList);
@@ -185,9 +231,24 @@ async function sendSocketCommand(page, command) {
   }, command);
 }
 
-async function waitForRoll(page) {
-  await page.waitForFunction(() => document.querySelector('#roll')?.hasAttribute('aria-busy'));
-  await page.waitForFunction(() => !document.querySelector('#roll')?.hasAttribute('aria-busy'));
+async function rollCount(page) {
+  return page.evaluate(() => window.__plakotoSmoke.rolls);
+}
+
+async function waitForRoll(page, previous) {
+  await page.waitForFunction(
+    (before) =>
+      window.__plakotoSmoke.rolls > before &&
+      !document.querySelector('#roll')?.hasAttribute('aria-busy'),
+    previous,
+  );
+}
+
+/** Click the roll button for one seat and wait until every seat finished presenting dice. */
+async function clickRoll(pages, player) {
+  const counts = await Promise.all(pages.map(rollCount));
+  await pages[player].locator('#roll').click();
+  await Promise.all(pages.map((page, index) => waitForRoll(page, counts[index])));
 }
 
 async function boardState(page) {
@@ -234,8 +295,9 @@ async function rollOnline(pages) {
   assert.equal(before.phase, 'WAITING_FOR_ROLL');
   const active = before.active;
   assert.ok(active === 0 || active === 1, 'movement roll has no active player');
+  const counts = await Promise.all(pages.map(rollCount));
   const rolled = actAndWait(pages, () => pages[active].locator('#roll').click());
-  await Promise.all(pages.map(waitForRoll));
+  await Promise.all(pages.map((page, index) => waitForRoll(page, counts[index])));
   return rolled;
 }
 
@@ -283,14 +345,17 @@ async function endOnlineTurn(pages) {
 async function advanceToRound(pages, targetRound) {
   for (let turn = 0; turn < 30; turn++) {
     let state = await authoritativeState(pages[0]);
+    assert.notEqual(
+      state.phase,
+      'GAME_OVER',
+      `the online match ended before round ${targetRound}; the smoke needs a longer game`,
+    );
     if (state.powerups.completedRounds >= targetRound) return state;
     if (state.phase === 'WAITING_FOR_ROLL') state = await rollOnline(pages);
     if (state.phase === 'WAITING_FOR_MOVE') state = await exhaustOnlineMoves(pages);
     if (state.phase === 'TURN_COMPLETE') {
       state = await endOnlineTurn(pages);
-      console.log(
-        `Powerups browser path: round ${state.powerups.completedRounds}, phase ${state.phase}`,
-      );
+      mark(`Powerups browser path: round ${state.powerups.completedRounds}, phase ${state.phase}`);
     }
   }
   assert.fail(`powerup match did not reach round ${targetRound}`);
@@ -424,15 +489,58 @@ async function localSmoke(browser, errors) {
     'Classic should be the default ruleset',
   );
   await page.setViewportSize({ width: 320, height: 568 });
-  const compactOptions = await page.locator('.start-options').boundingBox();
-  assert.ok(compactOptions, 'compact title options are not visible');
+  const compactTools = await page.locator('.top-actions').boundingBox();
+  assert.ok(compactTools, 'compact title tools are not visible');
   assert.ok(
-    compactOptions.y + compactOptions.height <= 568,
-    'compact title options overflow the viewport',
+    compactTools.x >= 0 &&
+      compactTools.x + compactTools.width <= 320 &&
+      compactTools.y + compactTools.height <= 568,
+    'compact title tools overflow the viewport',
+  );
+  assert.equal(
+    await page.locator('.start-options').count(),
+    0,
+    'the title menu should not repeat the Rules and Settings row',
   );
   await page.setViewportSize({ width: 1280, height: 720 });
+  await page.locator('.top-actions [data-open="settings"]').click();
   assert.equal(await page.locator('.playtest-tools').isVisible(), true);
+  assert.equal(
+    await page.locator('#exit-game').isHidden(),
+    true,
+    'Exit game should be hidden on the title screen',
+  );
+  // Dialog and action-row styling lives in its own stylesheets; make sure both still load.
+  const dialogStyle = await page.locator('#overlay').evaluate((element) => {
+    const style = getComputedStyle(element);
+    return {
+      padding: style.paddingTop,
+      radius: style.borderTopLeftRadius,
+      background: style.backgroundColor,
+      border: style.borderTopColor,
+    };
+  });
+  assert.deepEqual(
+    dialogStyle,
+    {
+      padding: '40px',
+      radius: '12px',
+      background: 'rgb(17, 30, 51)',
+      border: 'rgb(202, 177, 125)',
+    },
+    'the overlay should resolve the dialog stylesheet and its design tokens',
+  );
+  const exitStyle = await page.locator('#exit-game').evaluate((element) => {
+    const style = getComputedStyle(element);
+    return { padding: style.paddingLeft, marginTop: style.marginTop };
+  });
+  assert.deepEqual(
+    exitStyle,
+    { padding: '15px', marginTop: '14px' },
+    'the action row should use the settings stylesheet',
+  );
   await page.locator('#playtest-seed').fill('24680');
+  await page.locator('#overlay .close').click();
   await page.locator('#start-local').click();
   await page.waitForFunction(() => !document.body.classList.contains('on-title'));
   await page.waitForFunction(() => !document.querySelector('#roll')?.hasAttribute('disabled'));
@@ -441,19 +549,17 @@ async function localSmoke(browser, errors) {
   await canvas.waitFor({ state: 'visible' });
   assert.equal(await canvas.getAttribute('data-ruleset'), 'CLASSIC');
   assert.equal(await page.locator('#ruleset-badge').isHidden(), true);
-  for (let rollCount = 0; ; rollCount++) {
+  for (let attempt = 0; ; attempt++) {
     const phase = await canvas.getAttribute('data-phase');
     if (phase !== 'OPENING_ROLL') break;
-    assert.ok(rollCount < 12, 'opening rolls did not produce a winner');
-    await page.locator('#roll').click();
-    await waitForRoll(page);
+    assert.ok(attempt < 12, 'opening rolls did not produce a winner');
+    await clickRoll([page], 0);
     if ((await canvas.getAttribute('data-phase')) === 'OPENING_ROLL')
       await page.waitForFunction(() => !document.querySelector('#roll')?.hasAttribute('disabled'));
   }
 
   assert.equal(await canvas.getAttribute('data-phase'), 'WAITING_FOR_ROLL');
-  await page.locator('#roll').click();
-  await waitForRoll(page);
+  await clickRoll([page], 0);
   assert.equal(await canvas.getAttribute('data-phase'), 'WAITING_FOR_MOVE');
 
   const dice = (await page.locator('#dice-result').textContent())?.match(/[1-6]/g)?.map(Number);
@@ -479,6 +585,7 @@ async function localSmoke(browser, errors) {
   await page.waitForFunction(() => document.querySelector('#undo')?.hasAttribute('disabled'));
   assert.equal(await canvas.getAttribute('data-phase'), 'WAITING_FOR_MOVE');
   await page.locator('.top-actions [data-open="settings"]').click();
+  assert.equal(await page.locator('#exit-game').isVisible(), true);
   assert.equal(await page.locator('#download-playtest').isEnabled(), true);
   const [playtestDownload] = await Promise.all([
     page.waitForEvent('download'),
@@ -491,6 +598,13 @@ async function localSmoke(browser, errors) {
     document.querySelector('#playtest-analysis-output')?.textContent?.includes('1 valid report'),
   );
   assert.equal(await page.locator('#download-analysis').isEnabled(), true);
+  await page.locator('#exit-game').click();
+  await page.waitForFunction(() => document.body.classList.contains('on-title'));
+  assert.equal(
+    await page.locator('#start-screen').isVisible(),
+    true,
+    'Exit game should return to the title screen',
+  );
   await page.close();
 }
 
@@ -542,16 +656,15 @@ async function onlineSmoke(browser, errors) {
   const { variantConfig } = await smokeSnapshot(first);
   assert.equal(variantConfig.id, 'fast-balance');
   const draftInterval = variantConfig.draft.intervalRounds;
-  for (let rollCount = 0; ; rollCount++) {
+  for (let attempt = 0; ; attempt++) {
     const state = await boardState(first);
     assert.deepEqual(await boardState(second), state, 'online seats disagree about turn state');
     if (state.phase !== 'OPENING_ROLL') break;
-    assert.ok(rollCount < 12, 'online opening rolls did not produce a winner');
+    assert.ok(attempt < 12, 'online opening rolls did not produce a winner');
     const active = Number(state.active);
     assert.ok(active === 0 || active === 1, 'online match has no active opening player');
     assert.equal(await pages[1 - active].locator('#roll').isDisabled(), true);
-    await pages[active].locator('#roll').click();
-    await Promise.all(pages.map(waitForRoll));
+    await clickRoll(pages, active);
     assert.equal(
       await first.locator('#dice-result').getAttribute('aria-label'),
       await second.locator('#dice-result').getAttribute('aria-label'),
@@ -563,8 +676,7 @@ async function onlineSmoke(browser, errors) {
   assert.equal(ready.phase, 'WAITING_FOR_ROLL');
   assert.deepEqual(await boardState(second), ready);
   const active = Number(ready.active);
-  await pages[active].locator('#roll').click();
-  await Promise.all(pages.map(waitForRoll));
+  await clickRoll(pages, active);
   const moving = await boardState(first);
   assert.equal(moving.phase, 'WAITING_FOR_MOVE');
   assert.deepEqual(await boardState(second), moving, 'online seats disagree after movement roll');
@@ -575,7 +687,7 @@ async function onlineSmoke(browser, errors) {
   );
 
   let powerupState = await advanceToRound(pages, draftInterval);
-  console.log('Powerups browser path: first draft opened');
+  mark('Powerups browser path: first draft opened');
   assert.equal(powerupState.phase, 'DRAFT_PICK');
   await Promise.all(
     pages.map((page) => page.locator('#draft-panel').waitFor({ state: 'visible' })),
@@ -662,7 +774,7 @@ async function onlineSmoke(browser, errors) {
   }
 
   powerupState = await activateDraftedPower(pages, firstPicker, draftedPower);
-  console.log(`Powerups browser path: activated ${draftedPower.abilityId}`);
+  mark(`Powerups browser path: activated ${draftedPower.abilityId}`);
   assert.equal(
     powerupState.powerups.loadouts[firstPicker].powerups.some(
       (instance) => instance.instanceId === draftedPower.instanceId,
@@ -672,7 +784,7 @@ async function onlineSmoke(browser, errors) {
   );
 
   powerupState = await advanceToRound(pages, draftInterval * 2);
-  console.log('Powerups browser path: replacement draft opened');
+  mark('Powerups browser path: replacement draft opened');
   assert.equal(powerupState.phase, 'DRAFT_PICK');
   const replacementPassive = powerupState.powerups.draft.offer.find((abilityId) =>
     passiveIds.has(abilityId),
@@ -710,8 +822,23 @@ let gameServer;
 const databaseName = `plakoto-smoke-${randomUUID()}`;
 const mongo = await MongoMemoryServer.create();
 const mongoUrl = mongo.getUri();
+mark('in-memory MongoDB ready');
+
+// A Ctrl-C must not leave Chrome, Vite, the bundled server, or the in-memory MongoDB
+// holding resources for the next run.
+for (const signal of ['SIGINT', 'SIGTERM'])
+  process.once(signal, () => {
+    webServer?.child.kill('SIGKILL');
+    gameServer?.child.kill('SIGKILL');
+    void (browser ? browser.close().catch(() => {}) : Promise.resolve())
+      .then(() => mongo.stop())
+      .catch(() => {})
+      .finally(() => process.exit(130));
+  });
+
 try {
   await run(process.execPath, ['scripts/bundle-server.mjs']);
+  mark('game server bundled');
   gameServer = start(process.execPath, ['dist-server/index.mjs'], {
     env: {
       ...process.env,
@@ -719,6 +846,9 @@ try {
       PLAKOTO_MONGO_URL: mongoUrl,
       PLAKOTO_DB_NAME: databaseName,
       PLAKOTO_TEST_RANDOM_SEED: '2',
+      // The authoritative clock is not what this test covers, and software rendering
+      // makes a scripted turn slower than the real opening-roll allowance.
+      PLAKOTO_CLOCK: 'off',
     },
   });
   webServer = start(
@@ -730,18 +860,27 @@ try {
     waitForServer(url, webServer),
     waitForServer(`http://${host}:${gamePort}`, gameServer, false),
   ]);
+  mark('vite and game servers are serving requests');
   browser = await chromium.launch({
     executablePath: await chromePath(),
     headless: !headed,
     args: ['--no-sandbox', '--disable-dev-shm-usage', '--enable-webgl'],
   });
+  mark('browser launched');
   const browserErrors = [];
   await localSmoke(browser, browserErrors);
-  await onlineSmoke(browser, browserErrors);
-  assert.deepEqual(browserErrors, [], `browser errors:\n${browserErrors.join('\n')}`);
-  console.log(
-    'Browser smoke passed: local play plus authoritative online drafts, replacement, and ability use.',
-  );
+  mark('local play path done');
+  if (localOnly) {
+    assert.deepEqual(browserErrors, [], `browser errors:\n${browserErrors.join('\n')}`);
+    console.log('Browser smoke passed (local only): no page errors on the local play path.');
+  } else {
+    await onlineSmoke(browser, browserErrors);
+    mark('online play path done');
+    assert.deepEqual(browserErrors, [], `browser errors:\n${browserErrors.join('\n')}`);
+    console.log(
+      'Browser smoke passed: local play plus authoritative online drafts, replacement, and ability use.',
+    );
+  }
 } finally {
   await browser?.close();
   webServer?.child.kill('SIGTERM');

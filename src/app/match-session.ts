@@ -1,10 +1,11 @@
 import type { GameState, Player } from '../game/engine';
-import type { Command, Update } from '../net/messages';
+import type { ClientErrorCode, Command, Update } from '../net/messages';
 import { CLASSIC_SELECTION, type MatchSelection } from '../net/messages';
 import type { GameController } from './game-controller';
 import { rulesForSelection } from '../game/variant/rules-context';
 import type { ResolvedVariantConfig } from '../game/variant/types';
 import { createSeededRandomInt } from '../game/random';
+import { t } from '../ui/i18n';
 
 export type MatchEvents = {
   onReady: (name: string) => void;
@@ -17,8 +18,11 @@ export type MatchEvents = {
   onRejected: () => void;
   onReconnect: () => void;
   onWaiting: () => void;
+  onRoom: (code: string) => void;
   onMatched: (you: Player, state: GameState, variantConfig: ResolvedVariantConfig | null) => void;
   onUpdate: (update: Update) => void;
+  onError: (code: ClientErrorCode) => void;
+  onRematch: (status: 'OFFERED' | 'DECLINED') => void;
   onLeft: () => void;
   onClose: () => void;
 };
@@ -26,6 +30,8 @@ export type MatchEvents = {
 export type MatchTransport = {
   connect: () => void;
   find: (selection?: MatchSelection) => void;
+  createRoom: (selection?: MatchSelection) => void;
+  joinRoom: (code: string) => void;
   cancel: () => void;
   send: (command: Command) => void;
   abandon: () => void;
@@ -48,6 +54,7 @@ export type MatchScene = { startSetup: () => void };
 export type MatchUi = {
   setSearching: (searching: boolean) => void;
   showNote: (message: string | null) => void;
+  showRoom: (code: string) => void;
   enterTable: () => void;
   showTitle: () => void;
   signedOut: () => void;
@@ -69,7 +76,7 @@ export function createMatchSession(
       playing = false;
       flow.leave();
       ui.showTitle();
-      ui.showNote('The match ended while you were disconnected.');
+      ui.showNote(t('net.matchEndedDisconnected'));
     },
     onResume(you, state, canUndo, variantConfig) {
       searching = false;
@@ -90,14 +97,17 @@ export function createMatchSession(
         flow.leave();
         ui.showTitle();
       }
-      ui.showNote('Sign in again to play online.');
+      ui.showNote(t('net.signInAgain'));
     },
     onReconnect() {
-      if (searching || playing) ui.showNote('Reconnecting…');
+      if (searching || playing) ui.showNote(t('net.reconnecting'));
     },
     onWaiting() {
       if (!searching) return;
       ui.setSearching(true);
+    },
+    onRoom(code) {
+      ui.showRoom(code);
     },
     onMatched(you, state, variantConfig) {
       if (!searching) {
@@ -115,13 +125,19 @@ export function createMatchSession(
     onUpdate(update) {
       flow.receive(update);
     },
+    onError(code) {
+      ui.showNote(t(`error.${code}`));
+    },
+    onRematch(status) {
+      ui.showNote(status === 'OFFERED' ? t('net.rematchOffered') : t('net.rematchDeclined'));
+    },
     onLeft() {
       searching = false;
       playing = false;
       ui.setSearching(false);
       flow.leave();
       ui.showTitle();
-      ui.showNote('Opponent left. Search again to play.');
+      ui.showNote(t('net.opponentLeft'));
     },
     onClose() {
       const wasPlaying = playing || controller.scripted;
@@ -132,7 +148,7 @@ export function createMatchSession(
         flow.leave();
         ui.showTitle();
       }
-      ui.showNote('Can’t reach the game server.');
+      ui.showNote(t('net.unreachable'));
     },
   });
 
@@ -151,6 +167,21 @@ export function createMatchSession(
         flow.leave();
         ui.showTitle();
       }
+    },
+    /**
+     * Returns to the title screen from the table. An unfinished online match is cancelled through
+     * the same authoritative path as signing out: the opponent wins by abandonment and both seats
+     * are released, so a later search starts a fresh match instead of resuming the old one.
+     */
+    exitGame() {
+      const online = playing;
+      playing = false;
+      searching = false;
+      ui.setSearching(false);
+      if (online) table.abandon();
+      flow.leave();
+      ui.showNote(null);
+      ui.showTitle();
     },
     startLocal(selection: MatchSelection = CLASSIC_SELECTION, seed?: number): boolean {
       const rules = rulesForSelection(selection);
@@ -176,6 +207,16 @@ export function createMatchSession(
       searching = true;
       ui.showNote(null);
       table.find(selection);
+    },
+    createRoom(selection: MatchSelection = CLASSIC_SELECTION) {
+      searching = true;
+      ui.showNote(null);
+      table.createRoom(selection);
+    },
+    joinRoom(code: string) {
+      searching = true;
+      ui.showNote(null);
+      table.joinRoom(code);
     },
   };
 }

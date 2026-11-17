@@ -1,3 +1,5 @@
+import { t } from '../ui/i18n';
+
 export function sameOrigin() {
   return location.protocol === 'http:' || location.protocol === 'https:';
 }
@@ -43,13 +45,13 @@ async function submit(path: string, body: Record<string, string>) {
       body: JSON.stringify(body),
     });
   } catch {
-    return { ok: false as const, error: 'Can’t reach the game server.' };
+    return { ok: false as const, error: t('net.unreachable') };
   }
   const payload = (await response.json().catch(() => null)) as {
     username?: string;
     error?: string;
   } | null;
   if (!response.ok || !payload?.username)
-    return { ok: false as const, error: payload?.error || 'The account could not be saved.' };
+    return { ok: false as const, error: payload?.error || t('account.couldNotSave') };
   return { ok: true as const, username: payload.username };
 }

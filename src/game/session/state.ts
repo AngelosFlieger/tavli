@@ -7,6 +7,7 @@ import {
   type Ruleset,
 } from '../variant/types';
 import type { Phase } from './phase';
+import type { GameClock } from '../clock';
 
 export type GameState = Position & {
   phase: Phase;
@@ -16,12 +17,15 @@ export type GameState = Position & {
   openingRolls: [number[] | null, number[] | null];
   outcome: Outcome | null;
   message: string;
+  messageKey?: string;
+  messageParams?: Record<string, string | number>;
   opening: boolean;
   ruleset: Ruleset;
   variantConfigHash: string | null;
   powerups: PowerupsState | null;
   diceModifiers: DiceModifier[];
   rollSource: 'loadedKnuckles' | null;
+  clock: GameClock | null;
 };
 
 export type Session = { state: GameState; history: GameState[] };
@@ -42,6 +46,7 @@ export function initialGameState(rules: RulesContext = CLASSIC_RULES): GameState
     powerups: rules.variantConfig ? initialPowerupsState() : null,
     diceModifiers: [],
     rollSource: null,
+    clock: null,
   };
 }
 

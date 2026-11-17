@@ -2,7 +2,22 @@ import { PATHS } from '../points';
 
 export type Player = 0 | 1;
 export type Move = { from: number; to: number; die: number }; // -1 means bear off.
-export type Outcome = { winner: Player | null; points: number; reason: string };
+export type OutcomeKind =
+  | 'BEAR_OFF'
+  | 'MARS'
+  | 'MOTHER_VICTORY'
+  | 'DRAW'
+  | 'RESIGNATION'
+  | 'DISCONNECT'
+  | 'NO_SHOW'
+  | 'ABANDONED'
+  | 'TIMEOUT';
+export type Outcome = {
+  winner: Player | null;
+  points: number;
+  reason: string;
+  kind: OutcomeKind;
+};
 export type Position = { board: number[][]; off: [number[], number[]] };
 export const owner = (id: number): Player => (id < 15 ? 0 : 1);
 export const other = (player: Player): Player => (player === 0 ? 1 : 0);

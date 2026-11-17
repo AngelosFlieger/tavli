@@ -1,5 +1,9 @@
 import { MongoClient, type Db } from 'mongodb';
 import type { Session } from '../src/game/session/state';
+import type { GameState } from '../src/game/session/state';
+import { isPhase } from '../src/game/session/phase';
+import type { Outcome, OutcomeKind } from '../src/game/rules/position';
+import type { GameClock } from '../src/game/clock';
 import { resolveVariantConfig } from '../src/game/variant/config/schema';
 import type { ResolvedVariantConfig } from '../src/game/variant/types';
 import type { Update } from '../src/net/messages';
@@ -21,6 +25,8 @@ export type StoredMatch = {
   lastUpdate: StoredRevisionUpdate | null;
   revision: number;
   away: [number | null, number | null];
+  /** Whether each seat has connected at least once in this match. */
+  connected: [boolean, boolean];
   /** Set when the match is finished. Null while it is still being played. */
   endedAt: number | null;
   /** Account id of the winner. Null for a draw, or while the match is still being played. */
@@ -44,6 +50,7 @@ export type Store = {
   insertMatch(match: StoredMatch): Promise<boolean>;
   saveMatch(match: StoredMatch): Promise<boolean>;
   markAway(match: StoredMatch): Promise<boolean>;
+  setConnected(matchId: string, index: 0 | 1, connected: boolean): Promise<void>;
   /** Records the final session and winner. A later save cannot overwrite it. */
   endMatch(match: StoredMatch, winner: string | null): Promise<boolean>;
   /** Starts a new match for the same two accounts and leaves the finished one in place. */
@@ -53,14 +60,20 @@ export type Store = {
   leaveQueue(userId: string): Promise<void>;
   queued(userId: string): Promise<boolean>;
   wait(userId: string, matchKey: string): Promise<void>;
-  expireAway(before: number): Promise<{ match: StoredMatch; released: string[] }[]>;
+  clearQueue(): Promise<void>;
+  liveMatches(): Promise<StoredMatch[]>;
+  ping(): Promise<boolean>;
+  staleMatches(
+    graceBefore: number,
+    noShowBefore: number,
+  ): Promise<{ match: StoredMatch; expired: [boolean, boolean] }[]>;
   close(): Promise<void>;
   drop(): Promise<void>;
 };
 
 type StoreOptions = { url?: string; name?: string };
 
-const schemaVersion = 3;
+const schemaVersion = 4;
 const usernameCollation = { locale: 'en', strength: 2 };
 
 export async function openStore(options: StoreOptions = {}): Promise<Store> {
@@ -168,6 +181,9 @@ export async function openStore(options: StoreOptions = {}): Promise<Store> {
       );
       return result.matchedCount === 1;
     },
+    async setConnected(matchId, index, connected) {
+      await matches.updateOne({ _id: matchId }, { $set: { [`connected.${index}`]: connected } });
+    },
     async endMatch(match, winner) {
       const result = await matches.updateOne(
         { _id: match.id, revision: match.revision, endedAt: null },
@@ -219,6 +235,22 @@ export async function openStore(options: StoreOptions = {}): Promise<Store> {
     async wait(userId, matchKey) {
       await joinQueue(userId, matchKey);
     },
+    async clearQueue() {
+      await queue.deleteMany({});
+    },
+    async liveMatches() {
+      return (await matches.find({ endedAt: null }).toArray())
+        .map(readMatch)
+        .filter((match): match is StoredMatch => match !== null);
+    },
+    async ping() {
+      try {
+        await db.command({ ping: 1 });
+        return true;
+      } catch {
+        return false;
+      }
+    },
     async claimOpponent(userId, matchKey) {
       await joinQueue(userId, matchKey);
       const me = await queue.findOne({ _id: userId });
@@ -244,58 +276,24 @@ export async function openStore(options: StoreOptions = {}): Promise<Store> {
     async queued(userId) {
       return (await queue.findOne({ _id: userId })) !== null;
     },
-    async expireAway(before) {
-      const cutoff = new Date(before);
+    async staleMatches(graceBefore, noShowBefore) {
+      const staleCutoff = new Date(noShowBefore);
       const stale = await matches
-        .find({ $or: [{ 'away.0': { $lte: cutoff } }, { 'away.1': { $lte: cutoff } }] })
+        .find({
+          endedAt: null,
+          $or: [{ 'away.0': { $lte: staleCutoff } }, { 'away.1': { $lte: staleCutoff } }],
+        })
         .toArray();
-      const expired: { match: StoredMatch; released: string[] }[] = [];
-      for (const match of stale) {
-        const stored = readMatch(match);
-        if (!stored) continue;
-        if (stored.endedAt === null) {
-          const winner = forfeitWinner(stored, before);
-          const won = await matches.updateOne(
-            {
-              _id: match._id,
-              revision: stored.revision,
-              endedAt: null,
-              $or: [{ 'away.0': { $lte: cutoff } }, { 'away.1': { $lte: cutoff } }],
-            },
-            {
-              $set: {
-                endedAt: new Date(),
-                winner,
-                revision: stored.revision + 1,
-                away: [null, null],
-              },
-            },
-          );
-          if (won.matchedCount === 1) {
-            await playing.deleteMany({ matchId: match._id });
-            expired.push({
-              match: { ...stored, endedAt: before, winner, away: [null, null] },
-              released: [...stored.seats],
-            });
-            continue;
-          }
-          const current = await matches.findOne({ _id: match._id });
-          const again = current ? readMatch(current) : null;
-          if (!again?.endedAt) continue;
-          Object.assign(stored, again);
-        }
-        const released = stored.seats.filter((_, index) => {
-          const left = stored.away[index];
-          return left !== null && left <= before;
-        });
-        if (!released.length) continue;
-        const away: [number | null, number | null] = [
-          released.includes(stored.seats[0]) ? null : stored.away[0],
-          released.includes(stored.seats[1]) ? null : stored.away[1],
-        ];
-        await playing.deleteMany({ _id: { $in: released }, matchId: match._id });
-        await matches.updateOne({ _id: match._id }, { $set: { away: dates(away) } });
-        expired.push({ match: { ...stored, away }, released });
+      const expired: { match: StoredMatch; expired: [boolean, boolean] }[] = [];
+      for (const document of stale) {
+        const match = readMatch(document);
+        if (!match) continue;
+        const gone: [boolean, boolean] = [0, 1].map((index) => {
+          const left = match.away[index];
+          const cutoff = match.connected[index] ? graceBefore : noShowBefore;
+          return left !== null && left <= cutoff;
+        }) as [boolean, boolean];
+        if (gone[0] || gone[1]) expired.push({ match, expired: gone });
       }
       return expired;
     },
@@ -327,6 +325,7 @@ type MatchDocument = {
   lastUpdate?: StoredRevisionUpdate | null;
   revision: number;
   away: [Date | null, Date | null];
+  connected?: [boolean, boolean];
   endedAt: Date | null;
   winner: string | null;
 };
@@ -367,6 +366,10 @@ async function ensureSchema(db: Db) {
       session: { bsonType: 'object' },
       variantConfig: { bsonType: ['object', 'null'] },
       lastUpdate: { bsonType: ['object', 'null'] },
+      away: { bsonType: 'array', minItems: 2, maxItems: 2 },
+      connected: { bsonType: 'array', minItems: 2, maxItems: 2 },
+      endedAt: { bsonType: ['date', 'null'] },
+      winner: { bsonType: ['string', 'null'] },
     },
   });
   const users = db.collection('users');
@@ -403,6 +406,7 @@ function liveFields(match: StoredMatch) {
     lastUpdate: match.lastUpdate,
     revision: match.revision + 1,
     away: dates(match.away),
+    connected: match.connected,
   };
 }
 
@@ -414,21 +418,19 @@ function matchDocument(match: StoredMatch): MatchDocument {
     variantConfig: match.variantConfig,
     lastUpdate: match.lastUpdate,
     revision: 0,
-    away: [null, null],
+    away: dates(match.away),
+    connected: [...match.connected] as [boolean, boolean],
     endedAt: null,
     winner: null,
   };
 }
 
-function forfeitWinner(match: StoredMatch, before: number): string | null {
-  const gone = match.away.map((left) => left !== null && left <= before);
-  if (gone[0] === gone[1]) return null;
-  return match.seats[gone[0] ? 1 : 0];
-}
-
 function readMatch(document: MatchDocument): StoredMatch | null {
+  if (!Array.isArray(document.seats) || document.seats.length !== 2) return null;
+  const [first, second] = document.seats;
+  if (typeof first !== 'string' || typeof second !== 'string' || first === second) return null;
   const session = readSession(document.session);
-  if (!session || document.seats[0] === document.seats[1]) return null;
+  if (!session) return null;
   let variantConfig: ResolvedVariantConfig | null = null;
   try {
     if (document.variantConfig != null)
@@ -442,19 +444,34 @@ function readMatch(document: MatchDocument): StoredMatch | null {
       session.state.variantConfigHash !== variantConfig.hash)
   )
     return null;
+  const endedAt = document.endedAt instanceof Date ? document.endedAt.getTime() : null;
+  const winner = typeof document.winner === 'string' ? document.winner : null;
+  if (document.winner != null && document.winner !== null && typeof document.winner !== 'string')
+    return null;
+  if (endedAt !== null && winner !== null && !document.seats.includes(winner)) return null;
+  const outcomeWinner = session.state.outcome?.winner;
+  if (
+    endedAt !== null &&
+    winner !== null &&
+    outcomeWinner !== null &&
+    outcomeWinner !== undefined &&
+    document.seats[outcomeWinner] !== winner
+  )
+    return null;
   return {
     id: document._id,
-    seats: document.seats,
+    seats: [first, second],
     session,
     variantConfig,
     lastUpdate: readRevisionUpdate(document.lastUpdate),
     revision: document.revision,
     away: [
-      document.away?.[0] ? document.away[0].getTime() : null,
-      document.away?.[1] ? document.away[1].getTime() : null,
+      document.away?.[0] instanceof Date ? document.away[0].getTime() : null,
+      document.away?.[1] instanceof Date ? document.away[1].getTime() : null,
     ],
-    endedAt: document.endedAt ? document.endedAt.getTime() : null,
-    winner: document.winner ?? null,
+    connected: [document.connected?.[0] === true, document.connected?.[1] === true],
+    endedAt,
+    winner,
   };
 }
 
@@ -492,9 +509,95 @@ function readUser(document: UserDocument | null): StoredUser | null {
 
 function readSession(value: unknown): Session | null {
   if (!value || typeof value !== 'object') return null;
-  const session = value as Session;
-  if (!session.state || typeof session.state !== 'object' || !Array.isArray(session.history))
+  const candidate = value as { state?: unknown; history?: unknown };
+  const state = readState(candidate.state);
+  if (!state || !Array.isArray(candidate.history)) return null;
+  const history = candidate.history.map(readState);
+  if (history.some((entry) => entry === null)) return null;
+  return { state, history: history as GameState[] };
+}
+
+const outcomeKinds: readonly OutcomeKind[] = [
+  'BEAR_OFF',
+  'MARS',
+  'MOTHER_VICTORY',
+  'DRAW',
+  'RESIGNATION',
+  'DISCONNECT',
+  'NO_SHOW',
+  'ABANDONED',
+  'TIMEOUT',
+];
+
+function readState(value: unknown): GameState | null {
+  if (!value || typeof value !== 'object') return null;
+  const state = structuredClone(value) as Partial<GameState> & Record<string, unknown>;
+  if (!Array.isArray(state.board) || state.board.length !== 24) return null;
+  if (!Array.isArray(state.off) || state.off.length !== 2) return null;
+  const checkers: number[] = [];
+  for (const stack of [...state.board, ...state.off]) {
+    if (!Array.isArray(stack)) return null;
+    for (const checker of stack) {
+      if (!Number.isInteger(checker) || checker < 0 || checker > 29) return null;
+      checkers.push(checker);
+    }
+  }
+  if (checkers.length !== 30 || new Set(checkers).size !== 30) return null;
+  if (!isPhase(state.phase)) return null;
+  if (state.active !== null && state.active !== 0 && state.active !== 1) return null;
+  if (!isDice(state.remaining) || !isDice(state.roll)) return null;
+  if (!Array.isArray(state.openingRolls) || state.openingRolls.length !== 2) return null;
+  if (
+    !state.openingRolls.every((roll) => roll === null || (Array.isArray(roll) && roll.every(isDie)))
+  )
     return null;
-  if (typeof session.state.phase !== 'string') return null;
-  return session;
+  if (state.outcome !== null && !isOutcome(state.outcome)) return null;
+  if (typeof state.message !== 'string' || typeof state.opening !== 'boolean') return null;
+  if (state.ruleset !== 'CLASSIC' && state.ruleset !== 'POWERUPS_V1') return null;
+  if (state.variantConfigHash !== null && typeof state.variantConfigHash !== 'string') return null;
+  if (state.powerups !== null && (!state.powerups || typeof state.powerups !== 'object'))
+    return null;
+  if (!Array.isArray(state.diceModifiers)) return null;
+  if (state.rollSource !== null && state.rollSource !== 'loadedKnuckles') return null;
+  if (state.clock !== undefined && state.clock !== null && !isClock(state.clock)) return null;
+  if (state.clock === undefined) state.clock = null;
+  return state as GameState;
+}
+
+function isClock(value: unknown): value is GameClock {
+  if (!value || typeof value !== 'object') return false;
+  const clock = value as Record<string, unknown>;
+  return (
+    Number.isFinite(clock.remainingMs) &&
+    Number(clock.remainingMs) >= 0 &&
+    typeof clock.running === 'boolean' &&
+    (clock.deadline === null || Number.isFinite(clock.deadline))
+  );
+}
+
+function isDice(value: unknown): value is number[] {
+  return Array.isArray(value) && value.every(isDie);
+}
+
+function isDie(value: unknown): boolean {
+  return Number.isInteger(value) && Number(value) >= 1 && Number(value) <= 6;
+}
+
+function isOutcome(value: unknown): value is Outcome {
+  if (!value || typeof value !== 'object') return false;
+  const outcome = value as Record<string, unknown>;
+  if (outcome.winner !== null && outcome.winner !== 0 && outcome.winner !== 1) return false;
+  if (!Number.isInteger(outcome.points) || Number(outcome.points) < 0) return false;
+  if (typeof outcome.reason !== 'string') return false;
+  if (outcome.kind !== undefined && !outcomeKinds.includes(outcome.kind as OutcomeKind))
+    return false;
+  if (outcome.kind === undefined) outcome.kind = inferredOutcomeKind(outcome.reason);
+  return true;
+}
+
+function inferredOutcomeKind(reason: string): OutcomeKind {
+  if (reason.includes('Mother')) return 'MOTHER_VICTORY';
+  if (reason.includes('Mars')) return 'MARS';
+  if (reason.includes('draw')) return 'DRAW';
+  return 'BEAR_OFF';
 }

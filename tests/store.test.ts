@@ -23,6 +23,7 @@ test('a live match is found by either seat without loading every match', async (
         lastUpdate: null,
         revision: 0,
         away: [null, null],
+        connected: [true, false],
         endedAt: null,
         winner: null,
       }),
@@ -52,6 +53,7 @@ test('a stored configuration snapshot restores without a registered profile', as
         lastUpdate: null,
         revision: 0,
         away: [null, null],
+        connected: [true, false],
         endedAt: null,
         winner: null,
       }),
@@ -147,12 +149,13 @@ test('two processes preserve exact roll and move revision metadata', async () =>
     await first.disconnect('ada');
     now += 45_001;
     const left = await second.sync();
-    assert.equal(left.find((event) => event.userId === 'basil')?.message.type, 'left');
+    assert.equal(left.find((event) => event.message.type === 'left')?.message.type, 'left');
     assert.equal(await store.matchForUser('basil'), null);
     const kept = await store.match(live.id);
     assert.equal(kept?.winner, 'basil');
     assert.notEqual(kept?.endedAt, null);
-    assert.equal(kept?.session.state.phase, live.session.state.phase);
+    assert.equal(kept?.session.state.phase, 'GAME_OVER');
+    assert.equal(kept?.session.state.outcome?.kind, 'DISCONNECT');
   } finally {
     await store.drop();
   }
@@ -220,20 +223,27 @@ test('cancelling keeps the match and records the opponent as winner', async () =
 
 test('a finished game stays stored, and the next game is a new match', async () => {
   const store = await openStore({ name: `plakoto-test-${randomUUID()}` });
-  const first = createTables(store, () => 1);
-  const second = createTables(store, () => 1);
+  const tables = createTables(store, () => 1);
   try {
-    await first.connect('ada');
-    await second.connect('basil');
-    await first.find('ada');
-    await second.find('basil');
-    await first.sync();
+    await tables.connect('ada');
+    await tables.connect('basil');
+    await tables.find('ada');
+    await tables.find('basil');
+    await tables.sync();
     const live = await store.matchForUser('ada');
     assert.ok(live);
     live.session.state.phase = 'GAME_OVER';
-    live.session.state.outcome = { winner: 0, points: 1, reason: 'Bear-off' };
+    live.session.state.outcome = {
+      winner: 0,
+      points: 1,
+      reason: 'Bear-off',
+      kind: 'BEAR_OFF',
+    };
     assert.equal(await store.endMatch(live, 'ada'), true);
-    const restarted = await first.act('ada', { type: 'restart' });
+    const offer = await tables.act('ada', { type: 'restart' });
+    assert.equal(offer.find((event) => event.userId === 'ada')?.message.type, 'rematch');
+    assert.equal((await store.matchForUser('ada'))?.id, live.id);
+    const restarted = await tables.act('basil', { type: 'restart' });
     const update = restarted.find((event) => event.userId === 'ada')?.message;
     assert.equal(update?.type, 'update');
     if (update?.type !== 'update') return;
@@ -245,8 +255,12 @@ test('a finished game stays stored, and the next game is a new match', async () 
     const again = await store.matchForUser('ada');
     assert.notEqual(again?.id, live.id);
     assert.equal(again?.winner, null);
-    const followed = await second.sync();
-    assert.equal(followed.find((event) => event.userId === 'basil')?.message.type, 'update');
+    const followed = await tables.sync();
+    assert.equal(
+      followed.find((event) => event.userId === 'basil'),
+      undefined,
+    );
+    assert.equal(restarted.find((event) => event.userId === 'basil')?.message.type, 'update');
   } finally {
     await store.drop();
   }

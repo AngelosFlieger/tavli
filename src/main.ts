@@ -1,16 +1,22 @@
+import './tokens.css';
 import './style.css';
+import './dialog.css';
+import './settings.css';
+import './auth.css';
 import './gameplay-hud.css';
 import './title.css';
 import './responsive.css';
 import './waiting.css';
 import './draft.css';
 import { preferences } from './ui/preferences';
+import { loadLocalePreference, t, translateDOM } from './ui/i18n';
 import {
   enablePlay,
   enterTable,
   initShell,
   setSearching,
   showNote,
+  showRoom,
   showTitle,
   syncShell,
   type Session,
@@ -25,10 +31,12 @@ import { createWaitingScatter } from './scene/waiting-scatter';
 import { loadModel } from './scene/assets';
 import { createStage } from './scene/stage';
 import { GameController } from './app/game-controller';
+import type { GameState } from './game/session/state';
 import { createGameplayActions } from './app/gameplay-actions';
 import { createOnlineGameFlow } from './app/online-game-flow';
 import { createMatchSession } from './app/match-session';
 import { PlaytestRecorder } from './app/playtest-report';
+import { addHistoryEntry, createHistoryEntry, loadHistory, saveHistory } from './app/history';
 
 const host = document.querySelector<HTMLElement>('#scene')!;
 const boardFrame = document.querySelector<HTMLElement>('#board-frame')!;
@@ -40,9 +48,14 @@ const session: Session = {
   canNewGame: () => false,
   onLocal() {},
   onMultiplayer() {},
+  onCreateRoom() {},
+  onJoinRoom() {},
+  onExitGame() {},
   onSignOut() {},
   playtestReport: () => null,
 };
+loadLocalePreference();
+translateDOM();
 let reconnect = () => {};
 initShell(session);
 initAuthScreen({
@@ -58,7 +71,30 @@ async function start() {
   const stage = await createStage(host, boardFrame);
   const controller = new GameController();
   const playtest = new PlaytestRecorder();
-  controller.setEventSink((events, state) => playtest.record(events, state));
+  let historyMode: 'LOCAL' | 'ONLINE' = 'LOCAL';
+  let historyRecordedFor: GameState | null = null;
+  controller.setEventSink((events, state) => {
+    playtest.record(events, state);
+    if (
+      preferences.history &&
+      state.phase === 'GAME_OVER' &&
+      state.outcome &&
+      historyRecordedFor !== state
+    ) {
+      historyRecordedFor = state;
+      saveHistory(
+        addHistoryEntry(
+          loadHistory(),
+          createHistoryEntry({
+            mode: historyMode,
+            ruleset: state.ruleset,
+            outcome: state.outcome,
+            rounds: state.powerups?.completedRounds ?? 0,
+          }),
+        ),
+      );
+    }
+  });
   let actions: ReturnType<typeof createGameplayActions>;
   let dice: Awaited<ReturnType<typeof createDice>> | undefined;
   const gameplay = await createGameplay(
@@ -74,6 +110,7 @@ async function start() {
       onMove: (sequence) => actions.move(sequence),
       onUndo: () => actions.undo(),
       onRestart: () => actions.restart(),
+      onForfeit: () => actions.forfeit(),
       onRollAbility: (option) => actions.playRollAbility(option),
       onBeforeRollAbility: (target) => actions.playBeforeRollAbility(target),
     },
@@ -151,6 +188,7 @@ async function start() {
     {
       setSearching,
       showNote,
+      showRoom,
       showTitle,
       enterTable,
       signedOut() {
@@ -161,6 +199,7 @@ async function start() {
     connectTable,
   );
   session.onLocal = (selection, seed) => {
+    historyMode = 'LOCAL';
     const accepted = match.startLocal(selection, seed);
     if (!accepted || seed === undefined) {
       playtest.clear();
@@ -174,10 +213,22 @@ async function start() {
     });
   };
   session.onMultiplayer = (selection) => {
+    historyMode = 'ONLINE';
     playtest.clear();
     match.toggleSearch(selection);
   };
+  session.onCreateRoom = (selection) => {
+    historyMode = 'ONLINE';
+    playtest.clear();
+    match.createRoom(selection);
+  };
+  session.onJoinRoom = (code) => {
+    historyMode = 'ONLINE';
+    playtest.clear();
+    match.joinRoom(code);
+  };
   session.playtestReport = () => playtest.snapshot();
+  session.onExitGame = () => match.exitGame();
   session.onSignOut = () => {
     match.signOut();
     void logout();
@@ -198,7 +249,7 @@ async function start() {
 
   stage.canvas.addEventListener('webglcontextlost', (event) => {
     event.preventDefault();
-    status.textContent = 'Graphics connection lost. Reload the page to restore the board.';
+    status.textContent = t('main.graphicsLost');
     status.hidden = false;
   });
 
@@ -218,6 +269,5 @@ async function start() {
 start().catch((error: unknown) => {
   console.error(error);
   status.hidden = false;
-  status.textContent =
-    'The 3D board could not load. Check WebGL support and that public/models/Board.glb is present, then reload.';
+  status.textContent = t('main.boardLoadFailed');
 });

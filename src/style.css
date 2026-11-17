@@ -10,8 +10,8 @@ body {
   overflow: hidden;
 }
 body {
-  background: #0b1427;
-  color: #f1dfb3;
+  background: var(--surface-base);
+  color: var(--ink);
   font-family: Georgia, serif;
 }
 #ambient {
@@ -102,12 +102,12 @@ canvas {
   display: inline-block;
   width: 8px;
   height: 8px;
-  background: #cb354d;
+  background: var(--accent-crimson);
   border-radius: 50%;
   margin-right: 4px;
 }
 .ivory i {
-  background: #f1dfb3;
+  background: var(--ink);
 }
 .versus {
   display: flex;
@@ -126,15 +126,16 @@ canvas {
   position: fixed;
   display: flex;
   gap: 12px;
+  z-index: 4;
 }
 button {
   font-family: Georgia, serif;
   color: #f5e5bc;
   background: #1c2b41;
-  border: 2px solid #cab17d;
-  border-radius: 7px;
+  border: 2px solid var(--line-gold);
+  border-radius: var(--radius-control);
   box-shadow:
-    0 6px #080e1c,
+    0 6px var(--shadow-ink),
     0 7px #79634c;
   cursor: pointer;
   font-weight: bold;
@@ -149,7 +150,7 @@ button:hover:not(:disabled) {
 }
 button:active:not(:disabled) {
   transform: translateY(5px);
-  box-shadow: 0 1px #080e1c;
+  box-shadow: 0 1px var(--shadow-ink);
 }
 button:focus-visible {
   outline: 3px solid #fff1ca;
@@ -167,10 +168,10 @@ footer button {
 }
 footer #roll {
   background: #b52d46;
-  border-color: #f1d89e;
+  border-color: var(--ink);
   box-shadow:
-    0 8px #621c32,
-    0 11px #080e1c;
+    0 8px var(--accent-crimson-deep),
+    0 11px var(--shadow-ink);
   text-shadow: 1px 2px #631d30;
 }
 #roll span {
@@ -181,8 +182,8 @@ footer #roll {
 #roll:active {
   transform: translateY(7px);
   box-shadow:
-    0 1px #621c32,
-    0 4px #080e1c;
+    0 1px var(--accent-crimson-deep),
+    0 4px var(--shadow-ink);
 }
 button:disabled {
   opacity: 0.45;
@@ -202,139 +203,10 @@ button:disabled {
 #status[hidden] {
   display: none;
 }
-dialog {
-  background: #111e33;
-  color: #f0dfb9;
-  border: 2px solid #cab17d;
-  border-radius: 12px;
-  padding: 40px;
-  width: min(510px, 90vw);
-  box-shadow: 10px 12px #060d1d;
-  line-height: 1.6;
-}
-dialog::backdrop {
-  background: #030a18ca;
-  backdrop-filter: blur(6px);
-}
-dialog h2 {
-  font-size: 36px;
-  margin: 0 0 20px;
-}
-dialog p {
-  color: #d2c5a9;
-}
-dialog h3 {
-  margin: 30px 0 10px;
-  color: #efd59e;
-}
-dialog .ability-help {
-  padding-left: 20px;
-}
-dialog .ability-help li {
-  margin: 0 0 12px;
-  color: #d2c5a9;
-}
-dialog .ability-help small {
-  margin-left: 5px;
-  color: #d6af72;
-  font: 9px monospace;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-dialog .eyebrow {
-  font: 10px monospace;
-  color: #d6af72;
-  letter-spacing: 0.2em;
-}
-dialog .note {
-  font: 12px/1.6 monospace;
-  color: #a1adbf;
-  border-top: 1px solid #bc9c6555;
-  padding-top: 18px;
-  margin-top: 25px;
-}
-.close {
-  position: absolute;
-  right: 14px;
-  top: 12px;
-  width: 32px;
-  height: 32px;
-  font-size: 22px;
-  box-shadow: none;
-}
-dialog label {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 15px 0;
-  border-bottom: 1px solid #cab17d33;
-}
 input {
   width: 21px;
   height: 21px;
-  accent-color: #bb354e;
-}
-dialog input[type='text'],
-dialog input[type='email'],
-dialog input[type='password'],
-dialog input[type='url'],
-#auth-screen input {
-  width: min(280px, 52vw);
-  height: auto;
-  padding: 8px 10px;
-  color: #f1dfb3;
-  background: #0c1728;
-  border: 1px solid #cab17d;
-  border-radius: 6px;
-  font: inherit;
-}
-#auth-screen {
-  position: fixed;
-  inset: 0;
-  z-index: 30;
-  display: grid;
-  place-items: center;
-  padding: 24px;
-  background: #070d18ee;
-}
-#auth-screen[hidden] {
-  display: none;
-}
-#auth-form {
-  width: min(420px, 100%);
-  padding: 28px 26px;
-  color: #f1dfb3;
-  background: #10192b;
-  border: 1px solid #cab17d;
-  border-radius: 16px;
-}
-#auth-form label {
-  display: grid;
-  justify-content: stretch;
-  gap: 6px;
-  margin: 14px 0;
-}
-#auth-form label[hidden] {
-  display: none;
-}
-body.auth-pending .sidebar,
-body.signed-out .sidebar,
-body.auth-pending .top-actions,
-body.signed-out .top-actions,
-body.auth-pending footer,
-body.signed-out footer {
-  visibility: hidden;
-}
-.account-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  margin-top: 8px;
-}
-.account-error {
-  min-height: 1.4em;
-  margin: 8px 0;
-  color: #e7a0a8;
+  accent-color: var(--accent-control);
 }
 .still #ambient {
   animation: none;
@@ -444,9 +316,14 @@ footer button {
   right: 22px;
   top: 25px;
 }
+/* Icon-only Rules/Settings buttons: the glyph is centered instead of sitting in a text row. */
 .top-actions button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
   width: 40px;
   height: 38px;
+  padding: 0;
   font-size: 22px;
 }
 footer {
@@ -572,34 +449,6 @@ footer #roll {
   .sidebar {
     left: 5%;
   }
-}
-.match-controls {
-  border-top: 1px solid #cab17d55;
-  margin-top: 20px;
-  padding-top: 15px;
-}
-.match-controls button {
-  padding: 8px 15px;
-  margin-top: 14px;
-}
-
-.playtest-analysis {
-  margin-top: 24px;
-  padding-top: 20px;
-  border-top: 1px solid rgba(215, 189, 136, 0.35);
-}
-
-.playtest-analysis output {
-  display: block;
-  margin-top: 14px;
-  padding: 12px;
-  max-height: 240px;
-  overflow: auto;
-  white-space: pre-wrap;
-  border: 1px solid rgba(215, 189, 136, 0.25);
-  background: rgba(4, 10, 21, 0.55);
-  color: #e5d1a2;
-  font: 12px/1.5 monospace;
 }
 @media (max-width: 1000px) {
   .sidebar {

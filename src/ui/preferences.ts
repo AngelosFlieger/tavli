@@ -1,9 +1,10 @@
-export type PreferenceKey = 'motion' | 'texture' | 'sound';
+export type PreferenceKey = 'motion' | 'texture' | 'sound' | 'history';
 
 export const preferences: Record<PreferenceKey, boolean> = {
   motion: true,
   texture: true,
   sound: true,
+  history: true,
 };
 
 const storageKey = 'plakoto-preferences';
@@ -27,4 +28,9 @@ export function savePreferences() {
   } catch {
     // Ignore quota and private-mode failures; the session still keeps the choice.
   }
+}
+
+/** Reflect the motion preference on the page so CSS can drop transitions and loops. */
+export function applyMotionClass() {
+  document.body.classList.toggle('still', !preferences.motion);
 }

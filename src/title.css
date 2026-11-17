@@ -8,65 +8,45 @@
 #start-screen[hidden] {
   display: none;
 }
+/* The menu owns the vertical rhythm: a single column with one gap keeps the mode
+   buttons evenly spaced and lets the column scroll instead of spilling off-screen. */
 .start-menu {
   position: absolute;
   top: 32%;
+  bottom: max(0.625rem, env(safe-area-inset-bottom, 0px));
   left: 50%;
   transform: translateX(-50%);
   width: min(48vw, 640px);
+  display: flex;
+  flex-direction: column;
+  gap: clamp(9px, 1.35vh, 16px);
+  padding: 0 10px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: #3c4a68 transparent;
   pointer-events: auto;
+}
+/* Keep each row at its natural height and let the column scroll instead of squashing it. */
+.start-menu > * {
+  flex-shrink: 0;
 }
 .ruleset-picker {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 10px;
-  margin: 0 0 20px;
+  margin: 0;
   padding: 9px;
   border: 1px solid #d7bd8888;
-  border-radius: 12px;
+  border-radius: var(--radius-panel);
   background: #09162be8;
-  box-shadow: 0 4px #050c1e;
+  box-shadow: 0 4px var(--shadow-ink);
 }
 
-.playtest-tools {
-  display: grid;
-  grid-template-columns: auto 1fr 1fr;
-  align-items: end;
-  gap: 0.45rem 0.7rem;
-  padding: 0.65rem 0.8rem;
-  border: 1px dashed rgba(244, 190, 79, 0.55);
-  color: var(--cream);
-  font-size: 0.72rem;
-}
-
-.playtest-tools > strong,
-.playtest-tools > small {
-  grid-column: 1 / -1;
-  letter-spacing: 0.08em;
-}
-
-.playtest-tools label {
-  display: grid;
-  gap: 0.2rem;
-}
-
-.playtest-tools select,
-.playtest-tools input {
-  min-width: 0;
-  padding: 0.3rem;
-  border: 1px solid rgba(244, 190, 79, 0.4);
-  background: rgba(4, 10, 21, 0.82);
-  color: inherit;
-}
-
-@media (max-width: 480px) and (max-height: 650px) {
-  .playtest-tools {
-    display: none;
-  }
-}
 .ruleset-picker legend {
   padding: 0 8px;
-  color: #d9bd84;
+  color: var(--ink-gold-soft);
   font: 10px monospace;
   letter-spacing: 0.16em;
   text-transform: uppercase;
@@ -78,7 +58,7 @@
   min-width: 0;
   padding: 9px 12px;
   border: 1px solid #b99d6866;
-  border-radius: 8px;
+  border-radius: var(--radius-card);
   background: #14233a;
   cursor: pointer;
 }
@@ -104,7 +84,7 @@
 }
 .ruleset-picker small {
   margin-top: 2px;
-  color: #aeb8c8;
+  color: var(--ink-subtle);
   font: 10px monospace;
 }
 .ruleset-picker:disabled {
@@ -120,7 +100,7 @@
   font-size: clamp(23px, 3vw, 43px);
   font-style: italic;
   border: 3px solid #e6cb95;
-  border-radius: 14px;
+  border-radius: var(--radius-panel);
   letter-spacing: -0.02em;
 }
 .mode-star {
@@ -132,40 +112,94 @@
   background: linear-gradient(125deg, #f5e3b8, #dac195);
   box-shadow:
     0 7px #a62d46,
-    0 12px #060d1e;
+    0 12px var(--shadow-ink);
   text-shadow: 0 1px #fff2ce;
-  margin-bottom: 23px;
 }
 .local-mode {
   background: linear-gradient(120deg, #4c2439, #16243a);
   box-shadow:
     0 7px #531c33,
-    0 12px #060d1e;
-}
-.start-options {
-  display: flex;
-  justify-content: center;
-  gap: 18px;
-  margin-top: 30px;
+    0 12px var(--shadow-ink);
 }
 .match-note {
-  margin: 22px 0 0;
+  margin: 0;
   text-align: center;
-  color: #f1dfb3;
+  color: var(--ink);
   font: 14px/1.45 monospace;
 }
-.start-options button {
-  font-size: 18px;
-  font-style: italic;
-  min-width: 145px;
-  padding: 12px 22px;
-  background: #111c30;
+.room-panel {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 8px 10px;
+  margin: 0;
+  padding: 10px;
+  border: 1px solid #35415c;
+  border-radius: var(--radius-panel);
+  background: #0b182c;
+  box-shadow: 0 4px var(--shadow-ink);
+  color: var(--ink);
+  font: 14px/1.4 monospace;
+  scroll-margin-block: 8px;
 }
-.start-options span {
-  font-size: 23px;
-  vertical-align: middle;
-  margin-right: 9px;
-  color: #e9cd91;
+.room-panel[hidden] {
+  display: none;
+}
+.room-panel label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--ink-subtle);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.room-panel input {
+  width: 76px;
+  padding: 8px 10px;
+  font: 15px/1 monospace;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  background: var(--surface-base);
+  color: var(--ink);
+  border: 1px solid #35415c;
+  border-radius: var(--radius-control);
+}
+.room-panel button {
+  font-size: 13px;
+  padding: 8px 12px;
+}
+#room-status {
+  flex-basis: 100%;
+  margin: 2px 0 0;
+  text-align: center;
+  color: var(--ink-gold-soft);
+}
+/* On phones the panel stacks as "code" above "create / join" so the pairing stays obvious. */
+@media (max-width: 480px) {
+  .room-panel {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+  .room-panel label {
+    grid-row: 1;
+    grid-column: 1 / -1;
+    justify-self: center;
+  }
+  #room-create {
+    grid-row: 2;
+    grid-column: 1;
+  }
+  #room-join {
+    grid-row: 2;
+    grid-column: 2;
+  }
+  #room-status,
+  #room-cancel {
+    grid-column: 1 / -1;
+  }
 }
 .on-title #board-frame {
   top: 60%;
@@ -198,7 +232,7 @@
   padding: 8px 8px 16px;
   opacity: 1;
   filter: none;
-  box-shadow: 6px 9px #050c1e;
+  box-shadow: 6px 9px var(--shadow-ink);
   border: 3px solid #e3c78e;
   pointer-events: none;
 }
@@ -230,7 +264,6 @@
 }
 .on-title .versus,
 .on-title footer,
-.on-title .top-actions,
 .on-title #dice-result,
 .on-title .game-hud {
   display: none;
@@ -249,7 +282,7 @@
   transform: translateY(6px);
   box-shadow:
     0 1px #641e35,
-    0 4px #060d1e;
+    0 4px var(--shadow-ink);
 }
 .mode-pressed {
   animation: modePress 0.28s ease-out;
@@ -275,35 +308,20 @@ dialog {
     width: min(340px, 78vw);
   }
   .start-menu {
-    width: 70vw;
+    width: 74vw;
   }
   .mode-button {
-    height: 75px;
-    padding: 0 17px;
-    font-size: 24px;
-  }
-  .ruleset-picker {
-    margin-bottom: 16px;
-  }
-  .ruleset-picker label {
-    padding: 8px;
-  }
-  .ruleset-picker strong {
-    font-size: 14px;
-  }
-  .mode-star {
+    height: 52px;
+    padding: 0 12px;
     font-size: 18px;
   }
-  .online-mode {
-    margin-bottom: 20px;
+  .ruleset-picker label {
+    padding: 6px;
   }
-  .start-options {
-    gap: 12px;
-    margin-top: 25px;
+  .ruleset-picker strong {
+    font-size: 12px;
   }
-  .start-options button {
-    min-width: 0;
-    padding: 9px 18px;
+  .mode-star {
     font-size: 16px;
   }
   .on-title .player {
@@ -336,15 +354,6 @@ dialog {
     height: 16vh;
     font-size: 5vh;
   }
-  .online-mode {
-    margin-bottom: 16px;
-  }
-  .start-options {
-    margin-top: 20px;
-  }
-  .start-options button {
-    padding: 8px 18px;
-  }
   .on-title .portrait {
     height: 25vh;
   }
@@ -371,10 +380,10 @@ dialog {
 }
 @media (max-aspect-ratio: 1/1) {
   .on-title .logo {
-    top: 10%;
+    top: 8%;
   }
   .start-menu {
-    top: 34%;
+    top: 27%;
   }
   .on-title #board-frame {
     top: 59%;
@@ -406,13 +415,12 @@ dialog {
   flex-shrink: 0;
   text-align: center;
 }
+/* Rules and Settings icons orbit the fixed top-right nav rather than a text row. */
 .rules-icon {
-  display: inline-block;
+  display: block;
   width: 24px;
   height: 24px;
-  vertical-align: middle;
-  margin-right: 8px;
-  color: #e9cd91;
+  color: var(--ink-gold-soft);
 }
 @media (max-aspect-ratio: 1/1) {
   .on-title .player {
@@ -420,10 +428,6 @@ dialog {
   }
   .mode-button > .mode-star {
     width: 19px;
-  }
-  .rules-icon {
-    width: 21px;
-    height: 21px;
   }
 }
 /* A small, staggered lift preserves the cards' original tilted poses. */

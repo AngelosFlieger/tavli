@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Game } from '../src/game/session/game';
 import { legalMoves } from '../src/game/rules/moves';
-import { sessionMessage } from '../src/game/session/messages';
+import { sessionMessageParts } from '../src/game/session/messages';
 import { initialGameState, type Session } from '../src/game/session/state';
 import { transitionSession, type SessionCommand } from '../src/game/session/transition';
 import type { Phase } from '../src/game/session/phase';
@@ -95,8 +95,12 @@ test('Game facade and pure transition agree across opening, moves, undo and turn
     assert.equal(result.ok, true);
     if (!result.ok) return;
     session = result.session;
-    const message = sessionMessage(session.state, result.events);
-    if (message !== null) session.state.message = message;
+    const parts = sessionMessageParts(session.state, result.events);
+    if (parts) {
+      session.state.message = parts.text;
+      session.state.messageKey = parts.key;
+      session.state.messageParams = parts.params;
+    }
     if (command.type === 'beginRoll') assert.equal(game.beginRoll(), true);
     if (command.type === 'receiveRoll') game.receiveRoll(command.values);
     if (command.type === 'move') assert.ok(game.moveSequence(command.sequence));

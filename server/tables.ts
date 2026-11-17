@@ -1,18 +1,23 @@
-import { randomUUID } from 'node:crypto';
-import { initialPresentedSession } from '../src/game/session/messages';
+import { randomUUID, randomBytes } from 'node:crypto';
+import { initialPresentedSession, sessionMessage } from '../src/game/session/messages';
 import { createLobby } from '../src/net/lobby';
 import { matchKey, rulesForSelection, rulesForState } from '../src/game/variant/rules-context';
 import {
   CLASSIC_SELECTION,
+  type ClientErrorCode,
   type Command,
   type MatchSelection,
   type ServerMessage,
   type Update,
 } from '../src/net/messages';
 import type { RulesContext } from '../src/game/variant/types';
+import type { Outcome } from '../src/game/rules/position';
+import { clockExpired, DISABLED_CLOCK, startClock, type ClockConfig } from '../src/game/clock';
 import type { Store, StoredMatch, StoredRevisionUpdate } from './store';
 
 const reconnectGraceMs = 45_000;
+const noShowGraceMs = 20_000;
+const roomTtlMs = 10 * 60_000;
 
 export type TableEvent = { userId: string; message: ServerMessage };
 
@@ -23,13 +28,22 @@ export function createTables(
   now = () => Date.now(),
   randomInt: (maximum: number) => number = (maximum) =>
     Math.min(maximum - 1, Math.floor(((rollDie() - 1) / 6) * maximum)),
+  clockConfig: ClockConfig = DISABLED_CLOCK,
 ) {
-  const lobby = createLobby(rollDie, randomInt);
+  const lobby = createLobby(rollDie, randomInt, clockConfig, now);
   const revision = new Map<string, number>();
   const away = new Map<string, [number | null, number | null]>();
   const waiting = new Set<string>();
   const online = new Set<string>();
   const seen = new Map<string, string>();
+  const rematchOffers = new Map<string, Set<string>>();
+  const rooms = new Map<string, { hostId: string; selection: MatchSelection; createdAt: number }>();
+
+  function freshSession(rules: RulesContext) {
+    const session = initialPresentedSession(rules);
+    session.state.clock = startClock(clockConfig, session.state.phase, now());
+    return session;
+  }
 
   function adopt(match: StoredMatch) {
     const loaded = lobby.snapshot(match.seats[0]) ?? lobby.snapshot(match.seats[1]);
@@ -49,6 +63,10 @@ export function createTables(
     return [{ userId, message }];
   }
 
+  function fail(userId: string, code: ClientErrorCode) {
+    return emit(userId, `error:${code}:${now()}`, { type: 'error', code });
+  }
+
   async function pull(userId: string) {
     const match = await store.matchForUser(userId);
     if (!match) {
@@ -59,22 +77,112 @@ export function createTables(
     return match;
   }
 
+  function roomCode(): string {
+    return randomBytes(3).toString('hex').toUpperCase();
+  }
+
+  function pruneRooms() {
+    const cutoff = now() - roomTtlMs;
+    for (const [code, room] of rooms) if (room.createdAt < cutoff) rooms.delete(code);
+  }
+
+  function leaveRooms(userId: string) {
+    for (const [code, room] of rooms) if (room.hostId === userId) rooms.delete(code);
+  }
+
+  async function pairRoom(hostId: string, joinerId: string, selection: MatchSelection) {
+    await store.leaveQueue(hostId);
+    await store.leaveQueue(joinerId);
+    waiting.delete(hostId);
+    waiting.delete(joinerId);
+    const rules = rulesForSelection(selection);
+    const match: StoredMatch = {
+      id: randomUUID(),
+      seats: [hostId, joinerId],
+      session: freshSession(rules),
+      variantConfig: rules.variantConfig,
+      lastUpdate: null,
+      revision: 0,
+      away: [online.has(hostId) ? null : now(), online.has(joinerId) ? null : now()],
+      connected: [online.has(hostId), online.has(joinerId)],
+      endedAt: null,
+      winner: null,
+    };
+    if (!(await store.insertMatch(match))) return fail(hostId, 'INTERNAL');
+    adopt(match);
+    const events: TableEvent[] = [];
+    for (const id of match.seats) {
+      const seat = lobby.seat(id);
+      if (!seat) continue;
+      events.push(
+        ...emit(id, `${match.id}:0`, {
+          type: 'matched',
+          you: seat.you,
+          state: seat.state,
+          variantConfig: rules.variantConfig,
+        }),
+      );
+    }
+    return events;
+  }
+
   return {
+    /** Clears volatile matchmaking state and starts a reconnect grace for every live match. */
+    async start() {
+      await store.clearQueue();
+      for (const live of await store.liveMatches()) {
+        let match = live;
+        for (let attempt = 0; attempt < 3; attempt++) {
+          const away: [number | null, number | null] = [now(), now()];
+          if (await store.markAway({ ...match, away })) break;
+          match = (await store.match(live.id)) ?? match;
+          if (match.endedAt !== null) break;
+        }
+        if (match.endedAt === null) {
+          const clock = match.session.state.clock;
+          if (clock?.running)
+            match = {
+              ...match,
+              session: {
+                ...match.session,
+                state: {
+                  ...match.session.state,
+                  clock: { remainingMs: clock.remainingMs, deadline: null, running: false },
+                },
+              },
+            };
+          adopt(match);
+          lobby.pause(match.seats[0]);
+        }
+      }
+    },
     async connect(userId: string) {
       online.add(userId);
       const found = await store.matchForUser(userId);
-      if (!found) return [];
+      if (!found) {
+        if (lobby.seat(userId)) lobby.leave(userId);
+        if (await store.queued(userId)) {
+          waiting.add(userId);
+          return emit(userId, `waiting:${userId}`, { type: 'waiting' });
+        }
+        return [];
+      }
       waiting.delete(userId);
       const index = found.seats[0] === userId ? 0 : 1;
       let match = found;
+      const connected: [boolean, boolean] = [...found.connected];
+      connected[index] = true;
+      await store.setConnected(found.id, index as 0 | 1, true);
+      match = { ...found, connected };
       if (found.away[index] !== null) {
         const nextAway: [number | null, number | null] = [...found.away];
         nextAway[index] = null;
-        if (await store.saveMatch({ ...found, away: nextAway }))
-          match = { ...found, revision: found.revision + 1, away: nextAway };
-        else match = (await store.matchForUser(userId)) ?? found;
+        if (await store.saveMatch({ ...match, away: nextAway }))
+          match = { ...match, revision: found.revision + 1, away: nextAway };
+        else match = (await store.matchForUser(userId)) ?? match;
       }
       adopt(match);
+      lobby.resume(userId);
       const seat = lobby.seat(userId);
       if (!seat) return [];
       return emit(userId, `${match.id}:${match.revision}`, {
@@ -97,11 +205,12 @@ export function createTables(
       const match: StoredMatch = {
         id: randomUUID(),
         seats: [opponent, userId],
-        session: initialPresentedSession(rules),
+        session: freshSession(rules),
         variantConfig: rules.variantConfig,
         lastUpdate: null,
         revision: 0,
-        away: [null, null],
+        away: [online.has(opponent) ? null : now(), online.has(userId) ? null : now()],
+        connected: [online.has(opponent), online.has(userId)],
         endedAt: null,
         winner: null,
       };
@@ -129,21 +238,61 @@ export function createTables(
       }
       return events;
     },
+    async createRoom(userId: string, selection: MatchSelection = CLASSIC_SELECTION) {
+      if (await pull(userId)) return this.connect(userId);
+      pruneRooms();
+      leaveRooms(userId);
+      const code = roomCode();
+      rooms.set(code, { hostId: userId, selection, createdAt: now() });
+      return emit(userId, `room:${code}`, { type: 'room', code });
+    },
+    async joinRoom(userId: string, code: string) {
+      if (await pull(userId)) return this.connect(userId);
+      pruneRooms();
+      const room = rooms.get(code.toUpperCase());
+      if (!room) return fail(userId, 'ROOM_NOT_FOUND');
+      if (room.hostId === userId) return fail(userId, 'ROOM_OWNED');
+      rooms.delete(code);
+      return pairRoom(room.hostId, userId, room.selection);
+    },
     async act(userId: string, command: Command) {
       for (let attempt = 0; attempt < 3; attempt++) {
         const match = await pull(userId);
-        if (!match) return [];
-        if (
-          command.type === 'restart' &&
-          (match.endedAt !== null || match.session.state.phase === 'GAME_OVER')
-        ) {
-          if (match.endedAt === null && !(await store.endMatch(match, winnerOf(match)))) continue;
+        if (!match) return fail(userId, 'NOT_FOUND');
+        if (match.endedAt !== null || match.session.state.phase === 'GAME_OVER') {
+          if (command.type !== 'restart') return fail(userId, 'MATCH_ENDED');
+          const offers = rematchOffers.get(match.id) ?? new Set<string>();
+          offers.add(userId);
+          rematchOffers.set(match.id, offers);
+          if (offers.size < 2) {
+            const events: TableEvent[] = [];
+            for (const id of match.seats) {
+              events.push(
+                ...emit(id, `rematch:${match.id}:offered`, {
+                  type: 'rematch',
+                  status: 'OFFERED',
+                }),
+              );
+            }
+            return events;
+          }
+          rematchOffers.delete(match.id);
           return rematch(match);
+        }
+        if (command.type === 'restart') return fail(userId, 'MATCH_NOT_FINISHED');
+        if (command.type === 'forfeit') {
+          const winner: 0 | 1 = match.seats[0] === userId ? 1 : 0;
+          return finishMatch(match, {
+            winner,
+            points: 1,
+            reason: 'Opponent resigned',
+            kind: 'RESIGNATION',
+          });
         }
         const before = JSON.stringify(lobby.snapshot(userId)?.session);
         const result = lobby.act(userId, command);
         const after = lobby.snapshot(userId);
-        if (!result || !after) return [];
+        if (!result || !after) return fail(userId, 'INVALID_COMMAND');
         if (JSON.stringify(after.session) === before)
           return result.to
             .filter((id) => online.has(id))
@@ -169,33 +318,36 @@ export function createTables(
     },
     async cancel(userId: string) {
       waiting.delete(userId);
+      leaveRooms(userId);
       await store.leaveQueue(userId);
       const match = await store.matchForUser(userId);
       if (!match) {
         if (lobby.seat(userId)) lobby.leave(userId);
         return [];
       }
+      const events: TableEvent[] = [];
       if (match.endedAt === null) {
-        let current = match;
-        for (let attempt = 0; attempt < 3 && current.endedAt === null; attempt++) {
-          const winner =
-            current.session.state.phase === 'GAME_OVER'
-              ? winnerOf(current)
-              : current.seats[current.seats[0] === userId ? 1 : 0];
-          if (await store.endMatch(current, winner)) break;
-          const again = await store.match(current.id);
-          if (!again) break;
-          current = again;
-        }
+        const winner: 0 | 1 = match.seats[0] === userId ? 1 : 0;
+        events.push(
+          ...(await finishMatch(match, {
+            winner,
+            points: 1,
+            reason: 'Opponent left',
+            kind: 'ABANDONED',
+          })),
+        );
       }
       await store.release(match.id);
       lobby.leave(userId);
+      rematchOffers.delete(match.id);
       seen.set(userId, `left:${match.id}`);
       const opponent = match.seats[match.seats[0] === userId ? 1 : 0];
-      return emit(opponent, `left:${match.id}`, { type: 'left' });
+      events.push(...emit(opponent, `left:${match.id}`, { type: 'left' }));
+      return events;
     },
     async disconnect(userId: string) {
       online.delete(userId);
+      leaveRooms(userId);
       if (!lobby.seat(userId)) {
         waiting.delete(userId);
         await store.leaveQueue(userId);
@@ -207,8 +359,17 @@ export function createTables(
           if (lobby.seat(userId)) lobby.leave(userId);
           return;
         }
-        adopt(match);
         const index = match.seats[0] === userId ? 0 : 1;
+        adopt(match);
+        lobby.pause(userId);
+        if (match.endedAt !== null) {
+          await store.release(match.id);
+          lobby.leave(userId);
+          rematchOffers.delete(match.id);
+          const opponent = match.seats[index === 0 ? 1 : 0];
+          void emit(opponent, `left:${match.id}`, { type: 'left' });
+          return;
+        }
         const nextAway: [number | null, number | null] = [...match.away];
         nextAway[index] = now();
         if (!(await store.markAway({ ...match, away: nextAway }))) continue;
@@ -219,11 +380,55 @@ export function createTables(
     },
     async sync() {
       const events: TableEvent[] = [];
-      for (const { match, released } of await store.expireAway(now() - reconnectGraceMs)) {
-        for (const id of released) {
-          if (lobby.snapshot(id)?.id === match.id) lobby.leave(id);
-          events.push(...emit(id, `left:${match.id}`, { type: 'left' }));
-        }
+      const current = now();
+      const timed = new Set<string>();
+      for (const userId of online) {
+        const seat = lobby.seat(userId);
+        if (!seat || !clockExpired(seat.state.clock, current)) continue;
+        const match = await store.matchForUser(userId);
+        if (!match || timed.has(match.id) || match.endedAt !== null) continue;
+        timed.add(match.id);
+        if (seat.state.active !== seat.you) continue;
+        const winner: 0 | 1 = seat.you === 0 ? 1 : 0;
+        events.push(
+          ...(await finishMatch(match, {
+            winner,
+            points: 1,
+            reason: 'Turn time expired',
+            kind: 'TIMEOUT',
+          })),
+        );
+      }
+      for (const { match, expired } of await store.staleMatches(
+        current - reconnectGraceMs,
+        current - noShowGraceMs,
+      )) {
+        if (match.endedAt !== null) continue;
+        const both = expired[0] && expired[1];
+        const winner: 0 | 1 | null = both ? null : expired[0] ? 1 : 0;
+        const loser = both ? null : expired[0] ? 0 : 1;
+        const noShow = loser !== null && !match.connected[loser] && match.away[loser] !== null;
+        events.push(
+          ...(await finishMatch(
+            match,
+            {
+              winner,
+              points: both ? 0 : 1,
+              reason: both
+                ? 'Both players left'
+                : noShow
+                  ? 'Opponent did not return'
+                  : 'Opponent disconnected',
+              kind: both ? 'ABANDONED' : noShow ? 'NO_SHOW' : 'DISCONNECT',
+            },
+            true,
+          )),
+        );
+        if (both)
+          for (const id of match.seats) {
+            if (lobby.snapshot(id)?.id === match.id) lobby.leave(id);
+            events.push(...emit(id, `left:${match.id}`, { type: 'left' }));
+          }
       }
       for (const userId of online) events.push(...(await watch(userId)));
       return events;
@@ -283,7 +488,7 @@ export function createTables(
     match: StoredMatch,
     update: Update,
   ): StoredMatch {
-    const currentRevision = revision.get(after.id) ?? match.revision;
+    const currentRevision = Math.max(revision.get(after.id) ?? 0, match.revision);
     return {
       id: after.id,
       seats: [after.ids[0], after.ids[1]],
@@ -292,6 +497,7 @@ export function createTables(
       lastUpdate: revisionUpdate(currentRevision + 1, update),
       revision: currentRevision,
       away: away.get(after.id) ?? match.away,
+      connected: match.connected,
       endedAt: match.endedAt,
       winner: match.winner,
     };
@@ -302,16 +508,71 @@ export function createTables(
     return winner == null ? null : match.seats[winner];
   }
 
+  async function finishMatch(
+    match: StoredMatch,
+    outcome: Outcome,
+    release = false,
+  ): Promise<TableEvent[]> {
+    const ended = lobby.end(match.seats[0], outcome) ?? lobby.end(match.seats[1], outcome);
+    const fallbackEvents = [{ type: 'GameEnded' as const, outcome }];
+    const fallbackState = {
+      ...structuredClone(match.session.state),
+      phase: 'GAME_OVER' as const,
+      outcome: structuredClone(outcome),
+      message: sessionMessage(match.session.state, fallbackEvents) ?? outcome.reason,
+    };
+    const update: Update = ended
+      ? { ...ended, resetDice: true }
+      : {
+          state: fallbackState,
+          canUndo: false,
+          events: fallbackEvents,
+          resetDice: true,
+        };
+    const session = ended
+      ? (lobby.snapshot(match.seats[0])?.session ?? { state: fallbackState, history: [] })
+      : { state: fallbackState, history: [] };
+    const currentRevision = Math.max(revision.get(match.id) ?? 0, match.revision);
+    const stored: StoredMatch = {
+      ...match,
+      session,
+      lastUpdate: revisionUpdate(currentRevision + 1, update),
+      revision: currentRevision,
+    };
+    if (
+      !(await store.endMatch(stored, outcome.winner === null ? null : match.seats[outcome.winner]))
+    )
+      return fail(match.seats[0], 'INTERNAL');
+    const next = currentRevision + 1;
+    revision.set(match.id, next);
+    rematchOffers.delete(match.id);
+    if (release) await store.release(match.id);
+    const token = `${match.id}:${next}`;
+    const events: TableEvent[] = [];
+    for (const id of match.seats) {
+      if (!online.has(id) || seen.get(id) === token) continue;
+      seen.set(id, token);
+      events.push({ userId: id, message: { type: 'update', ...update } });
+    }
+    return events;
+  }
+
   async function rematch(match: StoredMatch): Promise<TableEvent[]> {
+    if (match.endedAt === null && !(await store.endMatch(match, winnerOf(match)))) {
+      const live = await store.match(match.id);
+      if (!live || live.endedAt === null) return fail(match.seats[0], 'INTERNAL');
+      match = live;
+    }
     const rules = rulesForMatch(match);
     const next: StoredMatch = {
       id: randomUUID(),
       seats: match.seats,
-      session: initialPresentedSession(rules),
+      session: freshSession(rules),
       variantConfig: rules.variantConfig,
       lastUpdate: null,
       revision: 0,
       away: [null, null],
+      connected: [...match.connected],
       endedAt: null,
       winner: null,
     };

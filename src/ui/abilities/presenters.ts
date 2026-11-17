@@ -2,6 +2,7 @@ import type { GameState } from '../../game/session/state';
 import type { Player } from '../../game/rules/position';
 import { opportunistFocus, quartermasterCooldown } from '../../game/variant/passives/policy';
 import type { AbilityId, ResolvedVariantConfig, RollAbilityOption } from '../../game/variant/types';
+import { t } from '../i18n';
 
 type AbilityPresenter = Readonly<{
   counter?: (state: GameState, player: Player, config: ResolvedVariantConfig) => string | null;
@@ -20,9 +21,12 @@ export const abilityPresenters: Readonly<Record<AbilityId, AbilityPresenter>> = 
   jinx: {},
   clearSkies: {},
   recast: {
-    rollPrompt: () => 'Click the die you want to reroll',
+    rollPrompt: () => t('ability.recast.prompt'),
     rollOption: (state, option) =>
-      `Reroll die ${option.target.index + 1} · ${state.roll[option.target.index]}`,
+      t('ability.recast.option', {
+        die: option.target.index + 1,
+        value: state.roll[option.target.index],
+      }),
     directDieSelection: true,
   },
   nudge: {
@@ -33,13 +37,16 @@ export const abilityPresenters: Readonly<Record<AbilityId, AbilityPresenter>> = 
   quartermaster: {
     counter: (state, player) => {
       const cooldown = quartermasterCooldown(state.powerups!, player);
-      return cooldown ? `Cooldown ${cooldown}` : null;
+      return cooldown ? t('ability.cooldown', { count: cooldown }) : null;
     },
   },
   homeGuard: {},
   opportunist: {
     counter: (state, player, config) =>
-      `Focus ${opportunistFocus(state.powerups!, player)}/${config.abilities.opportunist.focusCap}`,
+      t('ability.focus', {
+        focus: opportunistFocus(state.powerups!, player),
+        cap: config.abilities.opportunist.focusCap,
+      }),
     rollOption: (state, option, config) =>
       adjustedDieLabel(state, option, config.abilities.opportunist.focusAdjustment),
   },
@@ -55,7 +62,7 @@ export function abilityCounterText(
 }
 
 export function rollAbilityPrompt(abilityId: AbilityId, name: string): string {
-  return abilityPresenters[abilityId].rollPrompt?.(name) ?? `Choose how to use ${name}`;
+  return abilityPresenters[abilityId].rollPrompt?.(name) ?? t('ability.chooseUse', { name });
 }
 
 export function rollAbilityOptionLabel(
@@ -66,7 +73,10 @@ export function rollAbilityOptionLabel(
 ): string {
   return (
     abilityPresenters[abilityId].rollOption?.(state, option, config) ??
-    `Die ${option.target.index + 1} · ${state.roll[option.target.index]}`
+    t('ability.dieOption', {
+      die: option.target.index + 1,
+      value: state.roll[option.target.index],
+    })
   );
 }
 
@@ -77,5 +87,9 @@ export function usesDirectDieSelection(abilityId: AbilityId): boolean {
 function adjustedDieLabel(state: GameState, option: RollAbilityOption, adjustment: number): string {
   const before = state.roll[option.target.index];
   const after = before + (option.option === 'INCREASE' ? adjustment : -adjustment);
-  return `Die ${option.target.index + 1} · ${before} → ${after}`;
+  return t('ability.dieAdjusted', {
+    die: option.target.index + 1,
+    before,
+    after,
+  });
 }
