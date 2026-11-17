@@ -171,12 +171,12 @@
   footer .secondary:first-child::before {
     content: '↶';
     font-size: 28px;
-    color: #d34459;
+    color: var(--accent-rose);
   }
   footer .secondary:last-child::before {
     content: '→';
     font-size: 27px;
-    color: #d34459;
+    color: var(--accent-rose);
   }
   footer #roll,
   footer #roll[aria-label*='opening'] {
@@ -280,7 +280,7 @@
   display: block;
   width: 24px;
   height: 24px;
-  color: #e9cd91;
+  color: var(--ink-gold-soft);
 }
 @media (min-aspect-ratio: 1/1) {
   .logo {

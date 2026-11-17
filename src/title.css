@@ -39,14 +39,14 @@
   margin: 0;
   padding: 9px;
   border: 1px solid #d7bd8888;
-  border-radius: 12px;
+  border-radius: var(--radius-panel);
   background: #09162be8;
-  box-shadow: 0 4px #050c1e;
+  box-shadow: 0 4px var(--shadow-ink);
 }
 
 .ruleset-picker legend {
   padding: 0 8px;
-  color: #d9bd84;
+  color: var(--ink-gold-soft);
   font: 10px monospace;
   letter-spacing: 0.16em;
   text-transform: uppercase;
@@ -58,7 +58,7 @@
   min-width: 0;
   padding: 9px 12px;
   border: 1px solid #b99d6866;
-  border-radius: 8px;
+  border-radius: var(--radius-card);
   background: #14233a;
   cursor: pointer;
 }
@@ -84,7 +84,7 @@
 }
 .ruleset-picker small {
   margin-top: 2px;
-  color: #aeb8c8;
+  color: var(--ink-subtle);
   font: 10px monospace;
 }
 .ruleset-picker:disabled {
@@ -100,7 +100,7 @@
   font-size: clamp(23px, 3vw, 43px);
   font-style: italic;
   border: 3px solid #e6cb95;
-  border-radius: 14px;
+  border-radius: var(--radius-panel);
   letter-spacing: -0.02em;
 }
 .mode-star {
@@ -112,19 +112,19 @@
   background: linear-gradient(125deg, #f5e3b8, #dac195);
   box-shadow:
     0 7px #a62d46,
-    0 12px #060d1e;
+    0 12px var(--shadow-ink);
   text-shadow: 0 1px #fff2ce;
 }
 .local-mode {
   background: linear-gradient(120deg, #4c2439, #16243a);
   box-shadow:
     0 7px #531c33,
-    0 12px #060d1e;
+    0 12px var(--shadow-ink);
 }
 .match-note {
   margin: 0;
   text-align: center;
-  color: #f1dfb3;
+  color: var(--ink);
   font: 14px/1.45 monospace;
 }
 .room-panel {
@@ -136,10 +136,10 @@
   margin: 0;
   padding: 10px;
   border: 1px solid #35415c;
-  border-radius: 12px;
+  border-radius: var(--radius-panel);
   background: #0b182c;
-  box-shadow: 0 4px #050c1e;
-  color: #f1dfb3;
+  box-shadow: 0 4px var(--shadow-ink);
+  color: var(--ink);
   font: 14px/1.4 monospace;
   scroll-margin-block: 8px;
 }
@@ -150,7 +150,7 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  color: #aeb8c8;
+  color: var(--ink-subtle);
   font-size: 11px;
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -161,10 +161,10 @@
   font: 15px/1 monospace;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  background: #0b1427;
-  color: #f1dfb3;
+  background: var(--surface-base);
+  color: var(--ink);
   border: 1px solid #35415c;
-  border-radius: 6px;
+  border-radius: var(--radius-control);
 }
 .room-panel button {
   font-size: 13px;
@@ -174,7 +174,7 @@
   flex-basis: 100%;
   margin: 2px 0 0;
   text-align: center;
-  color: #e9cd91;
+  color: var(--ink-gold-soft);
 }
 /* On phones the panel stacks as "code" above "create / join" so the pairing stays obvious. */
 @media (max-width: 480px) {
@@ -232,7 +232,7 @@
   padding: 8px 8px 16px;
   opacity: 1;
   filter: none;
-  box-shadow: 6px 9px #050c1e;
+  box-shadow: 6px 9px var(--shadow-ink);
   border: 3px solid #e3c78e;
   pointer-events: none;
 }
@@ -282,7 +282,7 @@
   transform: translateY(6px);
   box-shadow:
     0 1px #641e35,
-    0 4px #060d1e;
+    0 4px var(--shadow-ink);
 }
 .mode-pressed {
   animation: modePress 0.28s ease-out;
@@ -420,7 +420,7 @@ dialog {
   display: block;
   width: 24px;
   height: 24px;
-  color: #e9cd91;
+  color: var(--ink-gold-soft);
 }
 @media (max-aspect-ratio: 1/1) {
   .on-title .player {

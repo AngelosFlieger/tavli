@@ -29,3 +29,8 @@ export function savePreferences() {
     // Ignore quota and private-mode failures; the session still keeps the choice.
   }
 }
+
+/** Reflect the motion preference on the page so CSS can drop transitions and loops. */
+export function applyMotionClass() {
+  document.body.classList.toggle('still', !preferences.motion);
+}

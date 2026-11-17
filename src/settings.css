@@ -1,0 +1,76 @@
+/* Settings-panel composition: action rows, the development balance card, and report analysis. */
+.match-controls {
+  border-top: 1px solid var(--line-gold-soft);
+  margin-top: 20px;
+  padding-top: 15px;
+}
+.match-controls button {
+  padding: 8px 15px;
+  margin-top: 14px;
+}
+
+/* Development-only balance card inside Settings: profile and seed for reproducible local games. */
+.playtest-tools {
+  display: grid;
+  gap: 2px;
+  margin-top: 24px;
+  padding: 4px 14px 14px;
+  border: 1px dashed rgba(244, 190, 79, 0.5);
+  border-radius: var(--radius-card);
+  color: var(--ink);
+  font: 13px/1.4 monospace;
+}
+
+.playtest-tools > strong {
+  margin: 14px 0 4px;
+  color: var(--ink-gold-soft);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.playtest-tools label {
+  padding: 10px 0;
+}
+
+.playtest-tools small {
+  color: var(--ink-subtle);
+  line-height: 1.35;
+}
+
+.playtest-tools select,
+.playtest-tools input {
+  width: auto;
+  max-width: 68%;
+  min-width: 0;
+  height: auto;
+  padding: 6px 8px;
+  border: 1px solid rgba(244, 190, 79, 0.45);
+  border-radius: var(--radius-control);
+  background: rgba(4, 10, 21, 0.82);
+  color: inherit;
+  font: inherit;
+}
+
+.playtest-tools input {
+  min-width: 11ch;
+}
+
+.playtest-analysis {
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px solid rgba(215, 189, 136, 0.35);
+}
+
+.playtest-analysis output {
+  display: block;
+  margin-top: 14px;
+  padding: 12px;
+  max-height: 240px;
+  overflow: auto;
+  white-space: pre-wrap;
+  border: 1px solid rgba(215, 189, 136, 0.25);
+  background: rgba(4, 10, 21, 0.55);
+  color: #e5d1a2;
+  font: 12px/1.5 monospace;
+}
