@@ -4,6 +4,7 @@ import './title.css';
 import './responsive.css';
 import './waiting.css';
 import './draft.css';
+import './water-preview.css';
 import { preferences } from './ui/preferences';
 import {
   enablePlay,
@@ -24,6 +25,8 @@ import { createStartScatter } from './scene/start-scatter';
 import { createWaitingScatter } from './scene/waiting-scatter';
 import { loadModel } from './scene/assets';
 import { createStage } from './scene/stage';
+import { createWaterSweep } from './scene/water-sweep';
+import { createWaterPreview } from './ui/water-preview';
 import { GameController } from './app/game-controller';
 import { createGameplayActions } from './app/gameplay-actions';
 import { createOnlineGameFlow } from './app/online-game-flow';
@@ -56,6 +59,11 @@ void restoreSession().then((signedIn) => {
 
 async function start() {
   const stage = await createStage(host, boardFrame);
+  const water = createWaterPreview(
+    createWaterSweep(stage.root, stage.center, stage.layout),
+    stage.canvas,
+    reducedMotion,
+  );
   const controller = new GameController();
   const playtest = new PlaytestRecorder();
   controller.setEventSink((events, state) => playtest.record(events, state));
@@ -209,6 +217,7 @@ async function start() {
     last = now;
     if (document.hidden) return;
     if (!reducedMotion.matches && preferences.motion) elapsed += dt;
+    water.update(dt);
     stage.render(elapsed, !reducedMotion.matches && preferences.motion, preferences.texture, dt);
     dice!.update(dt);
     gameplay.update(dt);

@@ -1,0 +1,45 @@
+/* Temporary VFX test control, separate from the turn buttons and ability inventory. */
+#test-water {
+  position: fixed;
+  z-index: 9;
+  right: max(16px, env(safe-area-inset-right));
+  top: 84px;
+  min-height: 42px;
+  padding: 8px 12px;
+  border: 2px solid #9ce8d7;
+  border-radius: 6px;
+  background: #16475c;
+  color: #fff0c7;
+  box-shadow:
+    0 4px #102936,
+    0 6px #080e1c;
+  font: 700 11px monospace;
+  letter-spacing: 0.04em;
+}
+#test-water::before {
+  content: '≋';
+  margin-right: 7px;
+  color: #83efe1;
+  font-size: 18px;
+  vertical-align: -1px;
+}
+#test-water:active {
+  transform: translateY(3px);
+  box-shadow: 0 1px #102936;
+}
+#test-water:disabled {
+  opacity: 0.5;
+}
+.on-title #test-water,
+.signed-out #test-water,
+.auth-pending #test-water {
+  display: none;
+}
+@media (max-height: 500px) and (orientation: landscape) {
+  #test-water {
+    top: 68px;
+    right: 10px;
+    padding: 6px 8px;
+    font-size: 10px;
+  }
+}
