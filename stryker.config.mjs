@@ -13,9 +13,12 @@ export default {
   },
   coverageAnalysis: 'off',
   concurrency: 4,
-  reporters: ['clear-text', 'progress', 'html'],
+  reporters: ['clear-text', 'progress', 'html', 'json'],
   htmlReporter: {
     fileName: 'reports/mutation/mutation.html',
+  },
+  jsonReporter: {
+    fileName: 'reports/mutation/mutation.json',
   },
   thresholds: {
     high: 90,

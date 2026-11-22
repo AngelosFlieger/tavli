@@ -62,7 +62,7 @@ The ability draft UI presents the final decisive authoritative order attempt onc
 
 ## Development commands
 
-Node.js 22.12+ is required. Node 26 LTS is the recommended development runtime and the CI baseline.
+Node.js 24.11+ is required. Node 26 LTS is the recommended development runtime and the primary CI baseline; verification also runs on the minimum supported release.
 Run `npm ci` once, then:
 
 | Command                     | Effect                                                                                                                                   |

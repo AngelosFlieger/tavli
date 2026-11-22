@@ -1,5 +1,9 @@
 # Tavli
 
+[![CI](https://github.com/AngelosFlieger/tavli/actions/workflows/ci.yml/badge.svg?branch=main&event=push)](https://github.com/AngelosFlieger/tavli/actions/workflows/ci.yml)
+[![Mutation testing](https://github.com/AngelosFlieger/tavli/actions/workflows/mutation.yml/badge.svg?branch=main&event=push)](https://github.com/AngelosFlieger/tavli/actions/workflows/mutation.yml)
+[![Security](https://github.com/AngelosFlieger/tavli/actions/workflows/security.yml/badge.svg?branch=main&event=push)](https://github.com/AngelosFlieger/tavli/actions/workflows/security.yml)
+
 Two-player [Plakoto](https://en.wikipedia.org/wiki/Plakoto). Three.js, TypeScript, and Vite.
 
 The title screen offers two rulesets: core Plakoto and a configurable Powerups mode. Powerups has authoritative drafts, public inventories, six initial expendable powers (Frost Seal, Bastion, Jinx, Clear Skies, Recast, and Nudge), and four passives (Loaded Knuckles, Quartermaster, Home Guard, and Opportunist). See the [game specification](docs/game-spec.md), [powerups implementation plan](docs/powerups-plan.md), [ability catalog](docs/ability-catalog.md), [architecture map](docs/architecture.md), [refactor plan](docs/refactor-plan.md), and [agent guidelines](AGENTS.md) for the current behavior, proposals, and development conventions.
@@ -8,7 +12,7 @@ Ability inventories appear as overlapping cards beside each player. Select a car
 
 ## Run
 
-Node.js 22.12+ is required; Node 26 LTS is recommended and used by CI.
+Node.js 24.11+ is required; Node 26 LTS is recommended and used by CI.
 
 ```sh
 npm ci
@@ -35,7 +39,7 @@ npm start          # serve dist/ and the game server on port 3000
 npm run format:check
 ```
 
-GitHub Actions runs the type, coverage, lint, formatting, build, and browser checks. Coverage must stay above 89% of lines, 79% of branches, and 87% of functions across loaded `src` and `server` modules. A separate path-scoped CI job mutation-tests changes to pure movement, position, outcome, opening authority, and their variant policies. It enforces an 80% floor against an established baseline above 85%, has a ten-minute timeout, and uploads its HTML report when it fails. Mutation analysis remains outside the fast local `check` loop. The command runner does a fresh run instead of reusing incremental results, because it cannot safely attribute changed tests to individual mutants. The browser smoke test finds Chrome in the common Linux locations. Set `PLAKOTO_CHROME_PATH` when using another compatible executable. Both smoke variants log elapsed seconds per stage, pick a free port pair so leftover servers never block a run, and `npm run test:browser:headed` shows the browser window at full resolution.
+GitHub Actions runs the type, coverage, lint, formatting, build, and browser checks on the minimum Node 24.11 runtime and the recommended Node 26 runtime. Coverage must stay above 89% of lines, 79% of branches, and 87% of functions across loaded `src` and `server` modules; each verification job publishes the measured percentages in its GitHub summary. A separate CI job mutation-tests relevant changes to pure movement, position, outcome, opening authority, and their variant policies, while completing successfully as skipped for unrelated changes so it can safely be required. It enforces an 80% floor against an established baseline above 85%, publishes the measured score, has a ten-minute timeout, and uploads its HTML and JSON reports when it fails. Mutation analysis remains outside the fast local `check` loop. Security CI runs CodeQL over TypeScript and workflow files, audits the current lockfile weekly, and rejects pull requests that introduce dependencies with moderate-or-higher known vulnerabilities. The browser smoke test finds Chrome in the common Linux locations. Set `PLAKOTO_CHROME_PATH` when using another compatible executable. Both smoke variants log elapsed seconds per stage, pick a free port pair so leftover servers never block a run, and `npm run test:browser:headed` shows the browser window at full resolution.
 
 Development builds also show local balance-playtest controls in Settings. Leave the seed blank for fresh cryptographic randomness on every new game, or enter an unsigned 32-bit seed when a balance run must be reproducible. The same profile and explicit seed reproduce dice, draft offers/order, passive probability checks, and powerup rerolls. During that game, Settings can download an in-memory JSON report with semantic events, public effect snapshots, picks, uses, stalled turns, and the result. Settings can also import multiple reports, show a compact comparison, and download aggregate JSON. Aggregation keeps distinct configuration hashes separate and distinguishes completed hold times from unfinished, censored observations. Production builds do not expose these controls, and no report data is sent anywhere.
 

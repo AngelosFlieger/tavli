@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process';
+import { appendFile } from 'node:fs/promises';
 
 /**
  * Mirrors the CI verify job (build+coverage+lint+format) in one command, running the
@@ -47,6 +48,19 @@ function execute(step) {
 console.log(`Running ${steps.map((step) => step.name).join(', ')} in parallel…`);
 const results = await Promise.all(steps.map(execute));
 
+const coverageResult = results.find(({ step }) => step.name === 'coverage');
+const coverageText = coverageResult?.output.join('') ?? '';
+const coverageMatch = coverageText.match(
+  /^\s*(?:ℹ\s+)?all files\s+\|\s*([\d.]+)\s*\|\s*([\d.]+)\s*\|\s*([\d.]+)\s*\|/m,
+);
+const coverageSummary = coverageMatch
+  ? {
+      lines: Number(coverageMatch[1]),
+      branches: Number(coverageMatch[2]),
+      functions: Number(coverageMatch[3]),
+    }
+  : null;
+
 for (const result of results) {
   const status = result.ok ? '✓' : '✗';
   console.log(`${status} ${result.step.name} (${result.seconds.toFixed(1)}s)`);
@@ -61,6 +75,28 @@ for (const result of results) {
 }
 
 if (results.every((result) => result.ok)) {
+  if (!coverageSummary) throw new Error('Coverage passed but its summary could not be parsed');
+  console.log(
+    `Coverage: ${coverageSummary.lines.toFixed(2)}% lines, ${coverageSummary.branches.toFixed(2)}% branches, ${coverageSummary.functions.toFixed(2)}% functions.`,
+  );
+  if (process.env.GITHUB_STEP_SUMMARY) {
+    await appendFile(
+      process.env.GITHUB_STEP_SUMMARY,
+      [
+        '## Test coverage',
+        '',
+        '| Lines | Branches | Functions |',
+        '| ---: | ---: | ---: |',
+        `| ${coverageSummary.lines.toFixed(2)}% | ${coverageSummary.branches.toFixed(2)}% | ${coverageSummary.functions.toFixed(2)}% |`,
+        '',
+        'Required floors: 89% lines, 79% branches, 87% functions.',
+        '',
+      ].join('\n'),
+    );
+    console.log(
+      `::notice title=Test coverage::Lines ${coverageSummary.lines.toFixed(2)}% · Branches ${coverageSummary.branches.toFixed(2)}% · Functions ${coverageSummary.functions.toFixed(2)}%`,
+    );
+  }
   console.log(
     'All checks passed. Browser smoke: `npm run test:browser:local` or `npm run test:browser`.',
   );
