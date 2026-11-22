@@ -9,8 +9,7 @@ import {
 } from './types';
 
 export type VariantRulesSelection =
-  | { ruleset: 'CLASSIC' }
-  | { ruleset: 'POWERUPS_V1'; profileId: VariantProfileId };
+  { ruleset: 'CLASSIC' } | { ruleset: 'POWERUPS_V1'; profileId: VariantProfileId };
 
 export function rulesForSelection(selection: VariantRulesSelection): RulesContext {
   return selection.ruleset === 'CLASSIC'

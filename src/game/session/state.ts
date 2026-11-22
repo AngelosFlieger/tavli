@@ -10,8 +10,7 @@ import type { Phase } from './phase';
 import type { GameClock } from '../clock';
 
 export type OpeningState =
-  | { status: 'PENDING' }
-  | { status: 'RESOLVED'; attempts: [number, number][]; winner: Player };
+  { status: 'PENDING' } | { status: 'RESOLVED'; attempts: [number, number][]; winner: Player };
 
 export type GameState = Position & {
   phase: Phase;

@@ -22,12 +22,7 @@ export function isPhase(value: unknown): value is Phase {
 }
 
 export type PhaseAction =
-  | 'beginRoll'
-  | 'openingComplete'
-  | 'rollReady'
-  | 'movesExhausted'
-  | 'gameFinished'
-  | 'endTurn';
+  'beginRoll' | 'openingComplete' | 'rollReady' | 'movesExhausted' | 'gameFinished' | 'endTurn';
 
 const transitions: Record<Phase, Partial<Record<PhaseAction, Phase>>> = {
   OPENING: {

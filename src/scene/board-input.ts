@@ -81,8 +81,7 @@ export function createBoardInput({
     root.updateMatrixWorld(true);
     raycaster.setFromCamera(pointer, camera);
     return raycaster.intersectObjects(hitTargets, false)[0]?.object.userData.point as
-      | number
-      | undefined;
+      number | undefined;
   }
 
   canvas.addEventListener('pointerdown', (event) => {

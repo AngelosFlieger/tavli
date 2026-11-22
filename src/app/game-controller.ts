@@ -29,8 +29,7 @@ export type LocalMoveRequest = {
 };
 export type MoveRequest = LocalMoveRequest | { type: 'sent' };
 export type RollAbilityRequest =
-  | { type: 'local'; dice?: [number, number]; rerolledDie?: 0 | 1 }
-  | { type: 'sent' };
+  { type: 'local'; dice?: [number, number]; rerolledDie?: 0 | 1 } | { type: 'sent' };
 
 /** Routes user commands to local rules or the online authority, independent of rendering. */
 export class GameController {

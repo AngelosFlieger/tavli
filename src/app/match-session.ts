@@ -87,9 +87,7 @@ export type MatchUi = {
 };
 
 type MatchLifecycle =
-  | { type: 'IDLE' }
-  | { type: 'SEARCHING' }
-  | { type: 'PLAYING'; cursor: AuthorityCursor };
+  { type: 'IDLE' } | { type: 'SEARCHING' } | { type: 'PLAYING'; cursor: AuthorityCursor };
 
 /** Owns search, match, and disconnect sequencing behind transport and UI ports. */
 export function createMatchSession(
