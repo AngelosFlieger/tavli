@@ -10,6 +10,7 @@ import {
 } from './abilities/presenters';
 import { createDraftPanel } from './draft-panel';
 import { formatClock } from '../game/clock';
+import { stateMessageParts } from '../game/session/messages';
 import { pluralSuffix, t } from '../ui/i18n';
 
 type GameplayHudActions = {
@@ -78,9 +79,7 @@ export function createGameplayHud(
     const mine = controller.mine();
     const ending = state.phase === 'TURN_COMPLETE';
     roll.disabled =
-      blocked ||
-      !mine ||
-      !['OPENING_ROLL', 'WAITING_FOR_ROLL', 'TURN_COMPLETE'].includes(state.phase);
+      blocked || !mine || !['WAITING_FOR_ROLL', 'TURN_COMPLETE'].includes(state.phase);
     undo.disabled =
       blocked ||
       !mine ||
@@ -107,22 +106,14 @@ export function createGameplayHud(
         : `${t('hud.roll')} <span>↗</span>`;
     }
     if (selectedAbility && !selectedTarget) roll.disabled = true;
-    roll.setAttribute(
-      'aria-label',
-      ending
-        ? t('hud.endLabel')
-        : state.opening
-          ? t('hud.openingLabel', { player: state.active! + 1 })
-          : t('hud.rollLabel'),
-    );
-    message.textContent = state.messageKey
-      ? state.messageKey === 'status.winner' && state.outcome
-        ? t(state.messageKey, {
-            player: state.messageParams?.player ?? state.outcome.winner! + 1,
-            reason: t(`outcome.${state.outcome.kind}`),
-          })
-        : t(state.messageKey, state.messageParams)
-      : state.message;
+    roll.setAttribute('aria-label', ending ? t('hud.endLabel') : t('hud.rollLabel'));
+    const status = stateMessageParts(state);
+    message.textContent =
+      status?.key === 'status.winner' && state.outcome
+        ? t(status.key, { ...status.params, reason: t(`outcome.${state.outcome.kind}`) })
+        : status
+          ? t(status.key, status.params)
+          : '';
     message.hidden = state.phase !== 'GAME_OVER';
     panels.forEach((panel, player) => {
       panel.classList.toggle('inactive', state.active !== null && state.active !== player);

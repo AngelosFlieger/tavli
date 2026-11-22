@@ -2,11 +2,19 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { openStore } from '../server/store';
+import { nonTiedOpeningRandom } from './support/opening-random';
 import { createTables } from '../server/tables';
 
 test('private rooms pair a host and joiner and reject bad codes', async () => {
   const store = await openStore({ name: `plakoto-test-${randomUUID()}` });
-  const tables = createTables(store, () => 1);
+  const tables = createTables(
+    store,
+    () => 1,
+    undefined,
+    undefined,
+    undefined,
+    nonTiedOpeningRandom(),
+  );
   try {
     await tables.connect('ada');
     await tables.connect('basil');

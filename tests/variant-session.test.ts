@@ -20,7 +20,7 @@ import {
 function completeTurns(count: number): { session: Session; lastEvents: string[] } {
   const rules = powerupsRules(POWERUPS_V1);
   const state = initialGameState(rules);
-  state.opening = false;
+  state.opening = { status: 'RESOLVED', attempts: [[6, 1]], winner: 0 };
   state.active = 0;
   state.phase = 'TURN_COMPLETE';
   let session: Session = { state, history: [] };
@@ -231,7 +231,7 @@ test('invalid draft composition and order dice do not mutate the session', () =>
 test('Frost Seal is consumed atomically, blocks its point, and expires at target turn end', () => {
   const rules = powerupsRules(POWERUPS_V1);
   const state = initialGameState(rules);
-  state.opening = false;
+  state.opening = { status: 'RESOLVED', attempts: [[6, 1]], winner: 0 };
   state.active = 0;
   state.phase = 'TURN_COMPLETE';
   state.board[18].push(state.board[12].pop()!);
@@ -282,7 +282,7 @@ test('Frost Seal is consumed atomically, blocks its point, and expires at target
 test('Frost Seal and Bastion reject excluded targets without consuming their cards', () => {
   const rules = powerupsRules(POWERUPS_V1);
   const state = initialGameState(rules);
-  state.opening = false;
+  state.opening = { status: 'RESOLVED', attempts: [[6, 1]], winner: 0 };
   state.active = 0;
   state.phase = 'TURN_COMPLETE';
   state.powerups!.loadouts[0].powerups = [
@@ -340,7 +340,7 @@ test('configured effect duration counts target turns rather than global turns', 
   const config = resolveVariantConfig(input);
   const rules = powerupsRules(config);
   const state = initialGameState(rules);
-  state.opening = false;
+  state.opening = { status: 'RESOLVED', attempts: [[6, 1]], winner: 0 };
   state.active = 0;
   state.phase = 'TURN_COMPLETE';
   state.board[18].push(state.board[12].pop()!);
@@ -369,7 +369,7 @@ test('configured effect duration counts target turns rather than global turns', 
 test('Jinx targets the opponent and modifies only the next effective movement token', () => {
   const rules = powerupsRules(POWERUPS_V1);
   const state = initialGameState(rules);
-  state.opening = false;
+  state.opening = { status: 'RESOLVED', attempts: [[6, 1]], winner: 0 };
   state.active = 0;
   state.phase = 'TURN_COMPLETE';
   state.powerups!.loadouts[0].powerups = [{ instanceId: 'jinx-1', abilityId: 'jinx' }];
@@ -436,7 +436,7 @@ test('Jinx targets the opponent and modifies only the next effective movement to
 test('the default Jinx is consumed without modifying an actual double', () => {
   const rules = powerupsRules(POWERUPS_V1);
   const state = initialGameState(rules);
-  state.opening = false;
+  state.opening = { status: 'RESOLVED', attempts: [[6, 1]], winner: 0 };
   state.active = 0;
   state.phase = 'TURN_COMPLETE';
   state.powerups!.loadouts[0].powerups = [{ instanceId: 'jinx-1', abilityId: 'jinx' }];
@@ -465,7 +465,7 @@ test('Jinx double consumption and token handling follow the resolved profile', (
   persistentInput.abilities.jinx.unaffectedDoubleConsumes = false;
   const persistentRules = powerupsRules(resolveVariantConfig(persistentInput));
   const persistentState = initialGameState(persistentRules);
-  persistentState.opening = false;
+  persistentState.opening = { status: 'RESOLVED', attempts: [[6, 1]], winner: 0 };
   persistentState.active = 0;
   persistentState.phase = 'TURN_COMPLETE';
   persistentState.powerups!.loadouts[0].powerups = [{ instanceId: 'jinx-1', abilityId: 'jinx' }];
@@ -508,7 +508,7 @@ test('Jinx double consumption and token handling follow the resolved profile', (
   matchingInput.abilities.jinx.doubleHandling = 'CHANGE_MATCHING_TOKENS';
   const matchingRules = powerupsRules(resolveVariantConfig(matchingInput));
   const matchingState = initialGameState(matchingRules);
-  matchingState.opening = false;
+  matchingState.opening = { status: 'RESOLVED', attempts: [[6, 1]], winner: 0 };
   matchingState.active = 0;
   matchingState.phase = 'TURN_COMPLETE';
   matchingState.powerups!.loadouts[0].powerups = [{ instanceId: 'jinx-2', abilityId: 'jinx' }];
@@ -536,7 +536,7 @@ test('Jinx double consumption and token handling follow the resolved profile', (
 test('an unused Jinx expires at its configured next-draft boundary', () => {
   const rules = powerupsRules(POWERUPS_V1);
   const state = initialGameState(rules);
-  state.opening = false;
+  state.opening = { status: 'RESOLVED', attempts: [[6, 1]], winner: 0 };
   state.active = 0;
   state.phase = 'TURN_COMPLETE';
   state.powerups!.loadouts[0].powerups = [{ instanceId: 'jinx-1', abilityId: 'jinx' }];
@@ -567,7 +567,7 @@ test('an unused Jinx expires at its configured next-draft boundary', () => {
 test('Clear Skies removes a selected hostile effect before rolling', () => {
   const rules = powerupsRules(POWERUPS_V1);
   const state = initialGameState(rules);
-  state.opening = false;
+  state.opening = { status: 'RESOLVED', attempts: [[6, 1]], winner: 0 };
   state.active = 1;
   state.phase = 'TURN_COMPLETE';
   state.powerups!.loadouts[1].powerups = [{ instanceId: 'jinx-1', abilityId: 'jinx' }];
@@ -672,7 +672,7 @@ test('Clear Skies respects configured tags, removal count, and positive-effect t
     },
   ];
   const state = initialGameState(rules);
-  state.opening = false;
+  state.opening = { status: 'RESOLVED', attempts: [[6, 1]], winner: 0 };
   state.active = 0;
   state.phase = 'WAITING_FOR_ROLL';
   state.powerups!.loadouts[0].powerups = [{ instanceId: 'clear-1', abilityId: 'clearSkies' }];
@@ -711,7 +711,7 @@ test('Clear Skies respects configured tags, removal count, and positive-effect t
   positiveInput.abilities.clearSkies.canTargetOpponentPositive = true;
   const positiveRules = powerupsRules(resolveVariantConfig(positiveInput));
   const positiveState = initialGameState(positiveRules);
-  positiveState.opening = false;
+  positiveState.opening = { status: 'RESOLVED', attempts: [[6, 1]], winner: 0 };
   positiveState.active = 0;
   positiveState.phase = 'WAITING_FOR_ROLL';
   positiveState.powerups!.loadouts[0].powerups = [
@@ -737,7 +737,7 @@ test('Clear Skies respects configured tags, removal count, and positive-effect t
 test('Recast records authority randomness and preserves original-double token count', () => {
   const rules = powerupsRules(POWERUPS_V1);
   const state = initialGameState(rules);
-  state.opening = false;
+  state.opening = { status: 'RESOLVED', attempts: [[6, 1]], winner: 0 };
   state.active = 0;
   state.phase = 'WAITING_FOR_MOVE';
   state.roll = [3, 3];
@@ -778,7 +778,7 @@ test('Recast records authority randomness and preserves original-double token co
 test('Nudge changes movement tokens without changing the physical roll', () => {
   const rules = powerupsRules(POWERUPS_V1);
   const state = initialGameState(rules);
-  state.opening = false;
+  state.opening = { status: 'RESOLVED', attempts: [[6, 1]], winner: 0 };
   state.active = 0;
   state.phase = 'WAITING_FOR_MOVE';
   state.roll = [4, 5];
@@ -809,7 +809,7 @@ test('Nudge changes movement tokens without changing the physical roll', () => {
 test('roll abilities reject stale, late, and authority-invalid activation data', () => {
   const rules = powerupsRules(POWERUPS_V1);
   const state = initialGameState(rules);
-  state.opening = false;
+  state.opening = { status: 'RESOLVED', attempts: [[6, 1]], winner: 0 };
   state.active = 0;
   state.phase = 'WAITING_FOR_MOVE';
   state.roll = [2, 5];
@@ -870,7 +870,7 @@ test('non-default dice knobs control reroll count, double creation, and bearing 
   const rules = powerupsRules(config);
 
   const recastState = initialGameState(rules);
-  recastState.opening = false;
+  recastState.opening = { status: 'RESOLVED', attempts: [[6, 1]], winner: 0 };
   recastState.active = 0;
   recastState.phase = 'WAITING_FOR_MOVE';
   recastState.roll = [2, 2];
@@ -893,7 +893,7 @@ test('non-default dice knobs control reroll count, double creation, and bearing 
   assert.deepEqual(recast.session.state.diceModifiers[0].randomResults, [3, 6]);
 
   const nudgeState = initialGameState(rules);
-  nudgeState.opening = false;
+  nudgeState.opening = { status: 'RESOLVED', attempts: [[6, 1]], winner: 0 };
   nudgeState.active = 0;
   nudgeState.phase = 'WAITING_FOR_MOVE';
   nudgeState.roll = [2, 3];
@@ -918,7 +918,7 @@ test('non-default dice knobs control reroll count, double creation, and bearing 
   assert.deepEqual(nudge.session.state.remaining, [3, 3, 3, 3]);
 
   const restrictedState = initialGameState(rules);
-  restrictedState.opening = false;
+  restrictedState.opening = { status: 'RESOLVED', attempts: [[6, 1]], winner: 0 };
   restrictedState.active = 0;
   restrictedState.phase = 'WAITING_FOR_MOVE';
   restrictedState.roll = [2, 5];
@@ -955,7 +955,7 @@ test('Loaded Knuckles uses its exact configured chance and double token drawback
   const config = resolveVariantConfig(input);
   const rules = powerupsRules(config);
   const state = initialGameState(rules);
-  state.opening = false;
+  state.opening = { status: 'RESOLVED', attempts: [[6, 1]], winner: 0 };
   state.active = 0;
   state.phase = 'WAITING_FOR_ROLL';
   state.powerups!.loadouts[0].passives = [{ instanceId: 'loaded-1', abilityId: 'loadedKnuckles' }];
@@ -993,7 +993,7 @@ test('Loaded Knuckles uses its exact configured chance and double token drawback
   assert.equal(rolled.session.state.rollSource, 'loadedKnuckles');
 
   const modified = initialGameState(rules);
-  modified.opening = false;
+  modified.opening = { status: 'RESOLVED', attempts: [[6, 1]], winner: 0 };
   modified.active = 0;
   modified.phase = 'WAITING_FOR_MOVE';
   modified.roll = [2, 3];
@@ -1030,7 +1030,7 @@ test('Quartermaster expands capacity and blocks powerups for configured own turn
   const config = resolveVariantConfig(input);
   const rules = powerupsRules(config);
   const state = initialGameState(rules);
-  state.opening = false;
+  state.opening = { status: 'RESOLVED', attempts: [[6, 1]], winner: 0 };
   state.active = 0;
   state.phase = 'DRAFT_PICK';
   state.powerups!.loadouts[0] = {
@@ -1183,7 +1183,7 @@ test('replacing Quartermaster clears its cooldown and grandfathers occupied extr
 test('Home Guard derives public policy and blocks configured home-board pins', () => {
   const rules = powerupsRules(POWERUPS_V1);
   const state = initialGameState(rules);
-  state.opening = false;
+  state.opening = { status: 'RESOLVED', attempts: [[6, 1]], winner: 0 };
   state.active = 0;
   state.phase = 'DRAFT_PICK';
   state.powerups!.draft = {
@@ -1287,7 +1287,7 @@ test('Opportunist gains public Focus from an opponent stalled on their initial r
   const config = resolveVariantConfig(input);
   const rules = powerupsRules(config);
   const state = initialGameState(rules);
-  state.opening = false;
+  state.opening = { status: 'RESOLVED', attempts: [[6, 1]], winner: 0 };
   state.active = 0;
   state.phase = 'WAITING_FOR_ROLL';
   state.board = Array.from({ length: 24 }, () => []);
@@ -1338,7 +1338,7 @@ test('Opportunist spends Focus through configured dice rules without consuming a
   const config = resolveVariantConfig(input);
   const rules = powerupsRules(config);
   const state = initialGameState(rules);
-  state.opening = false;
+  state.opening = { status: 'RESOLVED', attempts: [[6, 1]], winner: 0 };
   state.active = 0;
   state.phase = 'WAITING_FOR_MOVE';
   state.roll = [5, 3];

@@ -1,5 +1,5 @@
 export type Phase =
-  | 'OPENING_ROLL'
+  | 'OPENING'
   | 'WAITING_FOR_ROLL'
   | 'WAITING_FOR_MOVE'
   | 'TURN_COMPLETE'
@@ -8,7 +8,7 @@ export type Phase =
   | 'GAME_OVER';
 
 export const PHASES: readonly Phase[] = [
-  'OPENING_ROLL',
+  'OPENING',
   'WAITING_FOR_ROLL',
   'WAITING_FOR_MOVE',
   'TURN_COMPLETE',
@@ -23,7 +23,6 @@ export function isPhase(value: unknown): value is Phase {
 
 export type PhaseAction =
   | 'beginRoll'
-  | 'needOpeningRoll'
   | 'openingComplete'
   | 'rollReady'
   | 'movesExhausted'
@@ -31,9 +30,7 @@ export type PhaseAction =
   | 'endTurn';
 
 const transitions: Record<Phase, Partial<Record<PhaseAction, Phase>>> = {
-  OPENING_ROLL: {
-    beginRoll: 'OPENING_ROLL',
-    needOpeningRoll: 'OPENING_ROLL',
+  OPENING: {
     openingComplete: 'WAITING_FOR_ROLL',
   },
   WAITING_FOR_ROLL: {

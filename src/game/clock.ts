@@ -42,9 +42,15 @@ export function clockConfigFromEnv(env: Record<string, string | undefined>): Clo
 }
 
 export function startClock(config: ClockConfig, phase: Phase, now: number): GameClock | null {
-  if (!config.enabled || phase === 'GAME_OVER' || phase === 'DRAFT_ORDER' || phase === 'DRAFT_PICK')
+  if (
+    !config.enabled ||
+    phase === 'OPENING' ||
+    phase === 'GAME_OVER' ||
+    phase === 'DRAFT_ORDER' ||
+    phase === 'DRAFT_PICK'
+  )
     return null;
-  const remainingMs = (phase === 'OPENING_ROLL' ? config.openingMs : config.turnMs) + config.bankMs;
+  const remainingMs = config.turnMs + config.bankMs;
   return { remainingMs, deadline: now + remainingMs, running: true };
 }
 

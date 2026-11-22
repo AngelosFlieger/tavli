@@ -1,30 +1,47 @@
 import { socketUrl } from './account';
 import {
   CLASSIC_SELECTION,
+  isAuthorityCursor,
+  isNetworkGameState,
+  isRevisionedUpdate,
   PROTOCOL_VERSION,
+  type AuthorityCursor,
   type ClientErrorCode,
   type ClientPacket,
   type MatchSelection,
   type ServerMessage,
-  type Update,
+  type RevisionedUpdate,
 } from './messages';
 import type { GameState, Player } from '../game/engine';
 import type { ResolvedVariantConfig } from '../game/variant/types';
+import { resolveVariantConfig } from '../game/variant/config/schema';
 
 export type TableEvents = {
   onReady: (name: string) => void;
   onResume: (
     you: Player,
+    players: [string, string],
     state: GameState,
     canUndo: boolean,
     variantConfig: ResolvedVariantConfig | null,
+    cursor: AuthorityCursor,
+    presentations?: RevisionedUpdate['presentations'],
+    events?: RevisionedUpdate['events'],
   ) => void;
   onRejected: () => void;
   onReconnect: () => void;
   onWaiting: () => void;
   onRoom: (code: string) => void;
-  onMatched: (you: Player, state: GameState, variantConfig: ResolvedVariantConfig | null) => void;
-  onUpdate: (update: Update) => void;
+  onMatched: (
+    you: Player,
+    players: [string, string],
+    state: GameState,
+    variantConfig: ResolvedVariantConfig | null,
+    cursor: AuthorityCursor,
+    presentations?: RevisionedUpdate['presentations'],
+    events?: RevisionedUpdate['events'],
+  ) => void;
+  onUpdate: (update: RevisionedUpdate) => void;
   onError: (code: ClientErrorCode) => void;
   onRematch: (status: 'OFFERED' | 'DECLINED') => void;
   onLeft: () => void;
@@ -61,6 +78,7 @@ export function connectTable(events: TableEvents) {
       if (!message) return;
       if (message.type === 'rejected') {
         intentional = true;
+        queued.length = 0;
         events.onRejected();
         socket.close();
         return;
@@ -82,15 +100,27 @@ export function connectTable(events: TableEvents) {
         events.onReady(message.name);
         return;
       }
-      if (message.type === 'resume' && (message.you === 0 || message.you === 1) && message.state) {
+      if (
+        message.type === 'resume' &&
+        (message.you === 0 || message.you === 1) &&
+        isPlayerNames(message.players) &&
+        isNetworkGameState(message.state) &&
+        isAuthorityCursor(message) &&
+        isVariantConfigValid(message.state, message.variantConfig) &&
+        isInitialPresentationValid(message, message.canUndo === true)
+      ) {
         authed = true;
         retry = 0;
         queued.length = 0;
         events.onResume(
           message.you,
+          message.players,
           message.state,
           message.canUndo === true,
           message.variantConfig,
+          { matchId: message.matchId, revision: message.revision },
+          message.presentations,
+          message.events,
         );
         return;
       }
@@ -104,10 +134,22 @@ export function connectTable(events: TableEvents) {
       } else if (
         message.type === 'matched' &&
         (message.you === 0 || message.you === 1) &&
-        message.state
+        isPlayerNames(message.players) &&
+        isNetworkGameState(message.state) &&
+        isAuthorityCursor(message) &&
+        isVariantConfigValid(message.state, message.variantConfig) &&
+        isInitialPresentationValid(message, false)
       )
-        events.onMatched(message.you, message.state, message.variantConfig);
-      else if (message.type === 'update' && message.state) events.onUpdate(message);
+        events.onMatched(
+          message.you,
+          message.players,
+          message.state,
+          message.variantConfig,
+          { matchId: message.matchId, revision: message.revision },
+          message.presentations,
+          message.events,
+        );
+      else if (message.type === 'update' && isRevisionedUpdate(message)) events.onUpdate(message);
       else if (message.type === 'rematch') events.onRematch(message.status);
       else if (message.type === 'left') events.onLeft();
     };
@@ -118,10 +160,10 @@ export function connectTable(events: TableEvents) {
       if (socket !== currentSocket) return;
       currentSocket = null;
       authed = false;
-      queued.length = 0;
       if (intentional) return;
       const delay = retryDelays[retry++];
       if (delay === undefined) {
+        queued.length = 0;
         events.onClose();
         return;
       }
@@ -165,6 +207,40 @@ export function connectTable(events: TableEvents) {
       queued.length = 0;
     },
   };
+}
+
+function isPlayerNames(value: unknown): value is [string, string] {
+  return (
+    Array.isArray(value) &&
+    value.length === 2 &&
+    value.every((name) => typeof name === 'string' && name.length > 0)
+  );
+}
+
+function isInitialPresentationValid(
+  message: Extract<ServerMessage, { type: 'matched' | 'resume' }>,
+  canUndo: boolean,
+) {
+  return isRevisionedUpdate({
+    matchId: message.matchId,
+    revision: message.revision,
+    state: message.state,
+    canUndo,
+    presentations: message.presentations ?? [],
+    events: message.events,
+  });
+}
+
+function isVariantConfigValid(
+  state: GameState,
+  value: unknown,
+): value is ResolvedVariantConfig | null {
+  if (state.ruleset === 'CLASSIC') return value === null;
+  try {
+    return resolveVariantConfig(value).hash === state.variantConfigHash;
+  } catch {
+    return false;
+  }
 }
 
 function parse(data: unknown): ServerMessage | null {

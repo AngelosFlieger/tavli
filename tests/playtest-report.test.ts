@@ -63,7 +63,7 @@ test('blank playtest seeds keep fresh randomness while explicit seeds remain rep
 test('playtest recorder keeps semantic events, state snapshots, and balance summaries', () => {
   const rules = powerupsRules(POWERUPS_V1);
   const state = initialGameState(rules);
-  state.opening = false;
+  state.opening = { status: 'RESOLVED', attempts: [[6, 1]], winner: 0 };
   state.active = 1;
   state.phase = 'TURN_COMPLETE';
   state.powerups!.completedRounds = 3;

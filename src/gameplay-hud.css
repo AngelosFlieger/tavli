@@ -123,6 +123,26 @@
   text-shadow: 1px 2px #070e1b;
 }
 
+#board-announcement {
+  position: fixed;
+  z-index: 7;
+  top: 42%;
+  left: 50%;
+  max-width: min(80vw, 520px);
+  margin: 0;
+  padding: 12px 22px;
+  transform: translate(-50%, -50%);
+  border: 1px solid #f5e1b599;
+  border-radius: var(--radius-control);
+  background: #071422dc;
+  color: #ffe1a0;
+  box-shadow: 0 6px 24px #02070dcc;
+  text-align: center;
+  font: 700 clamp(16px, 2.3vw, 26px) / 1.2 monospace;
+  letter-spacing: 0.04em;
+  pointer-events: none;
+}
+
 .game-hud p {
   margin: 0 0 4px;
 }

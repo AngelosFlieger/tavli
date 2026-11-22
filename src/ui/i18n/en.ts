@@ -29,6 +29,7 @@ export const en: Catalog = {
   'waiting.waiting': 'Waiting for',
   'waiting.opponent': 'opponent',
   'waiting.searching': 'Searching for an opponent…',
+  'waiting.connecting': 'Connecting to the game server…',
   'waiting.cancel': 'Cancel',
   'waiting.youAria': 'You',
   'waiting.opponentAria': 'Waiting for opponent',
@@ -63,7 +64,7 @@ export const en: Catalog = {
   'help.pin':
     'A lone opposing checker can be pinned beneath yours. It stays pinned until your checker leaves. Points occupied by two opposing checkers, or an opposing checker pinning yours, are blocked.',
   'help.opening':
-    'To start, Player 1 rolls both dice, then Player 2. The higher total starts; ties repeat. The starter rolls again for their first turn.',
+    'To start, one player-colored die is thrown for each player at the same time. The higher die starts; ties throw both again. The starter then rolls a normal pair for their first turn.',
   'help.movement':
     'Use both dice where possible; doubles give four moves. Click highlighted checkers to pick up several, then place them in pickup order. Each picked checker must have a legal move with the remaining dice. The held checkers follow your pointer, and a ghost shows the next landing. Use Put back last or Escape to release a pickup. Shift-click a source if it is also a destination. You may combine dice if intermediate landings are legal and later pickups remain placeable. Undo reverts a placement until End Turn.',
   'help.bearing':
@@ -134,7 +135,8 @@ export const en: Catalog = {
   'hud.status.loading': 'Setting the table…',
   'hud.rollLabel': 'Roll',
   'hud.endLabel': 'End turn',
-  'hud.openingLabel': 'Player {player} opening roll',
+  'hud.openingDetermining': 'Determining who plays first…',
+  'hud.openingFirst': '{player} plays first',
   'hud.cancelAbility': 'Cancel ability',
   'hud.chooseTarget': 'Choose a highlighted point for {name}',
   'hud.targets': '{name} targets {target}',
@@ -159,11 +161,8 @@ export const en: Catalog = {
   'target.effect': 'effect {instanceId}',
 
   // Game status messages
-  'status.gameReset': 'Player 1 rolls both dice to start.',
-  'status.openingRoll': 'Player {player} · opening roll',
+  'status.gameReset': 'Determining who plays first…',
   'status.rolling': 'Rolling…',
-  'status.openingPassed': 'Player 2 rolls both dice.',
-  'status.openingTied': 'Tie · Player 1 rolls both dice again.',
   'status.openingWinner': 'Player {player} starts · roll both dice for your first turn.',
   'status.noLegalMoves': 'No legal moves · End your turn.',
   'status.movesComplete': 'Moves complete · End Turn, or Undo to reconsider.',

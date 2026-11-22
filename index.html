@@ -113,7 +113,9 @@
         </div>
         <p class="waiting-status" role="status" aria-live="polite">
           <span class="waiting-spinner" aria-hidden="true"></span
-          ><span data-i18n="waiting.searching">Searching for an opponent…</span>
+          ><span id="waiting-status-text" data-i18n="waiting.searching"
+            >Searching for an opponent…</span
+          >
         </p>
         <p id="waiting-ruleset" class="waiting-ruleset">Classic matchmaking</p>
         <button id="waiting-cancel" class="mode-button local-mode">
@@ -176,6 +178,7 @@
     <output id="dice-result" class="dice-announcement" aria-live="polite" aria-atomic="true"
       >— · —</output
     >
+    <p id="board-announcement" role="status" aria-live="polite" aria-atomic="true" hidden></p>
     <section class="game-hud">
       <p id="game-message" role="status" aria-live="polite" hidden></p>
       <output

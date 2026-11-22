@@ -6,7 +6,12 @@ import type { Outcome, OutcomeKind } from '../src/game/rules/position';
 import type { GameClock } from '../src/game/clock';
 import { resolveVariantConfig } from '../src/game/variant/config/schema';
 import type { EffectConstraint, ResolvedVariantConfig } from '../src/game/variant/types';
-import type { Update } from '../src/net/messages';
+import {
+  isNetworkGameState,
+  isPresentationJob,
+  type PresentationJob,
+  type Update,
+} from '../src/net/messages';
 
 export type StoredUser = {
   id: string;
@@ -40,6 +45,7 @@ export type StoredRevisionUpdate = {
 
 export type Store = {
   createUser(user: StoredUser): Promise<void>;
+  userById(id: string): Promise<StoredUser | null>;
   userByEmail(email: string): Promise<StoredUser | null>;
   userByUsername(username: string): Promise<StoredUser | null>;
   createSession(tokenHash: string, userId: string, expiresAt: number): Promise<void>;
@@ -115,6 +121,9 @@ export async function openStore(options: StoreOptions = {}): Promise<Store> {
         createdAt: new Date(),
       });
     },
+    async userById(id) {
+      return readUser(await users.findOne({ _id: id }));
+    },
     async userByEmail(email) {
       return readUser(await users.findOne({ email }));
     },
@@ -164,7 +173,12 @@ export async function openStore(options: StoreOptions = {}): Promise<Store> {
         await playing.deleteMany({ matchId: match.id });
         return false;
       }
-      await matches.insertOne(matchDocument(match));
+      try {
+        await matches.insertOne(matchDocument(match));
+      } catch {
+        await playing.deleteMany({ matchId: match.id });
+        return false;
+      }
       return true;
     },
     async saveMatch(match) {
@@ -177,7 +191,13 @@ export async function openStore(options: StoreOptions = {}): Promise<Store> {
     async markAway(match) {
       const result = await matches.updateOne(
         { _id: match.id, revision: match.revision },
-        { $set: { away: dates(match.away), revision: match.revision + 1 } },
+        {
+          $set: {
+            away: dates(match.away),
+            session: structuredClone(match.session),
+            revision: match.revision + 1,
+          },
+        },
       );
       return result.matchedCount === 1;
     },
@@ -485,10 +505,43 @@ function readRevisionUpdate(value: unknown): StoredRevisionUpdate | null {
     typeof envelope.details !== 'object'
   )
     return null;
+  const details = envelope.details as Record<string, unknown>;
+  const presentations = readPresentations(details);
+  if (!presentations) return null;
+  const {
+    dice: _dice,
+    rerolledDie: _rerolledDie,
+    sequence: _sequence,
+    resetDice: _resetDice,
+    presentations: _presentations,
+    ...current
+  } = structuredClone(details);
   return {
     revision: Number(envelope.revision),
-    details: structuredClone(envelope.details) as StoredRevisionUpdate['details'],
+    details: { ...current, presentations } as StoredRevisionUpdate['details'],
   };
+}
+
+function readPresentations(details: Record<string, unknown>): PresentationJob[] | null {
+  if (Array.isArray(details.presentations))
+    return details.presentations.every(isPresentationJob)
+      ? structuredClone(details.presentations)
+      : null;
+  const legacy =
+    details.resetDice === true
+      ? { type: 'RESET_DICE' as const, blocking: false as const }
+      : Array.isArray(details.dice)
+        ? {
+            type: 'DICE' as const,
+            blocking: true as const,
+            values: details.dice,
+            ...(details.rerolledDie === undefined ? {} : { rerolledDie: details.rerolledDie }),
+          }
+        : Array.isArray(details.sequence)
+          ? { type: 'MOVE' as const, blocking: true as const, sequence: details.sequence }
+          : null;
+  if (!legacy) return [];
+  return isPresentationJob(legacy) ? [structuredClone(legacy)] : null;
 }
 
 async function createCollection(db: Db, name: string, validator: object) {
@@ -532,6 +585,7 @@ const outcomeKinds: readonly OutcomeKind[] = [
 function readState(value: unknown): GameState | null {
   if (!value || typeof value !== 'object') return null;
   const state = structuredClone(value) as Partial<GameState> & Record<string, unknown>;
+  migrateLegacyOpening(state);
   if (!Array.isArray(state.board) || state.board.length !== 24) return null;
   if (!Array.isArray(state.off) || state.off.length !== 2) return null;
   const checkers: number[] = [];
@@ -546,13 +600,8 @@ function readState(value: unknown): GameState | null {
   if (!isPhase(state.phase)) return null;
   if (state.active !== null && state.active !== 0 && state.active !== 1) return null;
   if (!isDice(state.remaining) || !isDice(state.roll)) return null;
-  if (!Array.isArray(state.openingRolls) || state.openingRolls.length !== 2) return null;
-  if (
-    !state.openingRolls.every((roll) => roll === null || (Array.isArray(roll) && roll.every(isDie)))
-  )
-    return null;
+  if (!isStoredOpening(state.opening)) return null;
   if (state.outcome !== null && !isOutcome(state.outcome)) return null;
-  if (typeof state.message !== 'string' || typeof state.opening !== 'boolean') return null;
   if (state.ruleset !== 'CLASSIC' && state.ruleset !== 'POWERUPS_V1') return null;
   if (state.variantConfigHash !== null && typeof state.variantConfigHash !== 'string') return null;
   if (state.powerups !== null && (!state.powerups || typeof state.powerups !== 'object'))
@@ -562,7 +611,65 @@ function readState(value: unknown): GameState | null {
   if (state.rollSource !== null && state.rollSource !== 'loadedKnuckles') return null;
   if (state.clock !== undefined && state.clock !== null && !isClock(state.clock)) return null;
   if (state.clock === undefined) state.clock = null;
-  return state as GameState;
+  const decoded = state as GameState;
+  return isNetworkGameState(decoded) ? decoded : null;
+}
+
+function migrateLegacyOpening(state: Record<string, unknown>) {
+  delete state.message;
+  delete state.messageKey;
+  delete state.messageParams;
+  if (state.phase === 'OPENING_ROLL') state.phase = 'OPENING';
+  if (state.opening && typeof state.opening === 'object') {
+    delete state.openingRolls;
+    delete state.openingAttempts;
+    return;
+  }
+  if (state.opening === true) {
+    state.opening = { status: 'PENDING' };
+  } else if (state.opening === false) {
+    const attempts = Array.isArray(state.openingAttempts)
+      ? state.openingAttempts.filter(
+          (attempt): attempt is [number, number] =>
+            Array.isArray(attempt) && attempt.length === 2 && attempt.every(isDie),
+        )
+      : [];
+    const validAttempts =
+      attempts.length > 0 &&
+      attempts.slice(0, -1).every(([left, right]) => left === right) &&
+      attempts.at(-1)![0] !== attempts.at(-1)![1]
+        ? attempts
+        : [];
+    const winner = validAttempts.length
+      ? validAttempts.at(-1)![0] > validAttempts.at(-1)![1]
+        ? 0
+        : 1
+      : state.active === 1
+        ? 1
+        : 0;
+    state.opening = {
+      status: 'RESOLVED',
+      attempts: validAttempts.length ? validAttempts : [winner === 0 ? [6, 1] : [1, 6]],
+      winner,
+    };
+  }
+  delete state.openingRolls;
+  delete state.openingAttempts;
+}
+
+function isStoredOpening(value: unknown): value is GameState['opening'] {
+  if (!value || typeof value !== 'object') return false;
+  const opening = value as Record<string, unknown>;
+  if (opening.status === 'PENDING') return true;
+  return (
+    opening.status === 'RESOLVED' &&
+    (opening.winner === 0 || opening.winner === 1) &&
+    Array.isArray(opening.attempts) &&
+    opening.attempts.length > 0 &&
+    opening.attempts.every(
+      (attempt) => Array.isArray(attempt) && attempt.length === 2 && attempt.every(isDie),
+    )
+  );
 }
 
 /**

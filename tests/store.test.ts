@@ -3,12 +3,20 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { legalMoves } from '../src/game/rules/moves';
 import { initialPresentedSession } from '../src/game/session/messages';
-import { initialGameState } from '../src/game/session/state';
+import { initialGameState, type Session } from '../src/game/session/state';
 import { createPowerupsV1Input } from '../src/game/variant/config/profiles/v1';
 import { resolveVariantConfig } from '../src/game/variant/config/schema';
 import { powerupsRules } from '../src/game/variant/types';
 import { openStore } from '../server/store';
 import { createTables } from '../server/tables';
+import { nonTiedOpeningRandom } from './support/opening-random';
+
+const createTestTables = (
+  store: Parameters<typeof createTables>[0],
+  rollDie: Parameters<typeof createTables>[1],
+  now?: Parameters<typeof createTables>[2],
+  openingRandom = nonTiedOpeningRandom(),
+) => createTables(store, rollDie, now, undefined, undefined, openingRandom);
 
 test('a live match is found by either seat without loading every match', async () => {
   const store = await openStore({ name: `plakoto-test-${randomUUID()}` });
@@ -31,6 +39,89 @@ test('a live match is found by either seat without loading every match', async (
     );
     assert.deepEqual((await store.matchForUser('ivory'))?.seats, ['crimson', 'ivory']);
     assert.equal(await store.matchForUser('missing'), null);
+  } finally {
+    await store.drop();
+  }
+});
+
+test('a stored manual opening is resolved automatically when a player reconnects', async () => {
+  const store = await openStore({ name: `plakoto-test-${randomUUID()}` });
+  try {
+    const current = initialPresentedSession();
+    const legacySession = {
+      ...current,
+      state: {
+        ...current.state,
+        phase: 'OPENING_ROLL',
+        opening: true,
+        openingRolls: [null, null],
+        openingAttempts: [],
+        message: 'legacy copy',
+        messageKey: 'status.openingRoll',
+        messageParams: { player: 1 },
+      },
+    } as unknown as Session;
+    assert.equal(
+      await store.insertMatch({
+        id: 'pending-opening',
+        seats: ['crimson', 'ivory'],
+        session: legacySession,
+        variantConfig: null,
+        lastUpdate: null,
+        revision: 0,
+        away: [null, null],
+        connected: [false, false],
+        endedAt: null,
+        winner: null,
+      }),
+      true,
+    );
+    const tables = createTestTables(store, () => 2, undefined, nonTiedOpeningRandom());
+    const events = await tables.connect('crimson');
+    const resume = events[0]?.message;
+    assert.equal(resume?.type, 'resume');
+    if (resume?.type !== 'resume') return;
+    assert.equal(resume.revision, 1);
+    assert.equal(resume.state.phase, 'WAITING_FOR_ROLL');
+    assert.deepEqual(resume.presentations, [
+      { type: 'OPENING', blocking: true, attempts: [[6, 1]] },
+    ]);
+    assert.deepEqual((await store.match('pending-opening'))?.session.state.opening, {
+      status: 'RESOLVED',
+      attempts: [[6, 1]],
+      winner: 0,
+    });
+    assert.equal('message' in resume.state, false);
+  } finally {
+    await store.drop();
+  }
+});
+
+test('stored legacy presentation hints migrate to discriminated jobs', async () => {
+  const store = await openStore({ name: `plakoto-test-${randomUUID()}` });
+  try {
+    assert.equal(
+      await store.insertMatch({
+        id: 'legacy-presentation',
+        seats: ['crimson', 'ivory'],
+        session: { state: initialGameState(), history: [] },
+        variantConfig: null,
+        lastUpdate: {
+          revision: 1,
+          details: { dice: [6, 1] },
+        } as never,
+        revision: 1,
+        away: [null, null],
+        connected: [true, true],
+        endedAt: null,
+        winner: null,
+      }),
+      true,
+    );
+
+    assert.deepEqual((await store.match('legacy-presentation'))?.lastUpdate?.details, {
+      presentations: [{ type: 'DICE', blocking: true, values: [6, 1] }],
+    });
   } finally {
     await store.drop();
   }
@@ -70,7 +161,7 @@ test('a stored pre-constraint effect snapshot is migrated on read', async () => 
       }),
       true,
     );
-    const tables = createTables(store, () => 1);
+    const tables = createTestTables(store, () => 1);
     const message = (await tables.connect('crimson'))[0]?.message;
     assert.equal(message?.type, 'resume');
     if (message?.type !== 'resume') return;
@@ -89,7 +180,7 @@ test('a stored configuration snapshot restores without a registered profile', as
   input.id = 'stored-balance-test';
   input.draft.intervalRounds = 2;
   const config = resolveVariantConfig(input);
-  const tables = createTables(store, () => 1);
+  const tables = createTestTables(store, () => 1);
   try {
     assert.equal(
       await store.insertMatch({
@@ -123,35 +214,25 @@ test('two processes preserve exact roll and move revision metadata', async () =>
   const next = () => rolls[roll++] ?? 1;
   let now = 1_000;
   const clock = () => now;
-  const first = createTables(store, next, clock);
-  const second = createTables(store, next, clock);
+  const first = createTestTables(store, next, clock);
+  let openingDie = 0;
+  const second = createTestTables(store, next, clock, (maximum) =>
+    openingDie++ % 2 === 0 ? 0 : maximum - 1,
+  );
   try {
     await first.connect('ada');
     await second.connect('basil');
     assert.equal((await first.find('ada'))[0]?.message.type, 'waiting');
     const matched = await second.find('basil');
-    assert.equal(matched.find((event) => event.userId === 'basil')?.message.type, 'matched');
+    const basilMatched = matched.find((event) => event.userId === 'basil')?.message;
+    assert.equal(basilMatched?.type, 'matched');
+    if (basilMatched?.type !== 'matched') return;
     const seen = await first.sync();
-    assert.equal(seen.find((event) => event.userId === 'ada')?.message.type, 'matched');
-
-    const rolled = await first.act('ada', { type: 'roll' });
-    assert.equal(rolled[0]?.message.type, 'update');
-    if (rolled[0]?.message.type !== 'update') return;
-    const followed = await second.sync();
-    const update = followed.find((event) => event.userId === 'basil')?.message;
-    assert.equal(update?.type, 'update');
-    if (update?.type !== 'update') return;
-    assert.deepEqual(update.dice, [6, 1]);
-    assert.deepEqual(update.events, rolled[0].message.events);
-
-    const opening = await second.act('basil', { type: 'roll' });
-    const openingUpdate = opening[0]?.message;
-    assert.equal(openingUpdate?.type, 'update');
-    if (openingUpdate?.type !== 'update') return;
-    const openingFollowed = (await first.sync()).find((event) => event.userId === 'ada')?.message;
-    assert.equal(openingFollowed?.type, 'update');
-    if (openingFollowed?.type !== 'update') return;
-    assert.deepEqual(openingFollowed.events, openingUpdate.events);
+    const adaMatched = seen.find((event) => event.userId === 'ada')?.message;
+    assert.equal(adaMatched?.type, 'matched');
+    if (adaMatched?.type !== 'matched') return;
+    assert.equal(adaMatched.matchId, basilMatched.matchId);
+    assert.equal(adaMatched.revision, basilMatched.revision);
 
     const movement = await second.act('basil', { type: 'roll' });
     const movementUpdate = movement[0]?.message;
@@ -160,8 +241,12 @@ test('two processes preserve exact roll and move revision metadata', async () =>
     const movementFollowed = (await first.sync()).find((event) => event.userId === 'ada')?.message;
     assert.equal(movementFollowed?.type, 'update');
     if (movementFollowed?.type !== 'update') return;
-    assert.deepEqual(movementFollowed.dice, movementUpdate.dice);
+    assert.deepEqual(movementFollowed.presentations, movementUpdate.presentations);
     assert.deepEqual(movementFollowed.events, movementUpdate.events);
+    assert.deepEqual(movementUpdate.presentations, [
+      { type: 'DICE', blocking: true, values: [6, 1] },
+    ]);
+    assert.ok(movementUpdate.revision > adaMatched.revision);
 
     const player = movementUpdate.state.active;
     assert.notEqual(player, null);
@@ -175,7 +260,9 @@ test('two processes preserve exact roll and move revision metadata', async () =>
     const moveFollowed = (await first.sync()).find((event) => event.userId === 'ada')?.message;
     assert.equal(moveFollowed?.type, 'update');
     if (moveFollowed?.type !== 'update') return;
-    assert.deepEqual(moveFollowed.sequence, [move]);
+    assert.deepEqual(moveFollowed.presentations, [
+      { type: 'MOVE', blocking: true, sequence: [move] },
+    ]);
     assert.deepEqual(moveFollowed.events, movedUpdate.events);
 
     await first.disconnect('ada');
@@ -208,9 +295,103 @@ test('two processes preserve exact roll and move revision metadata', async () =>
   }
 });
 
+test('revisioned commands acknowledge acceptance and reject stale retries without mutation', async () => {
+  const store = await openStore({ name: `plakoto-test-${randomUUID()}` });
+  const tables = createTestTables(store, () => 3);
+  try {
+    await tables.connect('ada');
+    await tables.connect('basil');
+    await tables.find('ada');
+    const matched = await tables.find('basil');
+    const message = matched.find((event) => event.userId === 'ada')?.message;
+    assert.equal(message?.type, 'matched');
+    if (message?.type !== 'matched') return;
+
+    const stale = await tables.act(
+      'ada',
+      { type: 'roll' },
+      {
+        commandId: 'stale-roll',
+        matchId: message.matchId,
+        expectedRevision: message.revision + 1,
+      },
+    );
+    const rejected = stale.find((event) => event.userId === 'ada')?.message;
+    assert.equal(rejected?.type, 'update');
+    if (rejected?.type !== 'update') return;
+    assert.deepEqual(rejected.commandResult, {
+      commandId: 'stale-roll',
+      status: 'REJECTED',
+      reason: 'STALE_REVISION',
+    });
+    assert.equal(rejected.revision, message.revision);
+    assert.deepEqual(rejected.state, message.state);
+
+    const accepted = await tables.act(
+      'ada',
+      { type: 'roll' },
+      {
+        commandId: 'current-roll',
+        matchId: message.matchId,
+        expectedRevision: message.revision,
+      },
+    );
+    const update = accepted.find((event) => event.userId === 'ada')?.message;
+    assert.equal(update?.type, 'update');
+    if (update?.type !== 'update') return;
+    assert.deepEqual(update.commandResult, {
+      commandId: 'current-roll',
+      status: 'ACCEPTED',
+    });
+    assert.ok(update.revision > message.revision);
+  } finally {
+    await store.drop();
+  }
+});
+
+test('concurrent commands for one match serialize around one authoritative revision', async () => {
+  const store = await openStore({ name: `plakoto-test-${randomUUID()}` });
+  const tables = createTestTables(store, () => 3);
+  try {
+    await tables.connect('ada');
+    await tables.connect('basil');
+    await tables.find('ada');
+    const matched = await tables.find('basil');
+    const initial = matched.find((event) => event.userId === 'ada')?.message;
+    assert.equal(initial?.type, 'matched');
+    if (initial?.type !== 'matched') return;
+
+    const results = await Promise.all(
+      ['parallel-a', 'parallel-b'].map((commandId) =>
+        tables.act(
+          'ada',
+          { type: 'roll' },
+          {
+            commandId,
+            matchId: initial.matchId,
+            expectedRevision: initial.revision,
+          },
+        ),
+      ),
+    );
+    const statuses = results
+      .flat()
+      .filter((event) => event.userId === 'ada' && event.message.type === 'update')
+      .map((event) =>
+        event.message.type === 'update' ? event.message.commandResult?.status : undefined,
+      )
+      .filter(Boolean)
+      .sort();
+    assert.deepEqual(statuses, ['ACCEPTED', 'REJECTED']);
+    assert.equal((await store.match(initial.matchId))?.revision, initial.revision + 1);
+  } finally {
+    await store.drop();
+  }
+});
+
 test('MongoDB matchmaking keeps rulesets and balance profiles in separate queues', async () => {
   const store = await openStore({ name: `plakoto-test-${randomUUID()}` });
-  const tables = createTables(store, () => 1);
+  const tables = createTestTables(store, () => 1);
   const standard = { ruleset: 'POWERUPS_V1', profileId: 'powerups-v1' } as const;
   const fast = { ruleset: 'POWERUPS_V1', profileId: 'fast-balance' } as const;
   try {
@@ -246,8 +427,8 @@ test('MongoDB matchmaking keeps rulesets and balance profiles in separate queues
 
 test('cancelling keeps the match and records the opponent as winner', async () => {
   const store = await openStore({ name: `plakoto-test-${randomUUID()}` });
-  const first = createTables(store, () => 1);
-  const second = createTables(store, () => 1);
+  const first = createTestTables(store, () => 1);
+  const second = createTestTables(store, () => 1);
   try {
     await first.connect('ada');
     await second.connect('basil');
@@ -270,7 +451,7 @@ test('cancelling keeps the match and records the opponent as winner', async () =
 
 test('a finished game stays stored, and the next game is a new match', async () => {
   const store = await openStore({ name: `plakoto-test-${randomUUID()}` });
-  const tables = createTables(store, () => 1);
+  const tables = createTestTables(store, () => 1);
   try {
     await tables.connect('ada');
     await tables.connect('basil');
@@ -294,8 +475,10 @@ test('a finished game stays stored, and the next game is a new match', async () 
     const update = restarted.find((event) => event.userId === 'ada')?.message;
     assert.equal(update?.type, 'update');
     if (update?.type !== 'update') return;
-    assert.equal(update.state.phase, 'OPENING_ROLL');
-    assert.equal(update.resetDice, true);
+    assert.equal(update.state.phase, 'WAITING_FOR_ROLL');
+    assert.deepEqual(update.presentations, [
+      { type: 'OPENING', blocking: true, attempts: [[6, 1]] },
+    ]);
     const kept = await store.match(live.id);
     assert.equal(kept?.winner, 'ada');
     assert.equal(kept?.session.state.phase, 'GAME_OVER');

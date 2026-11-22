@@ -1,6 +1,6 @@
 import type { Player } from '../game/rules/position';
 import type { Outcome } from '../game/rules/position';
-import { initialPresentedSession, sessionMessageParts } from '../game/session/messages';
+import { initialPresentedSession } from '../game/session/messages';
 import type { GameState, Session } from '../game/session/state';
 import {
   transitionSession,
@@ -155,21 +155,18 @@ class Match {
     return {
       state: structuredClone(this.session.state),
       canUndo: this.session.history.length > 0,
+      presentations: [],
       ...(events?.length ? { events: structuredClone(events) } : {}),
     };
   }
 
   end(outcome: Outcome): Update {
     const events: SessionEvent[] = [{ type: 'GameEnded', outcome }];
-    const parts = sessionMessageParts(this.session.state, events);
     this.session = {
       state: {
         ...structuredClone(this.session.state),
         phase: 'GAME_OVER',
         outcome: structuredClone(outcome),
-        message: parts?.text ?? outcome.reason,
-        messageKey: parts?.key,
-        messageParams: parts?.params,
         clock: null,
       },
       history: [],
@@ -183,12 +180,6 @@ class Match {
   ): Extract<SessionResult, { ok: true }> | null {
     const result = transitionSession(input, command, this.rules);
     if (!result.ok) return null;
-    const parts = sessionMessageParts(result.session.state, result.events);
-    if (parts) {
-      result.session.state.message = parts.text;
-      result.session.state.messageKey = parts.key;
-      result.session.state.messageParams = parts.params;
-    }
     return result;
   }
 
@@ -212,7 +203,13 @@ class Match {
     if (command.type === 'restart') {
       const events = this.apply({ type: 'restart' });
       if (!events) return rejected();
-      return { to: [...this.ids], update: { ...this.view(events), resetDice: true } };
+      return {
+        to: [...this.ids],
+        update: {
+          ...this.view(events),
+          presentations: [{ type: 'RESET_DICE', blocking: false }],
+        },
+      };
     }
     if (command.type === 'pickAbility') {
       const events = this.apply({
@@ -256,17 +253,23 @@ class Match {
           ...this.view(events),
           ...(randomCount
             ? {
-                dice: this.session.state.roll as [number, number],
-                rerolledDie:
-                  command.activation.target.type === 'DIE'
-                    ? command.activation.target.index
-                    : undefined,
+                presentations: [
+                  {
+                    type: 'DICE' as const,
+                    blocking: true as const,
+                    values: this.session.state.roll as [number, number],
+                    ...(command.activation.target.type === 'DIE'
+                      ? { rerolledDie: command.activation.target.index }
+                      : {}),
+                  },
+                ],
               }
             : {}),
         },
       };
     }
     if (command.type === 'roll') {
+      if (this.session.state.phase !== 'WAITING_FOR_ROLL') return rejected();
       const started = this.resolve({ type: 'beginRoll' });
       if (!started) return rejected();
       let dice: [number, number];
@@ -288,7 +291,10 @@ class Match {
       this.session = rolled.session;
       return {
         to: [...this.ids],
-        update: { ...this.view([...started.events, ...rolled.events]), dice },
+        update: {
+          ...this.view([...started.events, ...rolled.events]),
+          presentations: [{ type: 'DICE', blocking: true, values: dice }],
+        },
       };
     }
     if (command.type === 'move') {
@@ -296,7 +302,10 @@ class Match {
       if (!events) return rejected();
       return {
         to: [...this.ids],
-        update: { ...this.view(events), sequence: command.sequence },
+        update: {
+          ...this.view(events),
+          presentations: [{ type: 'MOVE', blocking: true, sequence: command.sequence }],
+        },
       };
     }
     if (command.type === 'undo') {

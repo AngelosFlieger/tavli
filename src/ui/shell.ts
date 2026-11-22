@@ -58,8 +58,8 @@ export function showTitle() {
   titleScreen.showTitle();
 }
 
-export function setSearching(on: boolean) {
-  titleScreen.setSearching(on);
+export function setSearching(on: boolean, status?: 'CONNECTING' | 'SEARCHING') {
+  titleScreen.setSearching(on, status);
 }
 
 export function showNote(text: string | null) {

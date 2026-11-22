@@ -132,7 +132,8 @@ export function generateConfiguredMovementRoll(
   rollDie: () => number,
   randomInt: (maximum: number) => number,
 ): [number, number] {
-  if (state.opening || !state.powerups) return [checkedDie(rollDie()), checkedDie(rollDie())];
+  if (state.opening.status === 'PENDING' || !state.powerups)
+    return [checkedDie(rollDie()), checkedDie(rollDie())];
   const id = activeBehaviors(state.powerups, player).find(
     (candidate) => passiveBehavior(candidate).roll,
   );

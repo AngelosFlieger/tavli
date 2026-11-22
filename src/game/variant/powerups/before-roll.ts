@@ -29,7 +29,7 @@ export function beforeRollAbilityTargets(
   const powerups = state.powerups;
   if (
     state.phase !== 'WAITING_FOR_ROLL' ||
-    state.opening ||
+    state.opening.status === 'PENDING' ||
     state.active !== player ||
     !powerups ||
     !canUsePowerup(powerups, player, config)

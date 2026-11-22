@@ -146,8 +146,8 @@ function aggregateReport(group: MutableGroup, report: PlaytestReport): void {
   }
 
   const openingWinner = events.find(
-    (event): event is Extract<SessionEvent, { type: 'OpeningWinnerChosen' }> =>
-      isEvent(event, 'OpeningWinnerChosen'),
+    (event): event is Extract<SessionEvent, { type: 'OpeningResolved' }> =>
+      isEvent(event, 'OpeningResolved'),
   )?.player;
   if (completed && openingWinner !== undefined) {
     group.openingWinnerGames++;
@@ -320,10 +320,22 @@ function isReportEvent(value: unknown): boolean {
     return isAbilityId(value.abilityId) && isPlayer(value.player);
   if (value.type === 'AbilityReplaced') return isAbilityId(value.abilityId);
   if (value.type === 'EffectExpired') return isAbilityId(value.abilityId);
-  if (value.type === 'OpeningWinnerChosen') return isPlayer(value.player);
+  if (value.type === 'OpeningResolved')
+    return (
+      isPlayer(value.player) &&
+      Array.isArray(value.attempts) &&
+      value.attempts.every(
+        (attempt) =>
+          Array.isArray(attempt) && attempt.length === 2 && attempt.every((die) => isDie(die)),
+      )
+    );
   if (value.type === 'DraftOrderChosen') return isPlayer(value.first);
   if (value.type === 'GameEnded') return isOutcome(value.outcome);
   return true;
+}
+
+function isDie(value: unknown): value is number {
+  return Number.isInteger(value) && Number(value) >= 1 && Number(value) <= 6;
 }
 
 function isLoadouts(value: unknown): boolean {

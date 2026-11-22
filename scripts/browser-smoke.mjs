@@ -128,7 +128,15 @@ async function openReadyPage(browser, label, errors) {
   watchErrors(page, label, errors);
   await page.addInitScript((testProfileId) => {
     const NativeWebSocket = window.WebSocket;
-    const smoke = { sockets: [], latest: null, variantConfig: null, revision: 0, rolls: 0 };
+    const smoke = {
+      sockets: [],
+      latest: null,
+      variantConfig: null,
+      revision: 0,
+      authorityCursor: null,
+      commandSequence: 0,
+      rolls: 0,
+    };
     Object.defineProperty(window, '__plakotoSmoke', { value: smoke });
     // Count dice presentations: their aria-busy window is shorter than a slow frame, so
     // polling for the attribute would race a fast reduced-motion roll.
@@ -168,6 +176,11 @@ async function openReadyPage(browser, label, errors) {
             const message = JSON.parse(event.data);
             if (!message.state) return;
             smoke.latest = message.state;
+            if (typeof message.matchId === 'string' && Number.isSafeInteger(message.revision))
+              smoke.authorityCursor = {
+                matchId: message.matchId,
+                revision: message.revision,
+              };
             if (message.type === 'matched') smoke.variantConfig = message.variantConfig;
             smoke.revision++;
           } catch {
@@ -227,7 +240,17 @@ async function sendSocketCommand(page, command) {
         candidate.readyState === WebSocket.OPEN && new URL(candidate.url).pathname === '/ws',
     );
     if (!socket) throw new Error('the smoke harness has no open game socket');
-    socket.send(JSON.stringify(next));
+    const smoke = window.__plakotoSmoke;
+    if (!smoke.authorityCursor) throw new Error('the smoke harness has no authority cursor');
+    socket.send(
+      JSON.stringify({
+        type: 'command',
+        commandId: `smoke-${++smoke.commandSequence}`,
+        matchId: smoke.authorityCursor.matchId,
+        expectedRevision: smoke.authorityCursor.revision,
+        command: next,
+      }),
+    );
   }, command);
 }
 
@@ -295,6 +318,9 @@ async function rollOnline(pages) {
   assert.equal(before.phase, 'WAITING_FOR_ROLL');
   const active = before.active;
   assert.ok(active === 0 || active === 1, 'movement roll has no active player');
+  await pages[active].waitForFunction(
+    () => !document.querySelector('#roll')?.hasAttribute('disabled'),
+  );
   const counts = await Promise.all(pages.map(rollCount));
   const rolled = actAndWait(pages, () => pages[active].locator('#roll').click());
   await Promise.all(pages.map((page, index) => waitForRoll(page, counts[index])));
@@ -329,8 +355,23 @@ async function endOnlineTurn(pages) {
   if (state.active !== null && !['DRAFT_ORDER', 'DRAFT_PICK', 'GAME_OVER'].includes(state.phase)) {
     await Promise.all(
       pages.map(async (page) => {
-        const incoming = page.locator(`.ability-tray.is-current[data-player="${state.active}"]`);
-        await incoming.waitFor({ state: 'visible' });
+        await page.waitForFunction((expected) => {
+          const latest = window.__plakotoSmoke.latest;
+          if (
+            latest.active !== expected ||
+            ['DRAFT_ORDER', 'DRAFT_PICK', 'GAME_OVER'].includes(latest.phase)
+          )
+            return true;
+          return Boolean(
+            document.querySelector(`.ability-tray.is-current[data-player="${expected}"]`),
+          );
+        }, state.active);
+        const latest = await authoritativeState(page);
+        if (
+          latest.active !== state.active ||
+          ['DRAFT_ORDER', 'DRAFT_PICK', 'GAME_OVER'].includes(latest.phase)
+        )
+          return;
         assert.equal(
           await page.locator(`.ability-tray.is-current[data-player="${active}"]`).count(),
           0,
@@ -339,7 +380,7 @@ async function endOnlineTurn(pages) {
       }),
     );
   }
-  return state;
+  return authoritativeState(pages[0]);
 }
 
 async function advanceToRound(pages, targetRound) {
@@ -551,10 +592,10 @@ async function localSmoke(browser, errors) {
   assert.equal(await page.locator('#ruleset-badge').isHidden(), true);
   for (let attempt = 0; ; attempt++) {
     const phase = await canvas.getAttribute('data-phase');
-    if (phase !== 'OPENING_ROLL') break;
+    if (phase !== 'OPENING') break;
     assert.ok(attempt < 12, 'opening rolls did not produce a winner');
     await clickRoll([page], 0);
-    if ((await canvas.getAttribute('data-phase')) === 'OPENING_ROLL')
+    if ((await canvas.getAttribute('data-phase')) === 'OPENING')
       await page.waitForFunction(() => !document.querySelector('#roll')?.hasAttribute('disabled'));
   }
 
@@ -659,7 +700,7 @@ async function onlineSmoke(browser, errors) {
   for (let attempt = 0; ; attempt++) {
     const state = await boardState(first);
     assert.deepEqual(await boardState(second), state, 'online seats disagree about turn state');
-    if (state.phase !== 'OPENING_ROLL') break;
+    if (state.phase !== 'OPENING') break;
     assert.ok(attempt < 12, 'online opening rolls did not produce a winner');
     const active = Number(state.active);
     assert.ok(active === 0 || active === 1, 'online match has no active opening player');
@@ -854,7 +895,15 @@ try {
   webServer = start(
     process.execPath,
     ['node_modules/vite/bin/vite.js', '--host', host, '--port', String(webPort), '--strictPort'],
-    { env: { ...process.env, PLAKOTO_SERVER_PORT: String(gamePort) } },
+    {
+      env: {
+        ...process.env,
+        PLAKOTO_SERVER_PORT: String(gamePort),
+        // Desktop IDEs can consume the per-user inotify instance limit. Polling keeps this
+        // isolated verification path reliable without changing the developer's system limits.
+        CHOKIDAR_USEPOLLING: '1',
+      },
+    },
   );
   await Promise.all([
     waitForServer(url, webServer),

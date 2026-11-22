@@ -36,6 +36,8 @@ import { createWaterPreview } from './ui/water-preview';
 import { GameController } from './app/game-controller';
 import type { GameState } from './game/session/state';
 import { createGameplayActions } from './app/gameplay-actions';
+import { createBoardAnnouncement } from './ui/board-announcement';
+import { PresentationCoordinator } from './app/presentation-coordinator';
 import { createOnlineGameFlow } from './app/online-game-flow';
 import { createMatchSession } from './app/match-session';
 import { PlaytestRecorder } from './app/playtest-report';
@@ -105,6 +107,8 @@ async function start() {
   });
   let actions: ReturnType<typeof createGameplayActions>;
   let dice: Awaited<ReturnType<typeof createDice>> | undefined;
+  const boardAnnouncement = createBoardAnnouncement();
+  const presentation = new PresentationCoordinator();
   const gameplay = await createGameplay(
     stage.root,
     stage.center,
@@ -113,6 +117,7 @@ async function start() {
     reducedMotion,
     stage.layout,
     controller,
+    () => presentation.blocking,
     {
       onChange: syncShell,
       onMove: (sequence) => actions.move(sequence),
@@ -126,6 +131,7 @@ async function start() {
   actions = createGameplayActions(controller, gameplay, {
     reset: () => dice?.reset(),
     play: (values, rerolledDie) => dice?.play(values, rerolledDie),
+    playOpening: (attempts) => dice?.playOpening(attempts),
   });
   session.onNewGame = () => actions.restart();
   session.canNewGame = () => actions.canRestart();
@@ -155,7 +161,7 @@ async function start() {
   let onlineFlow: ReturnType<typeof createOnlineGameFlow> | undefined;
   stage.mount(() => {
     gameplay.resize();
-    if (controller.hasRemoteMove) onlineFlow?.finishRemoteMove();
+    if (onlineFlow?.hasRemoteMove()) onlineFlow.finishRemoteMove();
     else actions.finishInterruptedMove();
     dice?.resize();
   });
@@ -185,14 +191,23 @@ async function start() {
           .find((candidate) => candidate.target.index === index);
         if (option) actions.playRollAbility(option);
       },
+      openingStarted: () => boardAnnouncement.openingStarted(),
+      openingFinished: (player) => {
+        boardAnnouncement.openingFinished(player);
+        gameplay.refresh(false);
+      },
     },
   );
-  onlineFlow = createOnlineGameFlow(controller, gameplay, dice);
+  onlineFlow = createOnlineGameFlow(controller, gameplay, dice, presentation);
 
   const match = createMatchSession(
     controller,
     onlineFlow,
-    gameplay,
+    {
+      startSetup: gameplay.startSetup,
+      presentOpening: (attempts) => dice?.playOpening(attempts),
+      setPlayerNames: (players) => boardAnnouncement.setPlayerNames(players),
+    },
     {
       setSearching,
       showNote,

@@ -6,19 +6,26 @@ export type StatusKey = string;
 export type StatusParams = Record<string, string | number>;
 
 export function initialPresentedSession(rules: RulesContext = CLASSIC_RULES): Session {
-  const state = initialGameState(rules);
-  const parts = sessionMessageParts(state, [{ type: 'GameReset' }]);
-  if (parts) {
-    state.message = parts.text;
-    state.messageKey = parts.key;
-    state.messageParams = parts.params;
-  }
-  return { state, history: [] };
+  return { state: initialGameState(rules), history: [] };
 }
 
-// Status copy belongs to presentation. Undo restores the saved text with its state.
+// Status copy belongs to presentation and is never stored in authoritative state.
 export function sessionMessage(state: GameState, events: SessionEvent[]): string | null {
   return sessionMessageParts(state, events)?.text ?? null;
+}
+
+/** Stable HUD projection for state that must survive reconnect without replaying an event. */
+export function stateMessageParts(
+  state: GameState,
+): { key: StatusKey; params: StatusParams; text: string } | null {
+  if (state.phase !== 'GAME_OVER' || !state.outcome) return null;
+  return state.outcome.winner === null
+    ? { key: `outcome.${state.outcome.kind}`, params: {}, text: state.outcome.reason }
+    : {
+        key: 'status.winner',
+        params: { player: state.outcome.winner + 1 },
+        text: `Player ${state.outcome.winner + 1} wins · ${state.outcome.reason}`,
+      };
 }
 
 /** Structured status copy so UI layers can render the same message in another locale. */
@@ -32,24 +39,12 @@ export function sessionMessageParts(
     case 'GameReset':
       return { key: 'status.gameReset', params: {}, text: 'Player 1 rolls both dice to start.' };
     case 'RollStarted':
-      return {
-        key: 'status.openingRoll',
-        params: { player: state.active! + 1 },
-        text: state.opening ? `Player ${state.active! + 1} · opening roll` : 'Rolling…',
-      };
-    case 'OpeningRollPassed':
-      return { key: 'status.openingPassed', params: {}, text: 'Player 2 rolls both dice.' };
-    case 'OpeningRollTied':
-      return {
-        key: 'status.openingTied',
-        params: {},
-        text: 'Tie · Player 1 rolls both dice again.',
-      };
-    case 'OpeningWinnerChosen':
+      return { key: 'status.rolling', params: {}, text: 'Rolling…' };
+    case 'OpeningResolved':
       return {
         key: 'status.openingWinner',
         params: { player: event.player + 1 },
-        text: `Player ${event.player + 1} starts · roll both dice for your first turn.`,
+        text: `Player ${event.player + 1} plays first.`,
       };
     case 'NoLegalMoves':
       return { key: 'status.noLegalMoves', params: {}, text: 'No legal moves · End your turn.' };

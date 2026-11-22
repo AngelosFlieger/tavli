@@ -6,13 +6,14 @@ import { GameController, type LocalMoveRequest } from './game-controller';
 export type ActionScene = {
   isSetupActive: () => boolean;
   refresh: (updatePositions?: boolean) => void;
-  startSetup: () => void;
+  startSetup: (complete?: () => void) => void;
   playLocalMove: (sequence: Move[], request: LocalMoveRequest, done: () => void) => void;
 };
 
 export type ActionDice = {
   reset: () => void;
   play: (values: [number, number], rerolledDie?: 0 | 1) => void;
+  playOpening: (attempts: [number, number][]) => void;
 };
 
 /** Sequences local presentation and online command waits without scene dependencies. */
@@ -47,8 +48,11 @@ export function createGameplayActions(
     },
     restart() {
       if (controller.restart(setupLocked()) !== 'local') return;
-      scene.startSetup();
+      const attempts = controller.resolveLocalOpening();
       dice.reset();
+      scene.startSetup(() => {
+        if (attempts) dice.playOpening(attempts);
+      });
       scene.refresh();
     },
     forfeit() {

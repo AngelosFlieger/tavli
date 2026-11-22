@@ -3,9 +3,20 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { initialGameState, type Session } from '../src/game/session/state';
 import { matchKey, rulesForSelection } from '../src/game/variant/rules-context';
-import { isCommand, isHello, isProtocolCompatible, PROTOCOL_VERSION } from '../src/net/messages';
+import {
+  isCommand,
+  isAuthorityCursor,
+  isHello,
+  isNetworkGameState,
+  isProtocolCompatible,
+  isRevisionedCommand,
+  isRevisionedUpdate,
+  PROTOCOL_MIN_VERSION,
+  PROTOCOL_VERSION,
+} from '../src/net/messages';
 import { createTables } from '../server/tables';
 import { openStore } from '../server/store';
+import { nonTiedOpeningRandom } from './support/opening-random';
 
 const isolatedStore = () => openStore({ name: `plakoto-test-${randomUUID()}` });
 
@@ -14,8 +25,193 @@ test('the handshake accepts only integer protocol versions and forfeits explicit
   assert.equal(isHello({ type: 'hello', protocol: 1.5 }), false);
   assert.equal(isHello({ type: 'find' }), false);
   assert.equal(isProtocolCompatible(PROTOCOL_VERSION), true);
+  assert.equal(isProtocolCompatible(PROTOCOL_MIN_VERSION), true);
+  assert.equal(isProtocolCompatible(PROTOCOL_MIN_VERSION - 1), false);
   assert.equal(isProtocolCompatible(PROTOCOL_VERSION + 1), false);
+  assert.equal(isAuthorityCursor({ matchId: 'match-1', revision: 0 }), true);
+  assert.equal(isAuthorityCursor({ matchId: '', revision: 0 }), false);
+  assert.equal(isAuthorityCursor({ matchId: 'match-1', revision: -1 }), false);
+  assert.equal(
+    isRevisionedCommand({
+      type: 'command',
+      commandId: 'command-1',
+      matchId: 'match-1',
+      expectedRevision: 0,
+      command: { type: 'roll' },
+    }),
+    true,
+  );
+  assert.equal(
+    isRevisionedCommand({
+      type: 'command',
+      commandId: '',
+      matchId: 'match-1',
+      expectedRevision: 0,
+      command: { type: 'roll' },
+    }),
+    false,
+  );
   assert.equal(isCommand({ type: 'forfeit' }), true);
+  assert.equal(isProtocolCompatible(2), false);
+});
+
+test('presentation jobs and update metadata are discriminated and revision-bound', () => {
+  const state = initialGameState();
+  const dice = {
+    type: 'DICE' as const,
+    blocking: true as const,
+    values: [6, 1] as [number, number],
+    rerolledDie: 0 as const,
+  };
+  assert.equal(
+    isRevisionedUpdate({
+      matchId: 'match-1',
+      revision: 1,
+      state,
+      canUndo: false,
+      presentations: [dice],
+    }),
+    true,
+  );
+  assert.equal(
+    isRevisionedUpdate({
+      matchId: 'match-1',
+      revision: 1,
+      state,
+      canUndo: false,
+      presentations: [{ type: 'DICE', blocking: false, values: [6, 1] }],
+    }),
+    false,
+  );
+  const opened = structuredClone(state);
+  opened.opening = {
+    status: 'RESOLVED',
+    attempts: [
+      [3, 3],
+      [6, 1],
+    ],
+    winner: 0,
+  };
+  opened.phase = 'WAITING_FOR_ROLL';
+  opened.active = 0;
+  opened.roll = [6, 1];
+  const openingUpdate = {
+    matchId: 'match-1',
+    revision: 0,
+    state: opened,
+    canUndo: false,
+  };
+  assert.equal(
+    isRevisionedUpdate({
+      ...openingUpdate,
+      presentations: [
+        {
+          type: 'OPENING',
+          blocking: true,
+          attempts: [
+            [3, 3],
+            [6, 1],
+          ],
+        },
+      ],
+    }),
+    true,
+  );
+  assert.equal(
+    isRevisionedUpdate({
+      ...openingUpdate,
+      presentations: [
+        {
+          type: 'OPENING',
+          blocking: true,
+          attempts: [
+            [3, 3],
+            [5, 1],
+          ],
+        },
+      ],
+    }),
+    false,
+  );
+  assert.equal(
+    isRevisionedUpdate({
+      ...openingUpdate,
+      presentations: [
+        {
+          type: 'OPENING',
+          blocking: true,
+          attempts: [
+            [3, 2],
+            [6, 1],
+          ],
+        },
+      ],
+    }),
+    false,
+  );
+  const contradictory = structuredClone(state);
+  contradictory.opening = { status: 'RESOLVED', attempts: [[6, 1]], winner: 0 };
+  assert.equal(isNetworkGameState(contradictory), false);
+  assert.equal(
+    isRevisionedUpdate({
+      matchId: 'match-1',
+      revision: 1,
+      state: contradictory,
+      canUndo: false,
+      presentations: [],
+    }),
+    false,
+  );
+  const powerups = initialGameState(
+    rulesForSelection({ ruleset: 'POWERUPS_V1', profileId: 'powerups-v1' }),
+  );
+  powerups.powerups!.loadouts[0].powerups.push({
+    instanceId: 'bad-copy',
+    abilityId: 'not-an-ability' as never,
+  });
+  assert.equal(isNetworkGameState(powerups), false);
+  assert.equal(
+    isRevisionedUpdate({
+      matchId: 'match-1',
+      revision: 1,
+      state: { ...state, board: [] },
+      canUndo: false,
+      presentations: [],
+    }),
+    false,
+  );
+  assert.equal(
+    isRevisionedUpdate({
+      matchId: 'match-1',
+      revision: 1,
+      state,
+      canUndo: false,
+      presentations: [dice, { type: 'RESET_DICE', blocking: false }],
+    }),
+    false,
+  );
+  assert.equal(
+    isRevisionedUpdate({
+      matchId: 'match-1',
+      revision: 1,
+      state,
+      canUndo: false,
+      presentations: [],
+      commandResult: { commandId: 'command-1', status: 'ACCEPTED', reason: 'INVALID_COMMAND' },
+    }),
+    false,
+  );
+  assert.equal(
+    isRevisionedUpdate({
+      matchId: 'match-1',
+      revision: 1,
+      state,
+      canUndo: false,
+      presentations: [],
+      events: [{ type: 'DiceRolled', player: 0, values: [9] }],
+    }),
+    false,
+  );
 });
 
 test('a queued opponent that never connects forfeits at the shorter no-show deadline', async () => {
@@ -25,6 +221,9 @@ test('a queued opponent that never connects forfeits at the shorter no-show dead
     store,
     () => 1,
     () => now,
+    undefined,
+    undefined,
+    nonTiedOpeningRandom(),
   );
   try {
     await tables.connect('ada');
@@ -57,7 +256,14 @@ test('a queued opponent that never connects forfeits at the shorter no-show dead
 
 test('resignation stores a typed result and keeps the match available for a rematch', async () => {
   const store = await isolatedStore();
-  const tables = createTables(store, () => 1);
+  const tables = createTables(
+    store,
+    () => 1,
+    undefined,
+    undefined,
+    undefined,
+    nonTiedOpeningRandom(),
+  );
   try {
     await tables.connect('ada');
     await tables.connect('basil');
@@ -81,7 +287,14 @@ test('resignation stores a typed result and keeps the match available for a rema
 
 test('startup clears volatile queues and gives live matches a reconnect grace', async () => {
   const store = await isolatedStore();
-  const tables = createTables(store, () => 1);
+  const tables = createTables(
+    store,
+    () => 1,
+    undefined,
+    undefined,
+    undefined,
+    nonTiedOpeningRandom(),
+  );
   try {
     await tables.connect('ada');
     await tables.connect('basil');
@@ -121,6 +334,62 @@ test('stored sessions with a malformed board are rejected instead of resumed', a
       true,
     );
     assert.equal(await store.match('malformed'), null);
+  } finally {
+    await store.drop();
+  }
+});
+
+test('stored sessions with contradictory semantic state are rejected instead of resumed', async () => {
+  const store = await isolatedStore();
+  try {
+    const state = initialGameState();
+    state.opening = { status: 'RESOLVED', attempts: [[6, 1]], winner: 0 };
+    assert.equal(
+      await store.insertMatch({
+        id: 'contradictory',
+        seats: ['ada', 'basil'],
+        session: { state, history: [] },
+        variantConfig: null,
+        lastUpdate: null,
+        revision: 0,
+        away: [null, null],
+        connected: [true, true],
+        endedAt: null,
+        winner: null,
+      }),
+      true,
+    );
+    assert.equal(await store.match('contradictory'), null);
+  } finally {
+    await store.drop();
+  }
+});
+
+test('stored sessions reject malformed nested variant state through the shared decoder', async () => {
+  const store = await isolatedStore();
+  try {
+    const rules = rulesForSelection({ ruleset: 'POWERUPS_V1', profileId: 'powerups-v1' });
+    const state = initialGameState(rules);
+    state.powerups!.loadouts[0].powerups.push({
+      instanceId: 'bad-copy',
+      abilityId: 'not-an-ability' as never,
+    });
+    assert.equal(
+      await store.insertMatch({
+        id: 'malformed-powerups',
+        seats: ['ada', 'basil'],
+        session: { state, history: [] },
+        variantConfig: rules.variantConfig,
+        lastUpdate: null,
+        revision: 0,
+        away: [null, null],
+        connected: [true, true],
+        endedAt: null,
+        winner: null,
+      }),
+      true,
+    );
+    assert.equal(await store.match('malformed-powerups'), null);
   } finally {
     await store.drop();
   }

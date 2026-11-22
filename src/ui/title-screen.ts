@@ -8,7 +8,7 @@ import type { Session } from './session';
 export type TitleScreen = {
   enterTable: () => void;
   showTitle: () => void;
-  setSearching: (on: boolean) => void;
+  setSearching: (on: boolean, status?: 'CONNECTING' | 'SEARCHING') => void;
   showNote: (text: string | null) => void;
   showRoom: (code: string) => void;
   enablePlay: () => void;
@@ -33,6 +33,7 @@ export function createTitleScreen(session: Session, playtest: PlaytestTools): Ti
     rulesetPicker.querySelectorAll<HTMLInputElement>('input[name="ruleset"]'),
   );
   const waitingRuleset = document.querySelector<HTMLElement>('#waiting-ruleset')!;
+  const waitingStatus = document.querySelector<HTMLElement>('#waiting-status-text')!;
   const roomButton = document.querySelector<HTMLButtonElement>('#start-room')!;
   const roomPanel = document.querySelector<HTMLElement>('#room-panel')!;
   const roomCreate = document.querySelector<HTMLButtonElement>('#room-create')!;
@@ -116,7 +117,7 @@ export function createTitleScreen(session: Session, playtest: PlaytestTools): Ti
     followScene('title');
   }
 
-  function setSearching(on: boolean) {
+  function setSearching(on: boolean, status: 'CONNECTING' | 'SEARCHING' = 'SEARCHING') {
     searching = on;
     document.body.classList.toggle('is-waiting', on);
     document.querySelector<HTMLElement>('#waiting-screen')!.hidden = !on;
@@ -125,6 +126,9 @@ export function createTitleScreen(session: Session, playtest: PlaytestTools): Ti
     if (on) document.querySelector<HTMLButtonElement>('#waiting-cancel')!.focus();
     else if (document.body.classList.contains('on-title')) multiplayerButton.focus();
     matchLabel.textContent = on ? t('menu.searching') : t('menu.multiplayer');
+    waitingStatus.textContent = t(
+      status === 'CONNECTING' ? 'waiting.connecting' : 'waiting.searching',
+    );
     multiplayerButton.setAttribute('aria-pressed', String(on));
     localButton.disabled = on || !playEnabled;
     roomButton.disabled = on || !playEnabled;

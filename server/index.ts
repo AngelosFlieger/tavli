@@ -7,11 +7,10 @@ import { extname, join, normalize, sep } from 'node:path';
 import { WebSocket, WebSocketServer, type WebSocket as Socket } from 'ws';
 import type { PlayerId } from '../src/net/lobby';
 import {
-  isCommand,
   isHello,
   isMatchSelection,
   isProtocolCompatible,
-  PROTOCOL_VERSION,
+  isRevisionedCommand,
   type ServerMessage,
 } from '../src/net/messages';
 import { createAccounts } from './accounts';
@@ -119,11 +118,12 @@ async function attach(socket: Socket, request: IncomingMessage) {
         socket.close();
         return;
       }
+      const negotiatedProtocol = message.protocol;
       ready = true;
       clearTimeout(handshakeTimer);
       const resumed = await tables.connect(user.id);
       if (resumed.length === 0)
-        send(user.id, { type: 'ready', protocol: PROTOCOL_VERSION, name: user.username });
+        send(user.id, { type: 'ready', protocol: negotiatedProtocol, name: user.username });
       else deliver(resumed);
     })().catch((error: unknown) => {
       console.error(error);
@@ -139,7 +139,7 @@ async function attach(socket: Socket, request: IncomingMessage) {
     owners.delete(socket);
     if (!userId || sockets.get(userId) !== socket) return;
     sockets.delete(userId);
-    void tables.disconnect(userId);
+    void tables.disconnect(userId).then(deliver).catch(console.error);
   });
 }
 
@@ -177,12 +177,17 @@ async function handleCommand(socket: Socket, data: unknown) {
       deliver(await tables.cancel(userId));
       return;
     }
-    const command = isCommand(message) ? message : null;
-    if (!command) {
+    if (!isRevisionedCommand(message)) {
       send(userId, { type: 'error', code: 'INVALID_COMMAND' });
       return;
     }
-    deliver(await tables.act(userId, command));
+    deliver(
+      await tables.act(userId, message.command, {
+        commandId: message.commandId,
+        matchId: message.matchId,
+        expectedRevision: message.expectedRevision,
+      }),
+    );
   } catch (error) {
     console.error(error);
     send(userId, { type: 'error', code: 'INTERNAL' });
@@ -275,7 +280,8 @@ function send(id: PlayerId, message: ServerMessage) {
 }
 
 function sendSocket(socket: Socket, message: ServerMessage) {
-  if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify(message));
+  if (socket.readyState !== WebSocket.OPEN) return;
+  socket.send(JSON.stringify(message));
 }
 
 function parse(data: unknown) {

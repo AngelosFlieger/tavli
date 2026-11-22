@@ -6,6 +6,7 @@ import { join } from 'node:path';
 const pureRoots = ['src/game/rules', 'src/game/session', 'src/game/variant'];
 const forbiddenImport =
   /from\s+['"](?:three|ws|mongodb|@capacitor\/[^'"]+|(?:\.\.\/)+(?:scene|ui|net|app|server)\/[^'"]*)['"]/;
+const authoritativeTransitionImport = /from\s+['"][^'"]*game\/session\/transition['"]/;
 
 async function sourceFiles(directory: string): Promise<string[]> {
   const entries = await readdir(directory, { withFileTypes: true });
@@ -26,4 +27,26 @@ test('pure rules and session layers do not import presentation or transport code
       assert.doesNotMatch(source, forbiddenImport, `${file} crosses a pure-layer boundary`);
     }
   }
+});
+
+test('UI and scene adapters cannot invoke authoritative session transitions', async () => {
+  for (const root of ['src/ui', 'src/scene']) {
+    for (const file of await sourceFiles(root)) {
+      const source = await readFile(file, 'utf8');
+      assert.doesNotMatch(
+        source,
+        authoritativeTransitionImport,
+        `${file} bypasses the application boundary`,
+      );
+    }
+  }
+});
+
+test('the interaction controller delegates session transitions to local authority', async () => {
+  const source = await readFile('src/app/game-controller.ts', 'utf8');
+  assert.doesNotMatch(source, /\btransitionSession\s*\(/);
+  assert.doesNotMatch(source, /\binitialPresentedSession\s*\(/);
+  assert.doesNotMatch(source, /new PickupSelection\s*\(/);
+  const interaction = await readFile('src/app/interaction-controller.ts', 'utf8');
+  assert.doesNotMatch(interaction, authoritativeTransitionImport);
 });
