@@ -7,12 +7,12 @@
   min-height: 42px;
   padding: 8px 12px;
   border: 2px solid #9ce8d7;
-  border-radius: 6px;
+  border-radius: var(--radius-control);
   background: #16475c;
   color: #fff0c7;
   box-shadow:
     0 4px #102936,
-    0 6px #080e1c;
+    0 6px var(--shadow-ink);
   font: 700 11px monospace;
   letter-spacing: 0.04em;
 }
