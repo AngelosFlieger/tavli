@@ -1,0 +1,81 @@
+/* Shared overlay dialog: the Rules reference and the Settings panel both render into it. */
+dialog {
+  background: var(--surface-panel);
+  color: var(--ink);
+  border: 2px solid var(--line-gold);
+  border-radius: var(--radius-panel);
+  padding: 40px;
+  width: min(510px, 90vw);
+  box-shadow: 10px 12px #060d1d;
+  line-height: 1.6;
+}
+dialog::backdrop {
+  background: #030a18ca;
+  backdrop-filter: blur(6px);
+}
+dialog h2 {
+  font-size: 36px;
+  margin: 0 0 20px;
+}
+dialog p {
+  color: var(--ink-muted);
+}
+dialog h3 {
+  margin: 30px 0 10px;
+  color: var(--ink-gold-soft);
+}
+dialog .ability-help {
+  padding-left: 20px;
+}
+dialog .ability-help li {
+  margin: 0 0 12px;
+  color: var(--ink-muted);
+}
+dialog .ability-help small {
+  margin-left: 5px;
+  color: var(--ink-gold);
+  font: 9px monospace;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+dialog .eyebrow {
+  font: 10px monospace;
+  color: var(--ink-gold);
+  letter-spacing: 0.2em;
+}
+dialog .note {
+  font: 12px/1.6 monospace;
+  color: #a1adbf;
+  border-top: 1px solid #bc9c6555;
+  padding-top: 18px;
+  margin-top: 25px;
+}
+.close {
+  position: absolute;
+  right: 14px;
+  top: 12px;
+  width: 32px;
+  height: 32px;
+  font-size: 22px;
+  box-shadow: none;
+}
+dialog label {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 15px 0;
+  border-bottom: 1px solid var(--line-gold-faint);
+}
+dialog input[type='text'],
+dialog input[type='email'],
+dialog input[type='password'],
+dialog input[type='url'] {
+  width: min(280px, 52vw);
+  height: auto;
+  padding: 8px 10px;
+  color: var(--ink);
+  background: var(--surface-field);
+  border: 1px solid var(--line-gold);
+  border-radius: var(--radius-control);
+  font: inherit;
+}

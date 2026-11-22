@@ -1,22 +1,24 @@
-import { abilityRegistry, describeConfiguredAbility } from '../../game/variant/abilities/registry';
+import { abilityRegistry } from '../../game/variant/abilities/registry';
 import type { AbilityId, ResolvedVariantConfig } from '../../game/variant/types';
+import { t } from '../i18n';
+import { localizedAbilityCopy } from './copy';
 
 export function createAbilityCardContent(
   abilityId: AbilityId,
   config: ResolvedVariantConfig,
   mode: 'DRAFT' | 'FOCUS',
 ): DocumentFragment {
-  const copy = describeConfiguredAbility(abilityId, config);
+  const copy = localizedAbilityCopy(abilityId, config);
   const kind = document.createElement(mode === 'DRAFT' ? 'span' : 'small');
   if (mode === 'DRAFT') kind.className = 'draft-card-kind';
   kind.textContent =
     mode === 'DRAFT'
       ? abilityRegistry[abilityId].kind === 'POWERUP'
-        ? 'Powerup · expendable'
-        : 'Passive'
+        ? t('ability.powerupExpendable')
+        : t('ability.passive')
       : abilityRegistry[abilityId].kind === 'POWERUP'
-        ? 'Expendable power'
-        : 'Passive';
+        ? t('ability.expendablePower')
+        : t('ability.passive');
   const name = document.createElement('strong');
   name.textContent = copy.name;
   const summary = document.createElement(mode === 'DRAFT' ? 'span' : 'p');
@@ -24,17 +26,17 @@ export function createAbilityCardContent(
   summary.textContent = copy.summary;
   const fragment = document.createDocumentFragment();
   fragment.append(kind, name, summary);
-  if (copy.benefit) fragment.append(abilityDetail('Benefit', copy.benefit));
-  if (copy.drawback) fragment.append(abilityDetail('Drawback', copy.drawback));
+  if (copy.benefit) fragment.append(abilityDetail(t('ability.benefit'), copy.benefit));
+  if (copy.drawback) fragment.append(abilityDetail(t('ability.drawback'), copy.drawback));
   return fragment;
 }
 
 export function abilityTooltip(abilityId: AbilityId, config: ResolvedVariantConfig): string {
-  const copy = describeConfiguredAbility(abilityId, config);
+  const copy = localizedAbilityCopy(abilityId, config);
   return [
     copy.summary,
-    ...(copy.benefit ? [`Benefit: ${copy.benefit}`] : []),
-    ...(copy.drawback ? [`Drawback: ${copy.drawback}`] : []),
+    ...(copy.benefit ? [`${t('ability.benefit')}: ${copy.benefit}`] : []),
+    ...(copy.drawback ? [`${t('ability.drawback')}: ${copy.drawback}`] : []),
   ].join(' ');
 }
 

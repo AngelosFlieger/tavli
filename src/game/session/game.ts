@@ -1,6 +1,6 @@
 import { legalMoves } from '../rules/moves';
 import type { Move, Position } from '../rules/position';
-import { initialPresentedSession, sessionMessage } from './messages';
+import { initialPresentedSession } from './messages';
 import type { GameState } from './state';
 import { transitionSession, type SessionCommand, type SessionResult } from './transition';
 import { CLASSIC_RULES, type RulesContext } from '../variant/types';
@@ -28,8 +28,6 @@ export class Game {
     if (!result.ok) return result;
     this.state = result.session.state;
     this.history = result.session.history;
-    const message = sessionMessage(this.state, result.events);
-    if (message !== null) this.state.message = message;
     return result;
   }
 

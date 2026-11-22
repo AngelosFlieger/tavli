@@ -132,6 +132,21 @@ the redundant `draftRolls` update field and revision-envelope copy were removed.
 buttons and their screen projection now live in `die-selection-overlay.ts`; `dice.ts` owns only the
 3D rings and toss presentation.
 
+## Stage 6: ability extension seam
+
+Status: **complete**.
+
+Each definition module now owns its config type, validation, copy references, and the behavior its
+kind and timing require. `abilities/catalog.ts` is the single registry; `AbilityId`, the config
+map, metadata, and all capability maps are derived from it. `defineAbility` overloads make a
+missing capability a compile error instead of a runtime contract test, the UI renders copy from
+definition descriptors, and English copy no longer lives in the rules layer. Public effects now
+publish serializable constraints that the move and delayed-roll policies interpret, so those
+consumers no longer switch on ability IDs.
+
+Verification: frozen ID order, profile hashes, and seeded draft offers; a runtime import-cycle test;
+the full unit suite and both browser paths.
+
 ## Completion requirements
 
 Each stage requires focused rule/session/application/multiplayer tests as appropriate, followed by:

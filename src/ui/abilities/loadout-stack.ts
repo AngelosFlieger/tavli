@@ -1,9 +1,11 @@
 import type { GameController } from '../../app/game-controller';
 import type { Player } from '../../game/rules/position';
-import { abilityRegistry, describeConfiguredAbility } from '../../game/variant/abilities/registry';
+import { abilityRegistry } from '../../game/variant/abilities/registry';
 import type { AbilityInstance, PlayerLoadout } from '../../game/variant/types';
+import { t } from '../i18n';
 import { createActiveEffectList } from './active-effect-list';
 import { abilityTooltip } from './card-content';
+import { localizedAbilityCopy } from './copy';
 import { createFocusedAbilityCard } from './focused-ability-card';
 import { abilityCounterText } from './presenters';
 
@@ -59,7 +61,7 @@ export function createAbilityLoadouts(
           (effect) => effect.affectedPlayer === player,
         ) ?? [];
       view.replaceChildren();
-      view.setAttribute('aria-label', `Player ${player + 1} abilities`);
+      view.setAttribute('aria-label', t('draft.player.abilities', { player: player + 1 }));
       const isCurrent = activePlayer === player;
       playerTray.classList.toggle('is-current', isCurrent);
       playerTray.inert = !isCurrent;
@@ -98,7 +100,7 @@ export function createAbilityLoadouts(
     if (!instances.length && !hasEffects) {
       const empty = document.createElement('span');
       empty.className = 'ability-slot empty';
-      empty.textContent = 'No abilities';
+      empty.textContent = t('ability.noAbilities');
       stack.append(empty);
       return stack;
     }
@@ -120,9 +122,12 @@ export function createAbilityLoadouts(
     chip.dataset.ability = instance.abilityId;
     chip.dataset.instance = instance.instanceId;
     chip.classList.toggle('focused', focusedInstanceId === instance.instanceId);
-    const copy = describeConfiguredAbility(instance.abilityId, config);
+    const copy = localizedAbilityCopy(instance.abilityId, config);
     const kind = document.createElement('small');
-    kind.textContent = abilityRegistry[instance.abilityId].kind === 'POWERUP' ? 'Power' : 'Passive';
+    kind.textContent =
+      abilityRegistry[instance.abilityId].kind === 'POWERUP'
+        ? t('ability.power')
+        : t('ability.passive');
     const name = document.createElement('strong');
     name.textContent = copy.name;
     chip.append(kind, name);
@@ -134,7 +139,13 @@ export function createAbilityLoadouts(
     }
     chip.title = abilityTooltip(instance.abilityId, config);
     chip.setAttribute('aria-pressed', String(focusedInstanceId === instance.instanceId));
-    chip.setAttribute('aria-label', `View ${copy.name}${canUse ? ', playable now' : ''}`);
+    chip.setAttribute(
+      'aria-label',
+      t('ability.view', {
+        name: copy.name,
+        playable: canUse ? t('ability.playable') : '',
+      }),
+    );
     chip.onclick = () => {
       focusedInstanceId = focusedInstanceId === instance.instanceId ? null : instance.instanceId;
       requestRender();

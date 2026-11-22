@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { PlaytestRecorder } from '../src/app/playtest-report';
-import { createSeededRandomInt, parseOptionalSeed } from '../src/game/random';
+import { createSeededDie, createSeededRandomInt, parseOptionalSeed } from '../src/game/random';
 import { initialGameState } from '../src/game/session/state';
 import type { SessionEvent } from '../src/game/session/transition';
 import { POWERUPS_V1 } from '../src/game/variant/config/profiles';
@@ -29,6 +29,28 @@ test('seeded random integers are reproducible and stay within bounds', () => {
   assert.throws(() => first(0));
 });
 
+test('seeded dice are reproducible, stay on a die face, and keep their own stream', () => {
+  const first = createSeededDie(2);
+  const second = createSeededDie(2);
+  const rolls = Array.from({ length: 20 }, first);
+
+  assert.deepEqual(rolls, Array.from({ length: 20 }, second));
+  assert.equal(
+    rolls.every((roll) => Number.isInteger(roll) && roll >= 1 && roll <= 6),
+    true,
+  );
+  // Draft and passive draws keep the bare seed stream, so dice must not consume it.
+  const untouched = createSeededRandomInt(2);
+  const expectedDrafts = Array.from({ length: 20 }, () => untouched(6));
+  const draft = createSeededRandomInt(2);
+  const die = createSeededDie(2);
+  const interleavedDrafts = Array.from({ length: 20 }, () => {
+    die();
+    return draft(6);
+  });
+  assert.deepEqual(interleavedDrafts, expectedDrafts);
+});
+
 test('blank playtest seeds keep fresh randomness while explicit seeds remain reproducible', () => {
   assert.equal(parseOptionalSeed(''), undefined);
   assert.equal(parseOptionalSeed('   '), undefined);
@@ -41,7 +63,7 @@ test('blank playtest seeds keep fresh randomness while explicit seeds remain rep
 test('playtest recorder keeps semantic events, state snapshots, and balance summaries', () => {
   const rules = powerupsRules(POWERUPS_V1);
   const state = initialGameState(rules);
-  state.opening = false;
+  state.opening = { status: 'RESOLVED', attempts: [[6, 1]], winner: 0 };
   state.active = 1;
   state.phase = 'TURN_COMPLETE';
   state.powerups!.completedRounds = 3;
@@ -53,7 +75,7 @@ test('playtest recorder keeps semantic events, state snapshots, and balance summ
       affectedPlayer: 1,
       target: { type: 'POINT', point: 12 },
       tags: ['CONTROL'],
-      modifiers: { blockLeaving: true, blockLanding: true },
+      constraints: [{ kind: 'BLOCK_LEAVING' }, { kind: 'BLOCK_LANDING' }],
       duration: { boundary: 'TARGET_TURN_END', count: 2 },
       remaining: 1,
     },

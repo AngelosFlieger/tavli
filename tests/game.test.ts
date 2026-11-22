@@ -6,8 +6,8 @@ import {
   applyMove,
   canBearOff,
   initialPosition,
+  other,
   pinned,
-  owner,
   type Position,
 } from '../src/game/rules/position';
 import { moveSequences, rawMoves, legalMoves } from '../src/game/rules/moves';
@@ -16,13 +16,11 @@ import { PATHS, pointPosition } from '../src/game/points';
 import { canPlaceQueue, queuedSequences } from '../src/game/pickup';
 import { faces, landingRotation, upwardFace } from '../src/scene/dice';
 import { prepareAnimationStages } from '../src/scene/move-animation';
+import { resolvedOpeningState } from './support/resolved-opening';
 const empty = (): Position => ({ board: Array.from({ length: 24 }, () => []), off: [[], []] });
 const startTurn = (values: number[]) => {
   const g = new Game();
-  g.beginRoll();
-  g.receiveRoll([6, 6]);
-  g.beginRoll();
-  g.receiveRoll([1, 1]);
+  g.state = resolvedOpeningState();
   g.beginRoll();
   g.receiveRoll(values);
   return g;
@@ -37,6 +35,10 @@ test('initial 15-checker positions are inside the leftmost physical points', () 
   assert.ok(pointPosition(0).z < 0);
   assert.ok(pointPosition(12).z > 0);
 });
+test('player helpers preserve the two-seat ownership boundary', () => {
+  assert.equal(other(0), 1);
+  assert.equal(other(1), 0);
+});
 test('explicit opposite paths each cover exactly 24 physical points', () => {
   for (const path of PATHS) {
     assert.equal(new Set(path).size, 24);
@@ -49,27 +51,13 @@ test('explicit opposite paths each cover exactly 24 physical points', () => {
   assert.equal(PATHS[0][23], 12);
   assert.equal(PATHS[1][23], 0);
 });
-test('each player rolls two dice, totals decide starter, ties replay both rolls', () => {
+test('the compatibility facade cannot advance the automatic opening manually', () => {
   const g = new Game();
   assert.equal(g.state.active, 0);
-  assert.equal(g.beginRoll(), true);
+  assert.equal(g.state.opening.status, 'PENDING');
   assert.equal(g.beginRoll(), false);
-  g.receiveRoll([3, 4]);
-  assert.equal(g.state.active, 1);
-  assert.equal(g.state.phase, 'OPENING_ROLL');
-  assert.deepEqual(g.state.openingRolls[0], [3, 4]);
-  g.beginRoll();
-  g.receiveRoll([5, 2]);
-  assert.equal(g.state.phase, 'OPENING_ROLL');
-  assert.equal(g.state.active, 0);
-  assert.deepEqual(g.state.openingRolls, [null, null]);
-  g.beginRoll();
-  g.receiveRoll([2, 1]);
-  g.beginRoll();
-  g.receiveRoll([2, 5]);
-  assert.equal(g.state.active, 1);
-  assert.equal(g.state.phase, 'WAITING_FOR_ROLL');
-  assert.deepEqual(g.state.remaining, []);
+  assert.equal(g.state.phase, 'OPENING');
+  assert.deepEqual(g.state.opening, { status: 'PENDING' });
 });
 test('different dice allow independent steps and legal orderings', () => {
   const g = startTurn([3, 5]);
@@ -173,7 +161,23 @@ test('multiple controllers maintain the pin until the last leaves', () => {
 test('mother pin wins two points when own starting checkers have departed', () => {
   const p = empty();
   p.board[12] = [15, 0];
-  assert.deepEqual(outcome(p), { winner: 0, points: 2, reason: 'Mother victory' });
+  assert.deepEqual(outcome(p), {
+    winner: 0,
+    points: 2,
+    reason: 'Mother victory',
+    kind: 'MOTHER_VICTORY',
+  });
+});
+test('an enemy checker on the winner start does not prevent a mother victory', () => {
+  const p = empty();
+  p.board[12] = [15, 0];
+  p.board[0] = [16];
+  assert.deepEqual(outcome(p), {
+    winner: 0,
+    points: 2,
+    reason: 'Mother victory',
+    kind: 'MOTHER_VICTORY',
+  });
 });
 test('mother exception continues until own start empties, both pinned is a draw', () => {
   const p = empty();
@@ -181,7 +185,12 @@ test('mother exception continues until own start empties, both pinned is a draw'
   p.board[0] = [1];
   assert.equal(outcome(p), null);
   p.board[0] = [1, 16];
-  assert.deepEqual(outcome(p), { winner: null, points: 0, reason: 'Both mothers pinned — draw' });
+  assert.deepEqual(outcome(p), {
+    winner: null,
+    points: 0,
+    reason: 'Both mothers pinned — draw',
+    kind: 'DRAW',
+  });
 });
 test('bearing off requires all remaining checkers home and none pinned', () => {
   const p = empty();
@@ -194,6 +203,18 @@ test('bearing off requires all remaining checkers home and none pinned', () => {
   p.board[12] = [0, 15];
   assert.equal(canBearOff(p, 0), false);
 });
+test('pin detection distinguishes a controlled checker from ordinary stacks', () => {
+  const p = empty();
+  p.board[3] = [0];
+  p.board[4] = [0, 1];
+  p.board[5] = [15, 16];
+  assert.equal(pinned(p, 0), false);
+  assert.equal(pinned(p, 1), false);
+
+  p.board[6] = [0, 15];
+  assert.equal(pinned(p, 0), true);
+  assert.equal(pinned(p, 1), false);
+});
 test('exact bearing off and higher die only from highest occupied lower point', () => {
   const p = empty();
   p.board[14] = [0];
@@ -204,6 +225,12 @@ test('exact bearing off and higher die only from highest occupied lower point', 
     rawMoves(p, 0, 6).some((m) => m.from === 14 && m.to === -1),
     false,
   );
+});
+test('opponent checkers do not affect the highest occupied bearing-off point', () => {
+  const p = empty();
+  p.board[16] = [0];
+  p.board[23] = [15];
+  assert.deepEqual(rawMoves(p, 0, 6), [{ from: 16, to: -1, die: 6 }]);
 });
 test('home moves may be chosen instead of bearing off and lower dice move forward', () => {
   const p = empty();
@@ -217,9 +244,19 @@ test('normal win awards one, Mars awards two', () => {
   const p = empty();
   p.off[0] = Array.from({ length: 15 }, (_, i) => i);
   p.off[1] = [15];
-  assert.equal(outcome(p)?.points, 1);
+  assert.deepEqual(outcome(p), {
+    winner: 0,
+    points: 1,
+    reason: 'All checkers borne off',
+    kind: 'BEAR_OFF',
+  });
   p.off[1] = [];
-  assert.equal(outcome(p)?.points, 2);
+  assert.deepEqual(outcome(p), {
+    winner: 0,
+    points: 2,
+    reason: 'Mars',
+    kind: 'MARS',
+  });
 });
 test('turns enable end only after compulsory moves', () => {
   const g = startTurn([1, 2]);
@@ -236,7 +273,13 @@ test('turns enable end only after compulsory moves', () => {
 });
 test('no legal moves waits for the player to end the turn', () => {
   const g = new Game();
-  g.state = { ...g.state, ...empty(), active: 0, opening: false, phase: 'WAITING_FOR_ROLL' };
+  g.state = {
+    ...g.state,
+    ...empty(),
+    active: 0,
+    opening: { status: 'RESOLVED', attempts: [[6, 1]], winner: 0 },
+    phase: 'WAITING_FOR_ROLL',
+  };
   g.state.board[1] = [0];
   g.state.board[2] = [15, 16];
   g.state.board[3] = [17, 18];
@@ -270,7 +313,7 @@ test('single game finishes without match scoring and can be restarted', () => {
     ...g.state,
     ...empty(),
     active: 0,
-    opening: false,
+    opening: { status: 'RESOLVED', attempts: [[6, 1]], winner: 0 },
     phase: 'WAITING_FOR_MOVE',
     remaining: [1],
   };
@@ -282,7 +325,7 @@ test('single game finishes without match scoring and can be restarted', () => {
   assert.equal('scores' in g.state, false);
   g.reset();
   assert.equal(g.state.active, 0);
-  assert.equal(g.state.phase, 'OPENING_ROLL');
+  assert.equal(g.state.phase, 'OPENING');
   assert.equal(g.state.board[0].length, 15);
 });
 test('all modeled die face normals read correctly at all tested yaw angles', () => {
@@ -292,10 +335,7 @@ test('all modeled die face normals read correctly at all tested yaw angles', () 
 });
 test('long deterministic legal play conserves all 30 checkers and completes', () => {
   const g = new Game();
-  g.beginRoll();
-  g.receiveRoll([6, 6]);
-  g.beginRoll();
-  g.receiveRoll([1, 1]);
+  g.state = resolvedOpeningState();
   let seed = 51,
     turns = 0;
   const random = () => {

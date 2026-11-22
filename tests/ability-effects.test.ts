@@ -17,7 +17,7 @@ function effect(
     affectedPlayer: 1,
     target: { type: 'POINT', point },
     tags: ['CONTROL'],
-    modifiers: abilityId === 'bastion' ? { anchorChecker: 15 } : {},
+    constraints: abilityId === 'bastion' ? [{ kind: 'ANCHOR_CHECKER', checker: 15 }] : [],
     duration: { boundary: 'TARGET_TURN_END', count: 1 },
     remaining: 1,
   };

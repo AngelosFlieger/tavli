@@ -7,13 +7,13 @@ export function createBreathing(objects: Object3D[]) {
     rotation: object.rotation.clone(),
   }));
   return {
-    capture() {
+    capture: () => {
       bases = objects.map((object) => ({
         position: object.position.clone(),
         rotation: object.rotation.clone(),
       }));
     },
-    update(elapsed: number, motion: boolean) {
+    update: (elapsed: number, motion: boolean) => {
       objects.forEach((object, index) => {
         const base = bases[index],
           phase = elapsed * (0.65 + index * 0.025) + index * 1.7;

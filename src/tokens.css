@@ -1,0 +1,41 @@
+/*
+ * Design tokens for the shared chrome: surfaces, ink, gold lines, accents, shadow, and radius.
+ *
+ * Each token is the single source for its family, so the UI cannot drift back into near-duplicate
+ * shades. Decorative one-off gradient stops in draft.css and title.css stay literal until they are
+ * redrawn on purpose.
+ */
+:root {
+  /* Surfaces: page frame, text fields, overlay panel, auth card. */
+  --surface-base: #0b1427;
+  --surface-field: #0c1728;
+  --surface-panel: #111e33;
+  --surface-form: #10192b;
+
+  /* Ink: primary parchment, dialog copy, quiet mono copy, gold eyebrows, and soft gold headings. */
+  --ink: #f1dfb3;
+  --ink-muted: #d2c5a9;
+  --ink-subtle: #aeb8c8;
+  --ink-gold: #d6af72;
+  --ink-gold-soft: #d9bd84;
+
+  /* Gold rules: full-strength borders, section dividers, and faint inline separators. */
+  --line-gold: #cab17d;
+  --line-gold-soft: #cab17d55;
+  --line-gold-faint: #cab17d33;
+
+  /* Accents: crimson pieces and controls, rose glyphs, the deep crimson shadow. */
+  --accent-crimson: #cb354d;
+  --accent-crimson-deep: #621c32;
+  --accent-rose: #d34459;
+  --accent-control: #bb354e;
+
+  /* Hard offset shadow behind buttons, cards, and panels. */
+  --shadow-ink: #070e1b;
+
+  /* Three-step radius scale: controls, cards, panels; 50% stays literal for circles. */
+  --radius-control: 6px;
+  --radius-card: 10px;
+  --radius-panel: 12px;
+  --radius-pill: 999px;
+}

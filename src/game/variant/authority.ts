@@ -1,4 +1,3 @@
-import { sessionMessage } from '../session/messages';
 import type { Session } from '../session/state';
 import { transitionSession, type SessionEvent } from '../session/transition';
 import { sampleDraftOffer } from './draft';
@@ -40,8 +39,6 @@ export function advancePendingDraft(
     events.push(...ordered.events);
     orderRolls.push(rolls);
     if (session.state.phase === 'DRAFT_PICK') {
-      const message = sessionMessage(session.state, events);
-      if (message !== null) session.state.message = message;
       return { session, events, orderRolls };
     }
   }

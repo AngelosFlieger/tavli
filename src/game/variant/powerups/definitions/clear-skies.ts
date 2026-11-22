@@ -1,7 +1,5 @@
 import type { Player } from '../../../rules/position';
 import type { GameState } from '../../../session/state';
-import { defineBeforeRollAbilityBehavior } from '../../abilities/capabilities';
-import type { ActiveEffect, ClearSkiesConfig } from '../../types';
 import { defineAbility } from '../../abilities/define';
 import {
   baseConfig,
@@ -11,6 +9,13 @@ import {
   record,
   uniqueList,
 } from '../../abilities/validation';
+import type { AbilityConfigBase, ActiveEffect, EffectTag } from '../../base';
+
+export type ClearSkiesConfig = AbilityConfigBase & {
+  maxEffects: number;
+  removableTags: EffectTag[];
+  canTargetOpponentPositive: boolean;
+};
 
 export const clearSkies = defineAbility<'clearSkies', ClearSkiesConfig>({
   id: 'clearSkies',
@@ -39,36 +44,35 @@ export const clearSkies = defineAbility<'clearSkies', ClearSkiesConfig>({
       ),
     };
   },
-  describe(config) {
+  copy(config) {
     return {
-      name: 'Clear Skies',
-      summary: `Remove up to ${config.maxEffects} hostile effect${config.maxEffects === 1 ? '' : 's'}.`,
+      name: { key: 'ability.clearSkies.name' },
+      summary: { key: 'ability.clearSkies.summary', params: { count: config.maxEffects } },
     };
   },
-});
-
-export const clearSkiesBeforeRoll = defineBeforeRollAbilityBehavior({
-  id: 'clearSkies',
-  targets(state, player, config) {
-    return removableEffects(state, player, config).map((effect) => ({
-      type: 'EFFECT',
-      instanceId: effect.instanceId,
-    }));
-  },
-  apply(state, player, target, config) {
-    if (target.type !== 'EFFECT') return [];
-    const eligible = removableEffects(state, player, config);
-    const selected = eligible.find((effect) => effect.instanceId === target.instanceId);
-    if (!selected) return [];
-    const removed = [selected, ...eligible.filter((effect) => effect !== selected)].slice(
-      0,
-      config.maxEffects,
-    );
-    const removedIds = new Set(removed.map((effect) => effect.instanceId));
-    state.powerups!.activeEffects = state.powerups!.activeEffects.filter(
-      (effect) => !removedIds.has(effect.instanceId),
-    );
-    return removed;
+  behavior: {
+    id: 'clearSkies',
+    targets(state, player, config) {
+      return removableEffects(state, player, config).map((effect) => ({
+        type: 'EFFECT',
+        instanceId: effect.instanceId,
+      }));
+    },
+    apply(state, player, target, config) {
+      if (target.type !== 'EFFECT') return [];
+      const eligible = removableEffects(state, player, config);
+      const selected = eligible.find((effect) => effect.instanceId === target.instanceId);
+      if (!selected) return [];
+      const removed = [selected, ...eligible.filter((effect) => effect !== selected)].slice(
+        0,
+        config.maxEffects,
+      );
+      const removedIds = new Set(removed.map((effect) => effect.instanceId));
+      state.powerups!.activeEffects = state.powerups!.activeEffects.filter(
+        (effect) => !removedIds.has(effect.instanceId),
+      );
+      return removed;
+    },
   },
 });
 

@@ -21,12 +21,14 @@ export function boardAbilityEffects(state: GameState): BoardAbilityEffect[] {
       return [];
     const stack = state.board[effect.target.point];
     const top = stack.at(-1);
-    const checker =
-      effect.abilityId === 'bastion' &&
-      effect.modifiers.anchorChecker !== undefined &&
-      stack.includes(effect.modifiers.anchorChecker)
-        ? effect.modifiers.anchorChecker
-        : top;
+    const anchor =
+      effect.abilityId === 'bastion'
+        ? effect.constraints.find(
+            (constraint): constraint is Extract<typeof constraint, { kind: 'ANCHOR_CHECKER' }> =>
+              constraint.kind === 'ANCHOR_CHECKER',
+          )
+        : undefined;
+    const checker = anchor && stack.includes(anchor.checker) ? anchor.checker : top;
     return checker === undefined
       ? []
       : [

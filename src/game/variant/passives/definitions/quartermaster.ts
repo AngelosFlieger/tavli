@@ -1,13 +1,17 @@
-import type { QuartermasterConfig } from '../../types';
 import { defineAbility } from '../../abilities/define';
-import { baseConfig, exactKeys, integer, record, turns } from '../../abilities/validation';
-import { definePassiveAbilityBehavior } from '../capabilities';
+import { baseConfig, exactKeys, integer, record } from '../../abilities/validation';
+import type { AbilityConfigBase } from '../../base';
 import {
   clearPassiveCounter,
   passiveCounter,
   QUARTERMASTER_COOLDOWN,
   setPassiveCounter,
 } from '../counters';
+
+export type QuartermasterConfig = AbilityConfigBase & {
+  extraPowerupSlots: number;
+  cooldownOwnTurns: number;
+};
 
 export const quartermaster = defineAbility<'quartermaster', QuartermasterConfig>({
   id: 'quartermaster',
@@ -25,37 +29,42 @@ export const quartermaster = defineAbility<'quartermaster', QuartermasterConfig>
       cooldownOwnTurns: integer(input.cooldownOwnTurns, 'quartermaster.cooldownOwnTurns', 1),
     };
   },
-  describe(config) {
+  copy(config) {
     return {
-      name: 'Quartermaster',
-      benefit: `Hold ${config.extraPowerupSlots} extra powerup${config.extraPowerupSlots === 1 ? '' : 's'}.`,
-      drawback: `Using one starts a ${turns(config.cooldownOwnTurns)} cooldown.`,
-      summary: 'Carry more powerups, but use them less frequently.',
+      name: { key: 'ability.quartermaster.name' },
+      summary: { key: 'ability.quartermaster.summary' },
+      benefit: {
+        key: 'ability.quartermaster.benefit',
+        params: { count: config.extraPowerupSlots },
+      },
+      drawback: {
+        key: 'ability.quartermaster.drawback',
+        params: { count: config.cooldownOwnTurns },
+      },
     };
   },
-});
-
-export const quartermasterPassive = definePassiveAbilityBehavior({
-  id: 'quartermaster',
-  inventory: {
-    powerupCapacity(config) {
-      return { mode: 'ADD', slots: config.extraPowerupSlots };
+  behavior: {
+    id: 'quartermaster',
+    inventory: {
+      powerupCapacity(config) {
+        return { mode: 'ADD', slots: config.extraPowerupSlots };
+      },
     },
-  },
-  powerupUse: {
-    canUse(powerups, player) {
-      return passiveCounter(powerups, player, QUARTERMASTER_COOLDOWN) === 0;
+    powerupUse: {
+      canUse(powerups, player) {
+        return passiveCounter(powerups, player, QUARTERMASTER_COOLDOWN) === 0;
+      },
+      used(powerups, player, config) {
+        setPassiveCounter(powerups, player, QUARTERMASTER_COOLDOWN, config.cooldownOwnTurns);
+      },
+      ownerTurnEnded(powerups, player, usedPowerupThisTurn) {
+        const remaining = passiveCounter(powerups, player, QUARTERMASTER_COOLDOWN);
+        if (!usedPowerupThisTurn && remaining > 0)
+          setPassiveCounter(powerups, player, QUARTERMASTER_COOLDOWN, remaining - 1);
+      },
     },
-    used(powerups, player, config) {
-      setPassiveCounter(powerups, player, QUARTERMASTER_COOLDOWN, config.cooldownOwnTurns);
+    unequipped(powerups, player) {
+      clearPassiveCounter(powerups, player, QUARTERMASTER_COOLDOWN);
     },
-    ownerTurnEnded(powerups, player, usedPowerupThisTurn) {
-      const remaining = passiveCounter(powerups, player, QUARTERMASTER_COOLDOWN);
-      if (!usedPowerupThisTurn && remaining > 0)
-        setPassiveCounter(powerups, player, QUARTERMASTER_COOLDOWN, remaining - 1);
-    },
-  },
-  unequipped(powerups, player) {
-    clearPassiveCounter(powerups, player, QUARTERMASTER_COOLDOWN);
   },
 });

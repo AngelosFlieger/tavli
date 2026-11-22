@@ -5,3 +5,6 @@ dist-server/
 *.log
 assets/source/generated/
 data/
+reports/
+.stryker-tmp/
+stryker.log

@@ -2,6 +2,7 @@ import type { BoardLayout } from './layout';
 import * as THREE from 'three';
 import { loadModel } from './assets';
 import { createDieSelectionOverlay } from './die-selection-overlay';
+import { t } from '../ui/i18n';
 
 // Die.glb's modeled pips: Blender Z becomes glTF Y; Blender Y becomes glTF -Z.
 export const faces = [
@@ -52,6 +53,8 @@ export async function createDice(
     presented: () => void;
     selectableDice: () => (0 | 1)[];
     selectDie: (index: 0 | 1) => void;
+    openingStarted: () => void;
+    openingFinished: (player: 0 | 1) => void;
   },
 ) {
   const button = document.querySelector<HTMLButtonElement>('#roll')!;
@@ -61,13 +64,14 @@ export async function createDice(
   try {
     model = (await loadModel('Die')).scene;
   } catch (error) {
-    output.textContent = 'Dice unavailable · reload to retry';
+    output.textContent = t('dice.unavailable');
     console.error(error);
     return {
       update: (_dt: number) => {},
       resize: () => {},
       reset() {},
       play(_values: [number, number], _rerolledDie?: 0 | 1) {},
+      playOpening(_attempts: [number, number][]) {},
     };
   }
   const bounds = new THREE.Box3().setFromObject(model),
@@ -77,6 +81,12 @@ export async function createDice(
   const dice = [0, 1].map(() => {
     const pivot = new THREE.Group(),
       mesh = model.clone(true);
+    mesh.traverse((child) => {
+      if (!(child instanceof THREE.Mesh)) return;
+      child.material = Array.isArray(child.material)
+        ? child.material.map((material) => material.clone())
+        : child.material.clone();
+    });
     mesh.position.copy(center).negate();
     const wrapper = new THREE.Group();
     wrapper.add(mesh);
@@ -144,6 +154,9 @@ export async function createDice(
   }
   let timer = 0,
     rolling = false;
+  let openingQueue: [number, number][] = [];
+  let openingMode = false;
+  let openingPause = 0;
   let tosses: (
     | {
         start: THREE.Vector3;
@@ -157,7 +170,11 @@ export async function createDice(
     output.textContent = `${values[0]}  ·  ${values[1]}`;
     output.setAttribute(
       'aria-label',
-      `Dice result: ${values[0]} and ${values[1]}${values[0] === values[1] ? ' — doubles' : ''}`,
+      t('dice.result', {
+        first: values[0],
+        second: values[1],
+        doubles: values[0] === values[1] ? t('dice.doubles') : '',
+      }),
     );
   }
   updateShadows();
@@ -171,14 +188,35 @@ export async function createDice(
     selectionRings.forEach((ring) => (ring.visible = false));
     selectionOverlay.reset();
     rollingIndices = [];
+    openingQueue = [];
+    openingMode = false;
+    openingPause = 0;
+    tintOpeningDice(false);
     canvas.dataset.rollingDice = '';
     canvas.dataset.lastRollingDice = '';
     output.textContent = '— · —';
-    output.setAttribute('aria-label', 'No dice rolled yet');
+    output.setAttribute('aria-label', t('dice.none'));
   }
   const duration = 1.5;
-  function startToss(forced?: [number, number], onlyDie?: 0 | 1) {
+  function tintOpeningDice(opening: boolean) {
+    const colors = [0xa72e46, 0xe8dfc8];
+    dice.forEach((die, player) =>
+      die.traverse((child) => {
+        if (!(child instanceof THREE.Mesh)) return;
+        const materials = Array.isArray(child.material) ? child.material : [child.material];
+        for (const material of materials) {
+          if (!(material instanceof THREE.MeshStandardMaterial)) continue;
+          const stored = material.userData.baseDieColor as number | undefined;
+          if (stored === undefined) material.userData.baseDieColor = material.color.getHex();
+          material.color.setHex(opening ? colors[player] : material.userData.baseDieColor);
+        }
+      }),
+    );
+  }
+  function startToss(forced?: [number, number], onlyDie?: 0 | 1, opening = false) {
     rolling = true;
+    openingMode = opening;
+    tintOpeningDice(opening);
     rollingIndices = onlyDie === undefined ? [0, 1] : [onlyDie];
     canvas.dataset.rollingDice = rollingIndices.join(',');
     canvas.dataset.lastRollingDice = rollingIndices.join(',');
@@ -186,23 +224,25 @@ export async function createDice(
     timer = 0;
     button.disabled = true;
     button.setAttribute('aria-busy', 'true');
-    output.textContent = onlyDie === undefined ? 'Rolling…' : `Rerolling die ${onlyDie + 1}…`;
+    output.textContent =
+      onlyDie === undefined ? t('dice.rolling') : t('dice.rerolling', { die: onlyDie + 1 });
     output.setAttribute(
       'aria-label',
-      onlyDie === undefined ? 'Rolling two dice' : `Rerolling die ${onlyDie + 1}`,
+      onlyDie === undefined ? t('dice.rollingTwo') : t('dice.rerollOne', { die: onlyDie + 1 }),
     );
-    const side = callbacks.player() === 0 ? -1 : 1;
-    const place = (x: number, z: number, y: number) =>
+    const throwingSide = callbacks.player() === 0 ? -1 : 1;
+    const place = (side: number, x: number, z: number, y: number) =>
       new THREE.Vector3(side * x - boardCenter.x, y, (z - boardCenter.z) * layout.depth);
     tosses = dice.map((die, i) => {
       if (!rollingIndices.includes(i as 0 | 1)) return undefined;
       const rerolling = onlyDie !== undefined;
       const current = die.position.clone();
+      const side = opening ? (i === 0 ? -1 : 1) : throwingSide;
       die.visible = true;
       return {
         start: rerolling
           ? current.clone().setY(restingY + 0.075)
-          : place(0.23 + i * 0.035, side * 0.22, restingY + 0.1),
+          : place(side, opening ? 0.23 : 0.23 + i * 0.035, side * 0.22, restingY + 0.1),
         end: rerolling
           ? current
               .clone()
@@ -211,8 +251,11 @@ export async function createDice(
               )
               .setY(restingY)
           : place(
-              0.085 + i * 0.074 + (Math.random() - 0.5) * 0.014,
-              (Math.random() - 0.5) * 0.065,
+              side,
+              opening
+                ? 0.075 + (Math.random() - 0.5) * 0.014
+                : 0.085 + i * 0.074 + (Math.random() - 0.5) * 0.014,
+              opening ? side * 0.035 : (Math.random() - 0.5) * 0.065,
               restingY,
             ),
         target: landingRotation(forced?.[i] ?? randomFace(), Math.random() * Math.PI * 2),
@@ -229,8 +272,8 @@ export async function createDice(
     if (callbacks.scripted()) {
       button.disabled = true;
       button.setAttribute('aria-busy', 'true');
-      output.textContent = 'Rolling…';
-      output.setAttribute('aria-label', 'Rolling two dice');
+      output.textContent = t('dice.rolling');
+      output.setAttribute('aria-label', t('dice.rollingTwo'));
       return;
     }
     startToss(callbacks.forced() ?? undefined);
@@ -239,6 +282,12 @@ export async function createDice(
   return {
     play(values: [number, number], rerolledDie?: 0 | 1) {
       if (!rolling) startToss(values, rerolledDie);
+    },
+    playOpening(attempts: [number, number][]) {
+      if (rolling || !attempts.length) return;
+      callbacks.openingStarted();
+      openingQueue = attempts.map((attempt) => [...attempt] as [number, number]);
+      startToss(openingQueue.shift()!, undefined, true);
     },
     reset,
     resize() {
@@ -255,6 +304,12 @@ export async function createDice(
     },
     update(dt: number) {
       updateShadows();
+      if (!rolling && openingPause > 0) {
+        openingPause -= dt;
+        if (openingPause <= 0 && openingQueue.length)
+          startToss(openingQueue.shift()!, undefined, true);
+        return;
+      }
       if (!rolling) return;
       timer += dt;
       const t = Math.min(timer / (reducedMotion.matches ? 0.18 : duration), 1);
@@ -297,7 +352,13 @@ export async function createDice(
         const values = dice.map((die) => upwardFace(die.quaternion));
         show(values);
         button.removeAttribute('aria-busy');
-        if (callbacks.scripted()) callbacks.presented();
+        if (openingMode && openingQueue.length) {
+          openingPause = reducedMotion.matches ? 0.12 : 0.7;
+        } else if (openingMode) {
+          openingMode = false;
+          callbacks.openingFinished(values[0] > values[1] ? 0 : 1);
+          callbacks.presented();
+        } else if (callbacks.scripted()) callbacks.presented();
         else callbacks.settled(values);
       }
     },

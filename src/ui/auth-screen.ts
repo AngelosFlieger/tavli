@@ -1,4 +1,5 @@
 import { login, register, sameOrigin, whoami } from '../net/account';
+import { t, translateDOM } from './i18n';
 
 type AuthHooks = { onSignedIn: () => void };
 
@@ -18,6 +19,7 @@ export function initAuthScreen(next: AuthHooks) {
     void submit(form);
   });
   renderMode();
+  translateDOM(document.querySelector('#auth-screen')!);
 }
 
 export async function restoreSession() {
@@ -47,13 +49,15 @@ export function revealGame() {
 }
 
 function renderMode() {
-  document.querySelector('#auth-title')!.textContent = creating ? 'Create account' : 'Sign in';
+  document.querySelector('#auth-title')!.textContent = creating
+    ? t('auth.title.create')
+    : t('auth.title.signin');
   document.querySelector<HTMLButtonElement>('#auth-submit')!.textContent = creating
-    ? 'Create account'
-    : 'Sign in';
+    ? t('auth.submit.create')
+    : t('auth.submit.signin');
   document.querySelector('#auth-switch')!.textContent = creating
-    ? 'I have an account'
-    : 'Create an account';
+    ? t('auth.iHaveAccount')
+    : t('auth.createAnother');
   const username = document.querySelector<HTMLElement>('#auth-username-label')!;
   const email = document.querySelector<HTMLElement>('#auth-email-label')!;
   const identifier = document.querySelector<HTMLElement>('#auth-identifier-label')!;
@@ -72,12 +76,12 @@ function renderMode() {
 
 async function submit(form: HTMLFormElement) {
   const data = new FormData(form);
-  const password = String(data.get('password') ?? '');
+  const password = formText(data, 'password');
   const button = document.querySelector<HTMLButtonElement>('#auth-submit')!;
   button.disabled = true;
   const result = creating
-    ? await register(String(data.get('email') ?? ''), String(data.get('username') ?? ''), password)
-    : await login(String(data.get('identifier') ?? ''), password);
+    ? await register(formText(data, 'email'), formText(data, 'username'), password)
+    : await login(formText(data, 'identifier'), password);
   button.disabled = false;
   if (!result.ok) {
     setError(result.error);
@@ -86,6 +90,11 @@ async function submit(form: HTMLFormElement) {
   setError('');
   revealGame();
   hooks.onSignedIn();
+}
+
+function formText(data: FormData, name: string): string {
+  const value = data.get(name);
+  return typeof value === 'string' ? value : '';
 }
 
 function setError(message: string) {

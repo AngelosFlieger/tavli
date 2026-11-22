@@ -34,8 +34,17 @@ export function moveAllowedByActiveEffects(
   return powerups.activeEffects.every((effect) => {
     if (effect.affectedPlayer !== player || effect.target.type !== 'POINT') return true;
     if (!activeEffectIsValid(position, effect)) return true;
-    if (effect.modifiers.blockLeaving && move.from === effect.target.point) return false;
-    if (effect.modifiers.blockLanding && move.to === effect.target.point) return false;
-    return true;
+    const point = effect.target.point;
+    return effect.constraints.every((constraint) => {
+      switch (constraint.kind) {
+        case 'BLOCK_LEAVING':
+          return move.from !== point;
+        case 'BLOCK_LANDING':
+          return move.to !== point;
+        case 'ANCHOR_CHECKER':
+        case 'DICE_PENALTY':
+          return true;
+      }
+    });
   });
 }

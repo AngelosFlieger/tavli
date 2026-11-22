@@ -1,6 +1,4 @@
 import { other } from '../../../rules/position';
-import { defineEndTurnAbilityBehavior } from '../../abilities/capabilities';
-import type { JinxConfig } from '../../types';
 import { defineAbility } from '../../abilities/define';
 import {
   baseConfig,
@@ -11,6 +9,17 @@ import {
   oneOf,
   record,
 } from '../../abilities/validation';
+import type { AbilityConfigBase, EffectDuration } from '../../base';
+
+export type JinxConfig = AbilityConfigBase & {
+  duration: EffectDuration;
+  penalty: number;
+  minimumToken: number;
+  targetToken: 'HIGHEST' | 'LOWEST';
+  affectDoubles: boolean;
+  unaffectedDoubleConsumes: boolean;
+  doubleHandling: 'CHANGE_ONE_TOKEN' | 'CHANGE_MATCHING_TOKENS';
+};
 
 export const jinx = defineAbility<'jinx', JinxConfig>({
   id: 'jinx',
@@ -53,38 +62,44 @@ export const jinx = defineAbility<'jinx', JinxConfig>({
       ),
     };
   },
-  describe(config) {
+  copy(config) {
     return {
-      name: 'Jinx',
-      summary: `Reduce the opponent’s ${config.targetToken.toLowerCase()} die by ${config.penalty}.`,
-    };
-  },
-});
-
-export const jinxEndTurn = defineEndTurnAbilityBehavior({
-  id: 'jinx',
-  targets(_state, player) {
-    return [{ type: 'PLAYER', player: other(player) }];
-  },
-  effect(_state, activation, player, config) {
-    return {
-      abilityId: 'jinx',
-      source: player,
-      affectedPlayer: other(player),
-      target: activation.target,
-      tags: ['DICE_PENALTY'],
-      modifiers: {
-        dicePenalty: {
-          penalty: config.penalty,
-          minimumToken: config.minimumToken,
-          targetToken: config.targetToken,
-          affectDoubles: config.affectDoubles,
-          unaffectedDoubleConsumes: config.unaffectedDoubleConsumes,
-          doubleHandling: config.doubleHandling,
-        },
+      name: { key: 'ability.jinx.name' },
+      summary: {
+        key:
+          config.targetToken === 'HIGHEST'
+            ? 'ability.jinx.summary.highest'
+            : 'ability.jinx.summary.lowest',
+        params: { penalty: config.penalty },
       },
-      duration: config.duration,
-      remaining: config.duration.count,
     };
+  },
+  behavior: {
+    id: 'jinx',
+    targets(_state, player) {
+      return [{ type: 'PLAYER', player: other(player) }];
+    },
+    effect(_state, activation, player, config) {
+      return {
+        abilityId: 'jinx',
+        source: player,
+        affectedPlayer: other(player),
+        target: activation.target,
+        tags: ['DICE_PENALTY'],
+        constraints: [
+          {
+            kind: 'DICE_PENALTY',
+            penalty: config.penalty,
+            minimumToken: config.minimumToken,
+            targetToken: config.targetToken,
+            affectDoubles: config.affectDoubles,
+            unaffectedDoubleConsumes: config.unaffectedDoubleConsumes,
+            doubleHandling: config.doubleHandling,
+          },
+        ],
+        duration: config.duration,
+        remaining: config.duration.count,
+      };
+    },
   },
 });

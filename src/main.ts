@@ -1,4 +1,8 @@
+import './tokens.css';
 import './style.css';
+import './dialog.css';
+import './settings.css';
+import './auth.css';
 import './gameplay-hud.css';
 import './title.css';
 import './responsive.css';
@@ -6,12 +10,14 @@ import './waiting.css';
 import './draft.css';
 import './water-preview.css';
 import { preferences } from './ui/preferences';
+import { loadLocalePreference, t, translateDOM } from './ui/i18n';
 import {
   enablePlay,
   enterTable,
   initShell,
   setSearching,
   showNote,
+  showRoom,
   showTitle,
   syncShell,
   type Session,
@@ -28,10 +34,14 @@ import { createStage } from './scene/stage';
 import { createWaterSweep } from './scene/water-sweep';
 import { createWaterPreview } from './ui/water-preview';
 import { GameController } from './app/game-controller';
+import type { GameState } from './game/session/state';
 import { createGameplayActions } from './app/gameplay-actions';
+import { createBoardAnnouncement } from './ui/board-announcement';
+import { PresentationCoordinator } from './app/presentation-coordinator';
 import { createOnlineGameFlow } from './app/online-game-flow';
 import { createMatchSession } from './app/match-session';
 import { PlaytestRecorder } from './app/playtest-report';
+import { addHistoryEntry, createHistoryEntry, loadHistory, saveHistory } from './app/history';
 
 const host = document.querySelector<HTMLElement>('#scene')!;
 const boardFrame = document.querySelector<HTMLElement>('#board-frame')!;
@@ -43,9 +53,14 @@ const session: Session = {
   canNewGame: () => false,
   onLocal() {},
   onMultiplayer() {},
+  onCreateRoom() {},
+  onJoinRoom() {},
+  onExitGame() {},
   onSignOut() {},
   playtestReport: () => null,
 };
+loadLocalePreference();
+translateDOM();
 let reconnect = () => {};
 initShell(session);
 initAuthScreen({
@@ -66,9 +81,34 @@ async function start() {
   );
   const controller = new GameController();
   const playtest = new PlaytestRecorder();
-  controller.setEventSink((events, state) => playtest.record(events, state));
+  let historyMode: 'LOCAL' | 'ONLINE' = 'LOCAL';
+  let historyRecordedFor: GameState | null = null;
+  controller.setEventSink((events, state) => {
+    playtest.record(events, state);
+    if (
+      preferences.history &&
+      state.phase === 'GAME_OVER' &&
+      state.outcome &&
+      historyRecordedFor !== state
+    ) {
+      historyRecordedFor = state;
+      saveHistory(
+        addHistoryEntry(
+          loadHistory(),
+          createHistoryEntry({
+            mode: historyMode,
+            ruleset: state.ruleset,
+            outcome: state.outcome,
+            rounds: state.powerups?.completedRounds ?? 0,
+          }),
+        ),
+      );
+    }
+  });
   let actions: ReturnType<typeof createGameplayActions>;
   let dice: Awaited<ReturnType<typeof createDice>> | undefined;
+  const boardAnnouncement = createBoardAnnouncement();
+  const presentation = new PresentationCoordinator();
   const gameplay = await createGameplay(
     stage.root,
     stage.center,
@@ -77,11 +117,13 @@ async function start() {
     reducedMotion,
     stage.layout,
     controller,
+    () => presentation.blocking,
     {
       onChange: syncShell,
       onMove: (sequence) => actions.move(sequence),
       onUndo: () => actions.undo(),
       onRestart: () => actions.restart(),
+      onForfeit: () => actions.forfeit(),
       onRollAbility: (option) => actions.playRollAbility(option),
       onBeforeRollAbility: (target) => actions.playBeforeRollAbility(target),
     },
@@ -89,6 +131,7 @@ async function start() {
   actions = createGameplayActions(controller, gameplay, {
     reset: () => dice?.reset(),
     play: (values, rerolledDie) => dice?.play(values, rerolledDie),
+    playOpening: (attempts) => dice?.playOpening(attempts),
   });
   session.onNewGame = () => actions.restart();
   session.canNewGame = () => actions.canRestart();
@@ -118,7 +161,7 @@ async function start() {
   let onlineFlow: ReturnType<typeof createOnlineGameFlow> | undefined;
   stage.mount(() => {
     gameplay.resize();
-    if (controller.hasRemoteMove) onlineFlow?.finishRemoteMove();
+    if (onlineFlow?.hasRemoteMove()) onlineFlow.finishRemoteMove();
     else actions.finishInterruptedMove();
     dice?.resize();
   });
@@ -148,17 +191,27 @@ async function start() {
           .find((candidate) => candidate.target.index === index);
         if (option) actions.playRollAbility(option);
       },
+      openingStarted: () => boardAnnouncement.openingStarted(),
+      openingFinished: (player) => {
+        boardAnnouncement.openingFinished(player);
+        gameplay.refresh(false);
+      },
     },
   );
-  onlineFlow = createOnlineGameFlow(controller, gameplay, dice);
+  onlineFlow = createOnlineGameFlow(controller, gameplay, dice, presentation);
 
   const match = createMatchSession(
     controller,
     onlineFlow,
-    gameplay,
+    {
+      startSetup: gameplay.startSetup,
+      presentOpening: (attempts) => dice?.playOpening(attempts),
+      setPlayerNames: (players) => boardAnnouncement.setPlayerNames(players),
+    },
     {
       setSearching,
       showNote,
+      showRoom,
       showTitle,
       enterTable,
       signedOut() {
@@ -169,6 +222,7 @@ async function start() {
     connectTable,
   );
   session.onLocal = (selection, seed) => {
+    historyMode = 'LOCAL';
     const accepted = match.startLocal(selection, seed);
     if (!accepted || seed === undefined) {
       playtest.clear();
@@ -182,10 +236,22 @@ async function start() {
     });
   };
   session.onMultiplayer = (selection) => {
+    historyMode = 'ONLINE';
     playtest.clear();
     match.toggleSearch(selection);
   };
+  session.onCreateRoom = (selection) => {
+    historyMode = 'ONLINE';
+    playtest.clear();
+    match.createRoom(selection);
+  };
+  session.onJoinRoom = (code) => {
+    historyMode = 'ONLINE';
+    playtest.clear();
+    match.joinRoom(code);
+  };
   session.playtestReport = () => playtest.snapshot();
+  session.onExitGame = () => match.exitGame();
   session.onSignOut = () => {
     match.signOut();
     void logout();
@@ -206,7 +272,7 @@ async function start() {
 
   stage.canvas.addEventListener('webglcontextlost', (event) => {
     event.preventDefault();
-    status.textContent = 'Graphics connection lost. Reload the page to restore the board.';
+    status.textContent = t('main.graphicsLost');
     status.hidden = false;
   });
 
@@ -227,6 +293,5 @@ async function start() {
 start().catch((error: unknown) => {
   console.error(error);
   status.hidden = false;
-  status.textContent =
-    'The 3D board could not load. Check WebGL support and that public/models/Board.glb is present, then reload.';
+  status.textContent = t('main.boardLoadFailed');
 });

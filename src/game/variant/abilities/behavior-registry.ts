@@ -1,15 +1,10 @@
 import type { Player, Position } from '../../rules/position';
 import type { GameState } from '../../session/state';
-import { bastionEndTurn } from '../powerups/definitions/bastion';
-import { clearSkiesBeforeRoll } from '../powerups/definitions/clear-skies';
-import { frostSealEndTurn } from '../powerups/definitions/frost-seal';
-import { jinxEndTurn } from '../powerups/definitions/jinx';
-import { nudgeAfterRoll } from '../powerups/definitions/nudge';
-import { recastAfterRoll } from '../powerups/definitions/recast';
-import { opportunistAfterRoll } from '../passives/definitions/opportunist';
+import { abilityDefinitions, type AbilityId, type DefinitionOf } from './catalog';
 import type {
   AbilityActivation,
-  AbilityId,
+  AbilityConfigBase,
+  AbilityConfigMap,
   AbilityTarget,
   ActiveEffect,
   ResolvedVariantConfig,
@@ -23,13 +18,76 @@ import type {
   EndTurnAbilityBehavior,
 } from './capabilities';
 
-export const afterRollAbilityBehaviors = Object.freeze({
-  recast: recastAfterRoll,
-  nudge: nudgeAfterRoll,
-  opportunist: opportunistAfterRoll,
-});
+/**
+ * Capability maps are derived from the catalog: a definition carries the behavior its kind and
+ * timing require, so adding an ability does not mean editing a second registry.
+ */
+export type EndTurnAbilityId = {
+  [Id in AbilityId]: DefinitionOf<Id> extends { kind: 'POWERUP'; timing: 'WITH_END_TURN' }
+    ? Id
+    : never;
+}[AbilityId];
 
-export type AfterRollAbilityId = keyof typeof afterRollAbilityBehaviors;
+export type BeforeRollAbilityId = {
+  [Id in AbilityId]: DefinitionOf<Id> extends { kind: 'POWERUP'; timing: 'BEFORE_ROLL' }
+    ? Id
+    : never;
+}[AbilityId];
+
+export type AfterRollAbilityId = {
+  [Id in AbilityId]: DefinitionOf<Id> extends {
+    kind: 'POWERUP';
+    timing: 'AFTER_ROLL_BEFORE_MOVE';
+  }
+    ? Id
+    : DefinitionOf<Id> extends { afterRoll: unknown }
+      ? Id
+      : never;
+}[AbilityId];
+
+type AnyBehavior =
+  | EndTurnAbilityBehavior<string, AbilityConfigBase>
+  | BeforeRollAbilityBehavior<string, AbilityConfigBase>
+  | AfterRollAbilityBehavior<string, AbilityConfigBase>;
+
+const behaviors: Partial<Record<string, AnyBehavior>> = {};
+for (const [id, definition] of Object.entries(abilityDefinitions) as [
+  AbilityId,
+  DefinitionOf<AbilityId>,
+][]) {
+  if (definition.kind === 'POWERUP') behaviors[id] = definition.behavior as unknown as AnyBehavior;
+  else if (definition.afterRoll)
+    behaviors[id] = definition.afterRoll as unknown as AfterRollAbilityBehavior<
+      string,
+      AbilityConfigBase
+    >;
+}
+
+const powerupTiming = (id: string): string | undefined =>
+  abilityDefinitions[id as AbilityId].kind === 'POWERUP'
+    ? abilityDefinitions[id as AbilityId].timing
+    : undefined;
+
+export const endTurnAbilityBehaviors = Object.freeze(
+  Object.fromEntries(
+    Object.entries(behaviors).filter(([id]) => powerupTiming(id) === 'WITH_END_TURN'),
+  ),
+) as Record<EndTurnAbilityId, EndTurnAbilityBehavior<EndTurnAbilityId, AbilityConfigBase>>;
+
+export const beforeRollAbilityBehaviors = Object.freeze(
+  Object.fromEntries(
+    Object.entries(behaviors).filter(([id]) => powerupTiming(id) === 'BEFORE_ROLL'),
+  ),
+) as Record<BeforeRollAbilityId, BeforeRollAbilityBehavior<BeforeRollAbilityId, AbilityConfigBase>>;
+
+export const afterRollAbilityBehaviors = Object.freeze(
+  Object.fromEntries(
+    Object.entries(behaviors).filter(([id]) => {
+      const timing = powerupTiming(id);
+      return timing === 'AFTER_ROLL_BEFORE_MOVE' || timing === undefined;
+    }),
+  ),
+) as Record<AfterRollAbilityId, AfterRollAbilityBehavior<AfterRollAbilityId, AbilityConfigBase>>;
 
 export function hasAfterRollAbilityBehavior(id: AbilityId): id is AfterRollAbilityId {
   return id in afterRollAbilityBehaviors;
@@ -90,12 +148,6 @@ export function commitConfiguredAfterRoll<Id extends AfterRollAbilityId>(
   afterRollBehavior(id).commit?.(state, player, config.abilities[id]);
 }
 
-export const beforeRollAbilityBehaviors = Object.freeze({
-  clearSkies: clearSkiesBeforeRoll,
-});
-
-export type BeforeRollAbilityId = keyof typeof beforeRollAbilityBehaviors;
-
 export function hasBeforeRollAbilityBehavior(id: AbilityId): id is BeforeRollAbilityId {
   return id in beforeRollAbilityBehaviors;
 }
@@ -116,16 +168,13 @@ export function applyConfiguredBeforeRoll<Id extends BeforeRollAbilityId>(
   target: AbilityTarget,
   config: ResolvedVariantConfig,
 ): ActiveEffect[] {
-  return beforeRollBehavior(id).apply(state, player, target, config.abilities[id]);
+  return beforeRollBehavior(id).apply(
+    state,
+    player,
+    target,
+    config.abilities[id],
+  ) as ActiveEffect[];
 }
-
-export const endTurnAbilityBehaviors = Object.freeze({
-  frostSeal: frostSealEndTurn,
-  bastion: bastionEndTurn,
-  jinx: jinxEndTurn,
-});
-
-export type EndTurnAbilityId = keyof typeof endTurnAbilityBehaviors;
 
 export function hasEndTurnAbilityBehavior(id: AbilityId): id is EndTurnAbilityId {
   return id in endTurnAbilityBehaviors;
@@ -137,7 +186,7 @@ export function configuredEndTurnTargets<Id extends EndTurnAbilityId>(
   player: Player,
   config: ResolvedVariantConfig,
 ): AbilityTarget[] {
-  return behavior(id).targets(state, player, config.abilities[id]);
+  return endTurnBehavior(id).targets(state, player, config.abilities[id]);
 }
 
 export function createConfiguredEndTurnEffect<Id extends EndTurnAbilityId>(
@@ -146,24 +195,37 @@ export function createConfiguredEndTurnEffect<Id extends EndTurnAbilityId>(
   activation: AbilityActivation,
   player: Player,
   config: ResolvedVariantConfig,
-): Omit<ActiveEffect, 'instanceId'> & { abilityId: Id } {
-  return behavior(id).effect(state, activation, player, config.abilities[id]);
+): Omit<ActiveEffect<Id>, 'instanceId'> {
+  return endTurnBehavior(id).effect(state, activation, player, config.abilities[id]);
 }
 
 export function activeEffectIsValid(position: Position, effect: ActiveEffect): boolean {
   if (!hasEndTurnAbilityBehavior(effect.abilityId)) return true;
-  return behavior(effect.abilityId).effectIsValid?.(position, effect) ?? true;
+  const typed = effect as ActiveEffect<EndTurnAbilityId>;
+  return endTurnBehavior(typed.abilityId).effectIsValid?.(position, typed) ?? true;
 }
 
-/** Contains the only cast needed to preserve ID/config correlation in the heterogeneous registry. */
-function behavior<Id extends EndTurnAbilityId>(id: Id): EndTurnAbilityBehavior<Id> {
-  return endTurnAbilityBehaviors[id] as unknown as EndTurnAbilityBehavior<Id>;
+/** Contains the only cast needed to preserve ID/config correlation in the derived registry. */
+function endTurnBehavior<Id extends EndTurnAbilityId>(
+  id: Id,
+): EndTurnAbilityBehavior<Id, AbilityConfigMap[Id]> {
+  return endTurnAbilityBehaviors[id] as unknown as EndTurnAbilityBehavior<Id, AbilityConfigMap[Id]>;
 }
 
-function beforeRollBehavior<Id extends BeforeRollAbilityId>(id: Id): BeforeRollAbilityBehavior<Id> {
-  return beforeRollAbilityBehaviors[id] as unknown as BeforeRollAbilityBehavior<Id>;
+function beforeRollBehavior<Id extends BeforeRollAbilityId>(
+  id: Id,
+): BeforeRollAbilityBehavior<Id, AbilityConfigMap[Id]> {
+  return beforeRollAbilityBehaviors[id] as unknown as BeforeRollAbilityBehavior<
+    Id,
+    AbilityConfigMap[Id]
+  >;
 }
 
-function afterRollBehavior<Id extends AfterRollAbilityId>(id: Id): AfterRollAbilityBehavior<Id> {
-  return afterRollAbilityBehaviors[id] as unknown as AfterRollAbilityBehavior<Id>;
+function afterRollBehavior<Id extends AfterRollAbilityId>(
+  id: Id,
+): AfterRollAbilityBehavior<Id, AbilityConfigMap[Id]> {
+  return afterRollAbilityBehaviors[id] as unknown as AfterRollAbilityBehavior<
+    Id,
+    AbilityConfigMap[Id]
+  >;
 }

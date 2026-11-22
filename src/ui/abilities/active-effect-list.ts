@@ -1,10 +1,12 @@
-import { abilityRegistry, describeConfiguredAbility } from '../../game/variant/abilities/registry';
+import { abilityRegistry } from '../../game/variant/abilities/registry';
 import type {
   AbilityTarget,
   ActiveEffect,
   EffectBoundary,
   ResolvedVariantConfig,
 } from '../../game/variant/types';
+import { pluralSuffix, t } from '../i18n';
+import { localizedAbilityCopy } from './copy';
 
 export function createActiveEffectList(
   effects: ActiveEffect[],
@@ -19,11 +21,20 @@ export function createActiveEffectList(
     chip.dataset.kind = abilityRegistry[effect.abilityId].kind;
     chip.dataset.ability = effect.abilityId;
     chip.dataset.instance = effect.instanceId;
-    const copy = describeConfiguredAbility(effect.abilityId, config);
+    const copy = localizedAbilityCopy(effect.abilityId, config);
     const target = describeEffectTarget(effect.target);
     const expiry = describeEffectExpiry(effect.duration.boundary, effect.remaining);
-    chip.textContent = `${copy.name} · ${target} · ${effect.remaining}`;
-    chip.title = `Player ${effect.source + 1}: ${copy.summary} Target ${target}; ${expiry}.`;
+    chip.textContent = t('ability.effectChip', {
+      name: copy.name,
+      target,
+      remaining: effect.remaining,
+    });
+    chip.title = t('ability.effectTitle', {
+      player: effect.source + 1,
+      summary: copy.summary,
+      target,
+      expiry,
+    });
     list.append(chip);
   }
   return list;
@@ -32,24 +43,28 @@ export function createActiveEffectList(
 export function describeEffectTarget(target: AbilityTarget): string {
   switch (target.type) {
     case 'PLAYER':
-      return `Player ${target.player + 1}`;
+      return t('effectTarget.player', { player: target.player + 1 });
     case 'POINT':
-      return `P${target.point + 1}`;
+      return t('effectTarget.point', { point: target.point + 1 });
     case 'CHECKER':
-      return `checker ${target.checker + 1}`;
+      return t('effectTarget.checker', { checker: target.checker + 1 });
     case 'DIE':
-      return `die ${target.index + 1}`;
+      return t('effectTarget.die', { index: target.index + 1 });
     case 'EFFECT':
-      return `effect ${target.instanceId}`;
+      return t('effectTarget.effect', { instanceId: target.instanceId });
   }
 }
 
 export function describeEffectExpiry(boundary: EffectBoundary, remaining: number): string {
   const unit =
     boundary === 'NEXT_DRAFT'
-      ? 'draft boundary'
+      ? t('ability.expiry.draft')
       : boundary === 'SOURCE_TURN_END'
-        ? 'source turn'
-        : 'target turn';
-  return `${remaining} ${unit}${remaining === 1 ? '' : 's'} remaining`;
+        ? t('ability.expiry.source')
+        : t('ability.expiry.target');
+  return t('ability.expiry.remaining', {
+    remaining,
+    unit,
+    s: pluralSuffix(remaining),
+  });
 }

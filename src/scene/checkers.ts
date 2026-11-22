@@ -6,6 +6,7 @@ import { createMoveAnimator, prepareAnimationStages } from './move-animation';
 import { createMovePreview } from './move-preview';
 import * as THREE from 'three';
 import { preferences } from '../ui/preferences';
+import { t } from '../ui/i18n';
 import { createGameplayHud } from '../ui/gameplay-hud';
 import { owner, type Move, type Position } from '../game/engine';
 import { GameController, type LocalMoveRequest } from '../app/game-controller';
@@ -19,6 +20,7 @@ export type GameplayHooks = {
   onMove: (sequence: Move[]) => void;
   onUndo: () => void;
   onRestart: () => void;
+  onForfeit: () => void;
   onRollAbility: (option: RollAbilityOption) => void;
   onBeforeRollAbility: (target: AbilityTarget) => void;
 };
@@ -31,12 +33,14 @@ export async function createGameplay(
   reducedMotion: MediaQueryList,
   layout: BoardLayout,
   controller: GameController,
+  presentationBlocked: () => boolean,
   hooks: GameplayHooks,
 ) {
   const seatCamera = camera.position.clone();
   const mine = () => controller.mine();
   let setupTime: number | null = null;
-  const locked = () => setupTime !== null || controller.busy;
+  let setupComplete: (() => void) | null = null;
+  const locked = () => setupTime !== null || controller.busy || presentationBlocked();
   const assets = await Promise.all(['Checker_Red', 'Checker_Ivory'].map((name) => loadModel(name)));
   const checkers: THREE.Group[] = [];
   const heights: number[] = [];
@@ -69,12 +73,12 @@ export async function createGameplay(
     canvas.setAttribute(
       'aria-label',
       waiting
-        ? 'Decorative original Plakoto dice and checkers'
+        ? t('scene.aria.waiting')
         : title && portrait
-          ? 'Scattered original Plakoto checkers'
+          ? t('scene.aria.titlePortrait')
           : title
-            ? 'Original Plakoto board without checkers'
-            : 'Plakoto board with red and ivory checkers',
+            ? t('scene.aria.title')
+            : t('scene.aria.board'),
     );
   }
   updatePresentation();
@@ -172,6 +176,7 @@ export async function createGameplay(
   const hud = createGameplayHud(canvas, controller, locked, {
     undo: hooks.onUndo,
     restart: hooks.onRestart,
+    forfeit: hooks.onForfeit,
     releaseLast() {
       controller.releaseLastPickup();
       refresh(false);
@@ -276,29 +281,29 @@ export async function createGameplay(
         if (setupTime > 1.75) {
           setupTime = null;
           refresh();
+          const complete = setupComplete;
+          setupComplete = null;
+          complete?.();
         }
         return;
       }
       animator.update(dt);
       if (!reducedMotion.matches && preferences.motion) abilityEffects.update(dt);
     },
-    playRemoteMove(sequence: Move[], checker: number, done: () => void) {
-      const start: Position = { board: controller.state.board, off: controller.state.off };
-      animator.start(
-        prepareAnimationStages(start, controller.state.active!, sequence),
-        checker,
-        done,
-      );
+    playRemoteMove(sequence: Move[], checker: number, start: Position, done: () => void) {
+      animator.start(prepareAnimationStages(start, owner(checker), sequence), checker, done);
       refresh(false);
     },
   };
 
-  function startSetup() {
-    if (controller.state.phase !== 'OPENING_ROLL' || controller.state.openingRolls.some(Boolean))
-      return;
+  function startSetup(complete?: () => void) {
+    setupComplete = complete ?? null;
     if (reducedMotion.matches) {
       setupTime = null;
       refresh();
+      const done = setupComplete;
+      setupComplete = null;
+      done?.();
       return;
     }
     setupTime = 0;

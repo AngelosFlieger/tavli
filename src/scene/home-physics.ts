@@ -29,7 +29,7 @@ export function createHomeWorld(center: { x: number; y: number; z: number }, sca
   world.addBody(board);
   return {
     world,
-    checker(radius: number, height: number) {
+    checker: (radius: number, height: number) => {
       const body = new Body({
         mass: 0.035,
         material: checker,

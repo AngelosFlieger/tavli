@@ -59,7 +59,7 @@ test('aggregate analysis separates config hashes and derives completed and censo
   frostLoadout[0].powerups.push({ instanceId: 'frost-1', abilityId: 'frostSeal' });
   const completed = report(10, 'hash-a', [
     entry(0, [
-      { type: 'OpeningWinnerChosen', player: 0 },
+      { type: 'OpeningResolved', attempts: [[6, 1]], player: 0 },
       { type: 'DraftOpened', offer: ['frostSeal', 'recast', 'homeGuard'] },
       { type: 'DraftOrderChosen', first: 0 },
     ]),

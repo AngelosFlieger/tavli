@@ -31,6 +31,7 @@ import { resolvePendingRollEffects } from '../variant/powerups/roll-effects';
 import { activateBeforeRollAbility } from '../variant/powerups/before-roll';
 
 export type SessionCommand =
+  | { type: 'resolveOpening'; attempts: [number, number][] }
   | { type: 'beginRoll' }
   | { type: 'receiveRoll'; values: number[] }
   | { type: 'move'; sequence: Move[] }
@@ -56,9 +57,7 @@ export type SessionCommand =
 export type SessionEvent =
   | { type: 'GameReset' }
   | { type: 'RollStarted'; player: Player }
-  | { type: 'OpeningRollPassed' }
-  | { type: 'OpeningRollTied' }
-  | { type: 'OpeningWinnerChosen'; player: Player }
+  | { type: 'OpeningResolved'; attempts: [number, number][]; player: Player }
   | { type: 'DiceRolled'; player: Player; values: number[] }
   | { type: 'NoLegalMoves' }
   | { type: 'MovesAvailable' }
@@ -141,6 +140,37 @@ export function transitionSession(
   const state: GameState = structuredClone(input.state);
   const history = [...input.history];
   const active = state.active;
+
+  if (command.type === 'resolveOpening') {
+    if (state.phase !== 'OPENING' || state.opening.status !== 'PENDING') return rejected('phase');
+    const attempts = command.attempts;
+    if (
+      !attempts.length ||
+      attempts.some(
+        (attempt) =>
+          attempt.length !== 2 ||
+          attempt.some((value) => !Number.isInteger(value) || value < 1 || value > 6),
+      ) ||
+      attempts.slice(0, -1).some(([first, second]) => first !== second) ||
+      attempts.at(-1)![0] === attempts.at(-1)![1]
+    )
+      return rejected('invalid_roll');
+    const final = attempts.at(-1)!;
+    const player: Player = final[0] > final[1] ? 0 : 1;
+    const openingAttempts = attempts.map((attempt) => [...attempt] as [number, number]);
+    state.opening = { status: 'RESOLVED', attempts: openingAttempts, winner: player };
+    state.roll = [...final];
+    state.active = player;
+    state.phase = nextPhase(state.phase, 'openingComplete')!;
+    state.remaining = [];
+    state.diceModifiers = [];
+    state.rollSource = null;
+    return {
+      ok: true,
+      session: { state, history: [] },
+      events: [{ type: 'OpeningResolved', attempts: openingAttempts, player }],
+    };
+  }
 
   if (command.type === 'useBeforeRollAbility') {
     if (!rules.variantConfig || active === null || command.player !== active)
@@ -295,43 +325,13 @@ export function transitionSession(
   }
 
   if (command.type === 'receiveRoll') {
-    if (!['OPENING_ROLL', 'WAITING_FOR_ROLL'].includes(state.phase) || active === null)
-      return rejected('phase');
+    if (state.phase !== 'WAITING_FOR_ROLL' || active === null) return rejected('phase');
     const values = command.values;
     if (values.length !== 2 || values.some((v) => !Number.isInteger(v) || v < 1 || v > 6))
       return rejected('invalid_roll');
     state.roll = [...values];
     state.diceModifiers = [];
-    state.rollSource =
-      !state.opening && rules.variantConfig ? movementRollSource(state, active) : null;
-    if (state.opening) {
-      state.openingRolls[active] = [...values];
-      if (active === 0) {
-        state.active = 1;
-        state.phase = nextPhase(state.phase, 'needOpeningRoll')!;
-        return {
-          ok: true,
-          session: { state, history: [] },
-          events: [{ type: 'OpeningRollPassed' }],
-        };
-      }
-      const totals = state.openingRolls.map((pair) => pair!.reduce((sum, value) => sum + value, 0));
-      if (totals[0] === totals[1]) {
-        state.active = 0;
-        state.openingRolls = [null, null];
-        state.phase = nextPhase(state.phase, 'needOpeningRoll')!;
-        return { ok: true, session: { state, history: [] }, events: [{ type: 'OpeningRollTied' }] };
-      }
-      state.active = totals[0] > totals[1] ? 0 : 1;
-      state.opening = false;
-      state.phase = nextPhase(state.phase, 'openingComplete')!;
-      return {
-        ok: true,
-        session: { state, history: [] },
-        events: [{ type: 'OpeningWinnerChosen', player: state.active }],
-      };
-    }
-    state.openingRolls = [null, null];
+    state.rollSource = rules.variantConfig ? movementRollSource(state, active) : null;
     state.remaining = rules.variantConfig
       ? movementTokensForRoll(state, active, values as [number, number], rules.variantConfig)
       : values[0] === values[1]
