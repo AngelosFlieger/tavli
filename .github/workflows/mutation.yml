@@ -1,0 +1,58 @@
+name: Mutation testing
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - 'src/game/rules/**'
+      - 'src/game/session/opening-authority.ts'
+      - 'src/game/variant/**'
+      - 'tests/game.test.ts'
+      - 'tests/opening-authority.test.ts'
+      - 'tests/variant-session.test.ts'
+      - 'stryker.config.mjs'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/mutation.yml'
+  pull_request:
+    paths:
+      - 'src/game/rules/**'
+      - 'src/game/session/opening-authority.ts'
+      - 'src/game/variant/**'
+      - 'tests/game.test.ts'
+      - 'tests/opening-authority.test.ts'
+      - 'tests/variant-session.test.ts'
+      - 'stryker.config.mjs'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/mutation.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mutation-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  mutation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 26
+          cache: npm
+      - run: npm ci
+      - run: npm run test:mutation
+      - name: Upload mutation report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mutation-report-${{ github.run_id }}
+          path: reports/mutation
+          if-no-files-found: ignore
+          retention-days: 7
