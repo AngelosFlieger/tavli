@@ -51,7 +51,7 @@
     "prettier": "3.10.1",
     "tsrs": "^7.1.0-beta.tsrs4",
     "tsx": "^4.23.15",
-    "typescript": "~5.9.3",
+    "typescript": "~6.0.3",
     "vite": "^8.3.8"
   }
 }
