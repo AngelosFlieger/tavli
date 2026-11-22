@@ -12,7 +12,9 @@ import { inventoryCapacity } from '../src/game/variant/passives/policy';
 import { CLASSIC_RULES, powerupsRules, type RulesContext } from '../src/game/variant/types';
 
 const die = fc.integer({ min: 1, max: 6 });
+
 const decisiveOpening = fc.tuple(die, die).filter(([first, second]) => first !== second);
+
 const decision = fc.record({
   dice: fc.tuple(die, die),
   moveIndex: fc.nat(),
@@ -21,6 +23,7 @@ const decision = fc.record({
 
 function assertCheckerIdentity(session: Session): void {
   const checkers = [...session.state.board, ...session.state.off].flat().sort((a, b) => a - b);
+
   assert.deepEqual(
     checkers,
     Array.from({ length: 30 }, (_, checker) => checker),
@@ -39,13 +42,16 @@ function applyAccepted(
   assert.deepEqual(session, before, `${command.type} mutated its input`);
   assert.deepEqual(repeated, first, `${command.type} was not deterministic`);
   assert.equal(first.ok, true, `${command.type} should be accepted`);
+
   if (!first.ok) return session;
+
   assert.deepEqual(
     sessionInvariantViolations(first.session),
     [],
     `${command.type} violated the session contract`,
   );
   assertCheckerIdentity(first.session);
+
   return first.session;
 }
 
@@ -61,6 +67,7 @@ test('generated reachable Classic sessions remain deterministic and invariant-sa
           ...tieFaces.map((face): [number, number] => [face, face]),
           finalOpening,
         ];
+
         session = applyAccepted(session, { type: 'resolveOpening', attempts });
 
         for (const next of decisions) {
@@ -72,7 +79,9 @@ test('generated reachable Classic sessions remain deterministic and invariant-sa
           }
           if (session.state.phase === 'WAITING_FOR_MOVE') {
             assert.notEqual(session.state.active, null);
+
             const moves = legalMoves(session.state, session.state.active!, session.state.remaining);
+
             assert.ok(moves.length > 0);
             session = applyAccepted(session, {
               type: 'move',
@@ -83,13 +92,16 @@ test('generated reachable Classic sessions remain deterministic and invariant-sa
           if (session.state.phase === 'TURN_COMPLETE') {
             if (next.undo && session.history.length > 0) {
               const previous = structuredClone(session.history.at(-1)!);
+
               session = applyAccepted(session, { type: 'undo' });
               assert.deepEqual(session.state, previous);
             } else {
               session = applyAccepted(session, { type: 'endTurn' });
             }
+
             continue;
           }
+
           assert.fail(`Unexpected reachable Classic phase ${session.state.phase}`);
         }
       },
@@ -106,8 +118,10 @@ test('generated invalid rolls are rejected without mutating the session', () => 
   fc.assert(
     fc.property(invalidRoll, (values) => {
       let session: Session = { state: initialGameState(), history: [] };
+
       session = applyAccepted(session, { type: 'resolveOpening', attempts: [[6, 1]] });
       session = applyAccepted(session, { type: 'beginRoll' });
+
       const before = structuredClone(session);
 
       assert.deepEqual(transitionSession(session, { type: 'receiveRoll', values }), {
@@ -122,6 +136,7 @@ test('generated invalid rolls are rejected without mutating the session', () => 
 
 test('generated reachable Powerups sessions preserve drafts and shared invariants', () => {
   const rules = powerupsRules(POWERUPS_V1);
+
   fc.assert(
     fc.property(
       decisiveOpening,
@@ -129,6 +144,7 @@ test('generated reachable Powerups sessions preserve drafts and shared invariant
       (opening, decisions) => {
         let session: Session = { state: initialGameState(rules), history: [] };
         let reachedDraft = false;
+
         session = applyAccepted(session, { type: 'resolveOpening', attempts: [opening] }, rules);
 
         for (const next of decisions) {
@@ -144,7 +160,9 @@ test('generated reachable Powerups sessions preserve drafts and shared invariant
           }
           if (session.state.phase === 'WAITING_FOR_MOVE') {
             assert.notEqual(session.state.active, null);
+
             const moves = legalMoves(session.state, session.state.active!, session.state.remaining);
+
             assert.ok(moves.length > 0);
             session = applyAccepted(
               session,
@@ -159,24 +177,31 @@ test('generated reachable Powerups sessions preserve drafts and shared invariant
           }
           if (session.state.phase === 'DRAFT_ORDER') {
             reachedDraft = true;
+
             const draft = session.state.powerups?.draft;
+
             assert.ok(draft);
+
             if (draft.stage === 'AWAITING_OFFER') {
               const offer = sampleDraftOffer(
                 session.state.powerups!,
                 POWERUPS_V1,
                 (maximum) => next.moveIndex % maximum,
               );
+
               session = applyAccepted(session, { type: 'openDraft', offer }, rules);
             } else {
               session = applyAccepted(session, { type: 'resolveDraftOrder', rolls: [6, 1] }, rules);
             }
+
             continue;
           }
           if (session.state.phase === 'DRAFT_PICK') {
             const powerups = session.state.powerups!;
             const draft = powerups.draft;
+
             assert.ok(draft?.stage === 'PICKING');
+
             const player = draft.pickOrder[draft.currentPick];
             const abilityId = draft.offer[next.moveIndex % draft.offer.length];
             const kind = abilityRegistry[abilityId].kind;
@@ -189,6 +214,7 @@ test('generated reachable Powerups sessions preserve drafts and shared invariant
               inventory.length >= capacity
                 ? inventory[next.moveIndex % inventory.length].instanceId
                 : undefined;
+
             session = applyAccepted(
               session,
               { type: 'pickAbility', player, abilityId, replaceInstanceId },
@@ -196,8 +222,10 @@ test('generated reachable Powerups sessions preserve drafts and shared invariant
             );
             continue;
           }
+
           assert.fail(`Unexpected reachable Powerups phase ${session.state.phase}`);
         }
+
         assert.equal(reachedDraft, true);
       },
     ),

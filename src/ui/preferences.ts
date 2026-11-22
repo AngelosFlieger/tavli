@@ -14,6 +14,7 @@ export function loadPreferences() {
     const stored = JSON.parse(localStorage.getItem(storageKey) || '{}') as Partial<
       typeof preferences
     >;
+
     (Object.keys(preferences) as PreferenceKey[]).forEach((key) => {
       if (typeof stored[key] === 'boolean') preferences[key] = stored[key];
     });

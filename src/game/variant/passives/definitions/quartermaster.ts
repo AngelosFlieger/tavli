@@ -18,11 +18,13 @@ export const quartermaster = defineAbility<'quartermaster', QuartermasterConfig>
   kind: 'PASSIVE',
   validateConfig(value) {
     const input = record(value, 'quartermaster');
+
     exactKeys(
       input,
       ['enabled', 'offerWeight', 'extraPowerupSlots', 'cooldownOwnTurns'],
       'quartermaster',
     );
+
     return {
       ...baseConfig(input, 'quartermaster'),
       extraPowerupSlots: integer(input.extraPowerupSlots, 'quartermaster.extraPowerupSlots', 1),
@@ -59,6 +61,7 @@ export const quartermaster = defineAbility<'quartermaster', QuartermasterConfig>
       },
       ownerTurnEnded(powerups, player, usedPowerupThisTurn) {
         const remaining = passiveCounter(powerups, player, QUARTERMASTER_COOLDOWN);
+
         if (!usedPowerupThisTurn && remaining > 0)
           setPassiveCounter(powerups, player, QUARTERMASTER_COOLDOWN, remaining - 1);
       },

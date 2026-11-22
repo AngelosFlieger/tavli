@@ -22,15 +22,18 @@ export function endTurnAbilityTargets(
   config: ResolvedVariantConfig,
 ): AbilityTarget[] {
   if (state.phase !== 'TURN_COMPLETE' || state.active !== player || !state.powerups) return [];
+
   const instance = state.powerups.loadouts[player].powerups.find(
     (candidate) => candidate.instanceId === instanceId,
   );
+
   if (
     !instance ||
     abilityRegistry[instance.abilityId].timing !== 'WITH_END_TURN' ||
     !hasEndTurnAbilityBehavior(instance.abilityId)
   )
     return [];
+
   return configuredEndTurnTargets(instance.abilityId, state, player, config).filter(
     (target) =>
       !state.powerups!.activeEffects.some(
@@ -49,10 +52,13 @@ export function activateEndTurnAbility(
   config: ResolvedVariantConfig,
 ): ActiveEffect | null {
   const powerups = state.powerups;
+
   if (!powerups || !canUsePowerup(powerups, player, config)) return null;
+
   const inventory = powerups.loadouts[player].powerups;
   const index = inventory.findIndex((instance) => instance.instanceId === activation.instanceId);
   const instance = inventory[index];
+
   if (!instance) return null;
   if (
     !hasEndTurnAbilityBehavior(instance.abilityId) ||
@@ -61,54 +67,79 @@ export function activateEndTurnAbility(
     )
   )
     return null;
+
   const effect: ActiveEffect = {
     instanceId: activation.instanceId,
     ...createConfiguredEndTurnEffect(instance.abilityId, state, activation, player, config),
   };
+
   inventory.splice(index, 1);
   powerups.activeEffects.push(effect);
   recordPowerupUse(powerups, player, config);
+
   return effect;
 }
 
 export function expireTargetTurnEffects(state: GameState, player: Player): ActiveEffect[] {
   const powerups = state.powerups;
+
   if (!powerups) return [];
+
   const expired: ActiveEffect[] = [];
+
   powerups.activeEffects = powerups.activeEffects.filter((effect) => {
     if (effect.duration.boundary !== 'TARGET_TURN_END' || effect.affectedPlayer !== player)
       return true;
+
     effect.remaining--;
+
     if (effect.remaining > 0) return true;
+
     expired.push(effect);
+
     return false;
   });
+
   return expired;
 }
 
 export function expireNextDraftEffects(state: GameState): ActiveEffect[] {
   const powerups = state.powerups;
+
   if (!powerups) return [];
+
   const expired: ActiveEffect[] = [];
+
   powerups.activeEffects = powerups.activeEffects.filter((effect) => {
     if (effect.duration.boundary !== 'NEXT_DRAFT') return true;
+
     effect.remaining--;
+
     if (effect.remaining > 0) return true;
+
     expired.push(effect);
+
     return false;
   });
+
   return expired;
 }
 
 export function pruneInvalidEffects(state: GameState): ActiveEffect[] {
   const powerups = state.powerups;
+
   if (!powerups) return [];
+
   const expired: ActiveEffect[] = [];
+
   powerups.activeEffects = powerups.activeEffects.filter((effect) => {
     if (activeEffectIsValid(state, effect)) return true;
+
     expired.push(effect);
+
     return false;
   });
+
   return expired;
 }
 

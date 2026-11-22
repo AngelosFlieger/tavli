@@ -3,11 +3,17 @@ import type { Player } from '../rules/position';
 /** Variant primitives. This module must not import the ability catalog or any registry. */
 
 export type AbilityKind = 'POWERUP' | 'PASSIVE';
+
 export type PowerTiming = 'BEFORE_ROLL' | 'AFTER_ROLL_BEFORE_MOVE' | 'WITH_END_TURN';
+
 export type Probability = { numerator: number; denominator: number };
+
 export type EffectBoundary = 'SOURCE_TURN_END' | 'TARGET_TURN_END' | 'NEXT_DRAFT';
+
 export type EffectDuration = { boundary: EffectBoundary; count: number };
+
 export type RollKind = 'ANY' | 'NON_DOUBLE';
+
 export type EffectTag = 'CONTROL' | 'DICE_PENALTY' | 'PROTECTION';
 
 /**

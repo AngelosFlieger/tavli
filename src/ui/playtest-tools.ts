@@ -23,14 +23,17 @@ export function createPlaytestTools(): PlaytestTools {
   return {
     markup(powerups) {
       if (!import.meta.env.DEV) return '';
+
       const profileOptions = VARIANT_PROFILE_IDS.map(
         (id) => `<option value="${id}"${id === profileId ? ' selected' : ''}>${id}</option>`,
       ).join('');
+
       return `<section class="playtest-tools" aria-label="${t('playtest.aria')}"><strong>${t('playtest.title')}</strong><label>${t('playtest.profile')} <select id="playtest-profile"${powerups ? '' : ' disabled'}>${profileOptions}</select></label><label>${t('playtest.seed')} <input id="playtest-seed" type="number" min="0" max="4294967295" step="1" placeholder="${t('playtest.seedPlaceholder')}" value="${seedValue}"></label><small>${t('playtest.note')}</small></section>`;
     },
     wire(root) {
       const profile = root.querySelector<HTMLSelectElement>('#playtest-profile');
       const seed = root.querySelector<HTMLInputElement>('#playtest-seed');
+
       profile?.addEventListener('change', () => {
         profileId = profile.value as VariantProfileId;
       });

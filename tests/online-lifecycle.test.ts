@@ -63,6 +63,7 @@ test('presentation jobs and update metadata are discriminated and revision-bound
     values: [6, 1] as [number, number],
     rerolledDie: 0 as const,
   };
+
   assert.equal(
     isRevisionedUpdate({
       matchId: 'match-1',
@@ -83,7 +84,9 @@ test('presentation jobs and update metadata are discriminated and revision-bound
     }),
     false,
   );
+
   const opened = structuredClone(state);
+
   opened.opening = {
     status: 'RESOLVED',
     attempts: [
@@ -95,12 +98,14 @@ test('presentation jobs and update metadata are discriminated and revision-bound
   opened.phase = 'WAITING_FOR_ROLL';
   opened.active = 0;
   opened.roll = [6, 1];
+
   const openingUpdate = {
     matchId: 'match-1',
     revision: 0,
     state: opened,
     canUndo: false,
   };
+
   assert.equal(
     isRevisionedUpdate({
       ...openingUpdate,
@@ -149,7 +154,9 @@ test('presentation jobs and update metadata are discriminated and revision-bound
     }),
     false,
   );
+
   const contradictory = structuredClone(state);
+
   contradictory.opening = { status: 'RESOLVED', attempts: [[6, 1]], winner: 0 };
   assert.equal(isNetworkGameState(contradictory), false);
   assert.equal(
@@ -162,9 +169,11 @@ test('presentation jobs and update metadata are discriminated and revision-bound
     }),
     false,
   );
+
   const powerups = initialGameState(
     rulesForSelection({ ruleset: 'POWERUPS_V1', profileId: 'powerups-v1' }),
   );
+
   powerups.powerups!.loadouts[0].powerups.push({
     instanceId: 'bad-copy',
     abilityId: 'not-an-ability' as never,
@@ -225,14 +234,19 @@ test('a queued opponent that never connects forfeits at the shorter no-show dead
     undefined,
     nonTiedOpeningRandom(),
   );
+
   try {
     await tables.connect('ada');
     await tables.find('ada');
     await tables.find('basil');
+
     const live = await store.matchForUser('ada');
+
     assert.ok(live);
     now += 20_001;
+
     const events = await tables.sync();
+
     assert.deepEqual(
       events.map((event) => [event.userId, event.message.type]),
       [
@@ -240,14 +254,20 @@ test('a queued opponent that never connects forfeits at the shorter no-show dead
         ['ada', 'left'],
       ],
     );
+
     const update = events.find((event) => event.userId === 'ada')?.message;
+
     assert.equal(update?.type, 'update');
+
     if (update?.type !== 'update') return;
+
     assert.equal(update.state.phase, 'GAME_OVER');
     assert.equal(update.state.outcome?.kind, 'NO_SHOW');
     assert.equal(update.state.outcome?.winner, 0);
     assert.equal(await store.matchForUser('ada'), null);
+
     const ended = await store.match(live.id);
+
     assert.equal(ended?.session.state.outcome?.kind, 'NO_SHOW');
   } finally {
     await store.drop();
@@ -264,17 +284,24 @@ test('resignation stores a typed result and keeps the match available for a rema
     undefined,
     nonTiedOpeningRandom(),
   );
+
   try {
     await tables.connect('ada');
     await tables.connect('basil');
     await tables.find('ada');
     await tables.find('basil');
     await tables.sync();
+
     const live = await store.matchForUser('ada');
+
     assert.ok(live);
+
     const events = await tables.act('ada', { type: 'forfeit' });
+
     assert.deepEqual(events.map((event) => event.userId).sort(), ['ada', 'basil']);
+
     const kept = await store.match(live.id);
+
     assert.equal(kept?.winner, 'basil');
     assert.equal(kept?.session.state.phase, 'GAME_OVER');
     assert.equal(kept?.session.state.outcome?.kind, 'RESIGNATION');
@@ -295,6 +322,7 @@ test('startup clears volatile queues and gives live matches a reconnect grace', 
     undefined,
     nonTiedOpeningRandom(),
   );
+
   try {
     await tables.connect('ada');
     await tables.connect('basil');
@@ -303,7 +331,9 @@ test('startup clears volatile queues and gives live matches a reconnect grace', 
     await store.wait('stray', matchKey(rulesForSelection({ ruleset: 'CLASSIC' })));
     await tables.start();
     assert.equal(await store.queued('stray'), false);
+
     const live = await store.matchForUser('ada');
+
     assert.ok(live);
     assert.notEqual(live.away[0], null);
     assert.notEqual(live.away[1], null);
@@ -315,9 +345,11 @@ test('startup clears volatile queues and gives live matches a reconnect grace', 
 
 test('stored sessions with a malformed board are rejected instead of resumed', async () => {
   const store = await isolatedStore();
+
   try {
     const state = initialGameState();
     const bad = { state: { ...state, board: [] }, history: [] } as unknown as Session;
+
     assert.equal(
       await store.insertMatch({
         id: 'malformed',
@@ -341,8 +373,10 @@ test('stored sessions with a malformed board are rejected instead of resumed', a
 
 test('stored sessions with contradictory semantic state are rejected instead of resumed', async () => {
   const store = await isolatedStore();
+
   try {
     const state = initialGameState();
+
     state.opening = { status: 'RESOLVED', attempts: [[6, 1]], winner: 0 };
     assert.equal(
       await store.insertMatch({
@@ -367,9 +401,11 @@ test('stored sessions with contradictory semantic state are rejected instead of 
 
 test('stored sessions reject malformed nested variant state through the shared decoder', async () => {
   const store = await isolatedStore();
+
   try {
     const rules = rulesForSelection({ ruleset: 'POWERUPS_V1', profileId: 'powerups-v1' });
     const state = initialGameState(rules);
+
     state.powerups!.loadouts[0].powerups.push({
       instanceId: 'bad-copy',
       abilityId: 'not-an-ability' as never,

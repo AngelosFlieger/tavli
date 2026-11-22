@@ -3,6 +3,7 @@ import { CLASSIC_RULES, type RulesContext } from '../variant/types';
 import type { SessionEvent } from './transition';
 
 export type StatusKey = string;
+
 export type StatusParams = Record<string, string | number>;
 
 export function initialPresentedSession(rules: RulesContext = CLASSIC_RULES): Session {
@@ -19,6 +20,7 @@ export function stateMessageParts(
   state: GameState,
 ): { key: StatusKey; params: StatusParams; text: string } | null {
   if (state.phase !== 'GAME_OVER' || !state.outcome) return null;
+
   return state.outcome.winner === null
     ? { key: `outcome.${state.outcome.kind}`, params: {}, text: state.outcome.reason }
     : {
@@ -34,6 +36,7 @@ export function sessionMessageParts(
   events: SessionEvent[],
 ): { key: StatusKey; params: StatusParams; text: string } | null {
   const event = events.at(-1);
+
   if (!event) return null;
   switch (event.type) {
     case 'GameReset':

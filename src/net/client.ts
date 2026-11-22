@@ -60,31 +60,42 @@ export function connectTable(events: TableEvents) {
 
   function open() {
     if (currentSocket && currentSocket.readyState <= WebSocket.OPEN) return;
+
     const address = socketUrl();
+
     if (!address) {
       events.onRejected();
+
       return;
     }
+
     intentional = false;
+
     const socket = new WebSocket(address);
+
     currentSocket = socket;
     socket.onopen = () => {
       if (socket !== currentSocket) return;
+
       socket.send(JSON.stringify({ type: 'hello', protocol: PROTOCOL_VERSION }));
     };
     socket.onmessage = (event) => {
       if (socket !== currentSocket) return;
+
       const message = parse(event.data);
+
       if (!message) return;
       if (message.type === 'rejected') {
         intentional = true;
         queued.length = 0;
         events.onRejected();
         socket.close();
+
         return;
       }
       if (message.type === 'error') {
         events.onError(message.code);
+
         return;
       }
       if (message.type === 'ready') {
@@ -92,12 +103,15 @@ export function connectTable(events: TableEvents) {
           intentional = true;
           events.onError('PROTOCOL');
           socket.close();
+
           return;
         }
+
         authed = true;
         retry = 0;
         flush();
         events.onReady(message.name);
+
         return;
       }
       if (
@@ -122,6 +136,7 @@ export function connectTable(events: TableEvents) {
           message.presentations,
           message.events,
         );
+
         return;
       }
       if (message.type === 'waiting') {
@@ -158,15 +173,21 @@ export function connectTable(events: TableEvents) {
     };
     socket.onclose = () => {
       if (socket !== currentSocket) return;
+
       currentSocket = null;
       authed = false;
+
       if (intentional) return;
+
       const delay = retryDelays[retry++];
+
       if (delay === undefined) {
         queued.length = 0;
         events.onClose();
+
         return;
       }
+
       events.onReconnect();
       retryTimer = window.setTimeout(open, delay);
     };
@@ -175,11 +196,13 @@ export function connectTable(events: TableEvents) {
   function flush() {
     if (!authed || currentSocket?.readyState !== WebSocket.OPEN) return;
     for (const packet of queued) currentSocket.send(packet);
+
     queued.length = 0;
   }
 
   function send(message: ClientPacket) {
     const packet = JSON.stringify(message);
+
     if (authed && currentSocket?.readyState === WebSocket.OPEN) currentSocket.send(packet);
     else {
       queued.push(packet);
@@ -199,8 +222,10 @@ export function connectTable(events: TableEvents) {
       intentional = true;
       window.clearTimeout(retryTimer);
       retry = 0;
+
       if (currentSocket?.readyState === WebSocket.OPEN)
         currentSocket.send(JSON.stringify({ type: 'cancel' }));
+
       currentSocket?.close();
       currentSocket = null;
       authed = false;
@@ -247,6 +272,7 @@ function parse(data: unknown): ServerMessage | null {
   if (typeof data !== 'string') return null;
   try {
     const message = JSON.parse(data) as ServerMessage;
+
     if (
       message &&
       (message.type === 'ready' ||
@@ -264,5 +290,6 @@ function parse(data: unknown): ServerMessage | null {
   } catch {
     return null;
   }
+
   return null;
 }

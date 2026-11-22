@@ -39,6 +39,7 @@ test('seeded dice are reproducible, stay on a die face, and keep their own strea
     rolls.every((roll) => Number.isInteger(roll) && roll >= 1 && roll <= 6),
     true,
   );
+
   // Draft and passive draws keep the bare seed stream, so dice must not consume it.
   const untouched = createSeededRandomInt(2);
   const expectedDrafts = Array.from({ length: 20 }, () => untouched(6));
@@ -46,8 +47,10 @@ test('seeded dice are reproducible, stay on a die face, and keep their own strea
   const die = createSeededDie(2);
   const interleavedDrafts = Array.from({ length: 20 }, () => {
     die();
+
     return draft(6);
   });
+
   assert.deepEqual(interleavedDrafts, expectedDrafts);
 });
 
@@ -63,6 +66,7 @@ test('blank playtest seeds keep fresh randomness while explicit seeds remain rep
 test('playtest recorder keeps semantic events, state snapshots, and balance summaries', () => {
   const rules = powerupsRules(POWERUPS_V1);
   const state = initialGameState(rules);
+
   state.opening = { status: 'RESOLVED', attempts: [[6, 1]], winner: 0 };
   state.active = 1;
   state.phase = 'TURN_COMPLETE';
@@ -80,13 +84,16 @@ test('playtest recorder keeps semantic events, state snapshots, and balance summ
       remaining: 1,
     },
   ];
+
   const recorder = new PlaytestRecorder(() => new Date('2026-01-02T03:04:05.000Z'));
+
   recorder.start({
     mode: 'LOCAL',
     selection: { ruleset: 'POWERUPS_V1', profileId: 'powerups-v1' },
     seed: 77,
     configHash: POWERUPS_V1.hash,
   });
+
   const events: SessionEvent[] = [
     { type: 'DraftOpened', offer: ['frostSeal', 'recast', 'homeGuard'] },
     { type: 'AbilityPicked', player: 0, abilityId: 'frostSeal' },
@@ -106,6 +113,7 @@ test('playtest recorder keeps semantic events, state snapshots, and balance summ
 
   recorder.record(events, state);
   state.powerups!.activeEffects[0].remaining = 99;
+
   const report = recorder.snapshot()!;
 
   assert.equal(report.startedAt, '2026-01-02T03:04:05.000Z');

@@ -100,6 +100,7 @@ export function createMatchSession(
   let lifecycle: MatchLifecycle = { type: 'IDLE' };
   const sendRequest = (request: CommandRequest) => {
     if (lifecycle.type !== 'PLAYING') return;
+
     table.send({
       type: 'command',
       commandId: request.commandId,
@@ -111,6 +112,7 @@ export function createMatchSession(
   const table = connect({
     onReady() {
       if (lifecycle.type !== 'PLAYING') return;
+
       lifecycle = { type: 'IDLE' };
       flow.leave();
       ui.showTitle();
@@ -127,13 +129,16 @@ export function createMatchSession(
     },
     onRejected() {
       const wasPlaying = lifecycle.type === 'PLAYING';
+
       lifecycle = { type: 'IDLE' };
       ui.setSearching(false);
       ui.signedOut();
+
       if (wasPlaying) {
         flow.leave();
         ui.showTitle();
       }
+
       ui.showNote(t('net.signInAgain'));
     },
     onReconnect() {
@@ -142,6 +147,7 @@ export function createMatchSession(
     },
     onWaiting() {
       if (lifecycle.type !== 'SEARCHING') return;
+
       ui.setSearching(true, 'SEARCHING');
     },
     onRoom(code) {
@@ -150,8 +156,10 @@ export function createMatchSession(
     onMatched(you, players, state, variantConfig, cursor, presentations, events) {
       if (lifecycle.type !== 'SEARCHING') {
         table.cancel();
+
         return;
       }
+
       lifecycle = { type: 'PLAYING', cursor };
       ui.setSearching(false);
       ui.showNote(null);
@@ -162,9 +170,11 @@ export function createMatchSession(
     },
     onUpdate(update) {
       if (lifecycle.type !== 'PLAYING') return;
+
       const resetDice = update.presentations.some(
         (job) => job.type === 'RESET_DICE' || job.type === 'OPENING',
       );
+
       if (
         (update.matchId === lifecycle.cursor.matchId || (resetDice && update.revision === 0)) &&
         update.revision >=
@@ -175,6 +185,7 @@ export function createMatchSession(
           cursor: { matchId: update.matchId, revision: update.revision },
         };
       else return;
+
       flow.receive(update);
     },
     onError(code) {
@@ -192,12 +203,15 @@ export function createMatchSession(
     },
     onClose() {
       const wasPlaying = lifecycle.type === 'PLAYING' || controller.scripted;
+
       lifecycle = { type: 'IDLE' };
       ui.setSearching(false);
+
       if (wasPlaying) {
         flow.leave();
         ui.showTitle();
       }
+
       ui.showNote(t('net.unreachable'));
     },
   });
@@ -205,13 +219,16 @@ export function createMatchSession(
   return {
     reconnect() {
       if (lifecycle.type !== 'IDLE') return;
+
       table.connect();
     },
     signOut() {
       const wasPlaying = lifecycle.type === 'PLAYING';
+
       lifecycle = { type: 'IDLE' };
       ui.setSearching(false);
       table.abandon();
+
       if (wasPlaying) {
         flow.leave();
         ui.showTitle();
@@ -224,29 +241,39 @@ export function createMatchSession(
      */
     exitGame() {
       const online = lifecycle.type === 'PLAYING';
+
       lifecycle = { type: 'IDLE' };
       ui.setSearching(false);
+
       if (online) table.abandon();
+
       flow.leave();
       ui.showNote(null);
       ui.showTitle();
     },
     startLocal(selection: MatchSelection = CLASSIC_SELECTION, seed?: number): boolean {
       scene.setPlayerNames?.(null);
+
       const rules = rulesForSelection(selection);
+
       if (
         !controller.configure(rules, seed === undefined ? undefined : createSeededRandomInt(seed))
       )
         return false;
+
       const attempts = controller.resolveLocalOpening();
       const wasSearching = lifecycle.type === 'SEARCHING';
+
       lifecycle = { type: 'IDLE' };
       scene.startSetup(() => {
         if (attempts) scene.presentOpening?.(attempts);
       });
+
       if (!wasSearching) return true;
+
       ui.setSearching(false);
       table.cancel();
+
       return true;
     },
     toggleSearch(selection: MatchSelection = CLASSIC_SELECTION) {
@@ -256,8 +283,10 @@ export function createMatchSession(
         ui.setSearching(false);
         table.cancel();
         ui.showNote(null);
+
         return;
       }
+
       lifecycle = { type: 'SEARCHING' };
       ui.showNote(null);
       ui.setSearching(true, 'CONNECTING');
@@ -265,12 +294,14 @@ export function createMatchSession(
     },
     createRoom(selection: MatchSelection = CLASSIC_SELECTION) {
       if (lifecycle.type === 'PLAYING') return;
+
       lifecycle = { type: 'SEARCHING' };
       ui.showNote(null);
       table.createRoom(selection);
     },
     joinRoom(code: string) {
       if (lifecycle.type === 'PLAYING') return;
+
       lifecycle = { type: 'SEARCHING' };
       ui.showNote(null);
       table.joinRoom(code);

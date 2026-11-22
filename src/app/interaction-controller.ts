@@ -70,35 +70,45 @@ export class InteractionController {
 
   takeForcedLocalRoll(): [number, number] | null {
     if (this.current.type !== 'ROLL' || this.current.authority !== 'LOCAL') return null;
+
     const values = this.current.forced;
+
     this.current = { ...this.current, forced: null };
+
     return values;
   }
 
   moves(state: GameState): Move[] {
     if (state.active === null || state.phase !== 'WAITING_FOR_MOVE') return [];
+
     const key = JSON.stringify([
       state.board,
       state.remaining,
       state.active,
       state.powerups?.activeEffects,
     ]);
+
     if (key !== this.moveKey) {
       this.moveKey = key;
       this.cachedMoves = legalMoves(state, state.active, state.remaining);
     }
+
     return this.cachedMoves;
   }
 
   pickAt(point: number, state: GameState, mine: boolean): number | null {
     if (this.busy || this.abilitySelection || !mine) return null;
+
     return this.pickup.pickAt(point, state);
   }
 
   selectedAbility(state: GameState): AbilityInstance | null {
     const active = state.active;
+
     if (active === null || !this.abilitySelection || !state.powerups) return null;
+
     const loadout = state.powerups.loadouts[active];
+
     return (
       [...loadout.powerups, ...loadout.passives].find(
         (instance) => instance.instanceId === this.abilitySelection!.instanceId,
@@ -110,7 +120,9 @@ export class InteractionController {
     const selected = instanceId ?? this.abilitySelection?.instanceId;
     const config = rules.variantConfig;
     const active = state.active;
+
     if (!selected || !config || active === null || !mine) return [];
+
     return [
       ...beforeRollAbilityTargets(state, active, selected, config),
       ...endTurnAbilityTargets(state, active, selected, config),
@@ -137,7 +149,9 @@ export class InteractionController {
     const selected = instanceId ?? this.abilitySelection?.instanceId;
     const config = rules.variantConfig;
     const active = state.active;
+
     if (!selected || !config || active === null || !mine || this.pickup.items.length) return [];
+
     return rollAbilityOptions(state, active, selected, config);
   }
 
@@ -155,12 +169,15 @@ export class InteractionController {
 
   selectAbility(state: GameState, rules: RulesContext, mine: boolean, instanceId: string): boolean {
     if (this.busy || !mine || !this.abilityIsPlayable(state, rules, mine, instanceId)) return false;
+
     const targets = this.abilityTargets(state, rules, mine, instanceId);
     const onlyTarget =
       state.phase === 'TURN_COMPLETE' && targets.length === 1 && targets[0].type !== 'POINT'
         ? targets[0]
         : undefined;
+
     this.abilitySelection = { instanceId, ...(onlyTarget ? { target: onlyTarget } : {}) };
+
     return true;
   }
 
@@ -172,7 +189,9 @@ export class InteractionController {
   ): boolean {
     if (!this.abilitySelection || !this.abilityTargetPoints(state, rules, mine).includes(point))
       return false;
+
     this.abilitySelection.target = { type: 'POINT', point };
+
     return true;
   }
 
@@ -181,8 +200,11 @@ export class InteractionController {
     option?: AbilityActivation['option'],
   ): AbilityActivation | null {
     if (!this.abilitySelection) return null;
+
     const selectedTarget = target ?? this.abilitySelection.target;
+
     if (!selectedTarget) return null;
+
     return {
       instanceId: this.abilitySelection.instanceId,
       target: selectedTarget,
@@ -198,6 +220,7 @@ export class InteractionController {
     this.finish();
     this.cancelAbility();
     this.moveKey = '';
+
     if (preservePickup) this.pickup.revalidate(state);
     else this.pickup.clear();
   }

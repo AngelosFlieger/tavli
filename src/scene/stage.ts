@@ -25,6 +25,7 @@ export async function createStage(host: HTMLElement, boardFrame: HTMLElement) {
     premultipliedAlpha: false,
     powerPreference: 'high-performance',
   });
+
   renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.25;
@@ -32,9 +33,11 @@ export async function createStage(host: HTMLElement, boardFrame: HTMLElement) {
 
   const scene = new THREE.Scene();
   const camera = new THREE.OrthographicCamera(-7, 7, 5, -5, 0.1, 100);
+
   camera.position.set(0, 12, 8.3);
   camera.lookAt(0, 0, 0);
   camera.updateMatrixWorld();
+
   const titleCamera = new THREE.PerspectiveCamera(35, 1, 0.1, 100);
 
   const backdrop = new THREE.ShaderMaterial({
@@ -57,20 +60,30 @@ export async function createStage(host: HTMLElement, boardFrame: HTMLElement) {
     }`,
   });
   const background = new THREE.Scene();
+
   background.add(new THREE.Mesh(new THREE.PlaneGeometry(2, 2), backdrop));
+
   const backgroundCamera = new THREE.Camera();
 
   scene.add(new THREE.HemisphereLight(0xffefd2, 0x242139, 2.2));
+
   const lights = createTableLights();
+
   scene.add(lights);
 
   const composer = new EffectComposer(renderer);
+
   composer.addPass(new RenderPass(background, backgroundCamera));
+
   const boardPass = new RenderPass(scene, camera);
+
   boardPass.clear = false;
   composer.addPass(boardPass);
+
   const output = new OutputPass();
+
   composer.addPass(output);
+
   const retro = new ShaderPass({
     uniforms: {
       tDiffuse: { value: null },
@@ -88,6 +101,7 @@ export async function createStage(host: HTMLElement, boardFrame: HTMLElement) {
       gl_FragColor=vec4(c,texture2D(tDiffuse,vUv).a);
     }`,
   });
+
   composer.addPass(retro);
 
   const gltf = await loadModel('Board');
@@ -95,14 +109,18 @@ export async function createStage(host: HTMLElement, boardFrame: HTMLElement) {
   const bounds = new THREE.Box3().setFromObject(board);
   const size = bounds.getSize(new THREE.Vector3());
   const center = bounds.getCenter(new THREE.Vector3());
+
   // Source GLB is Y-up. Keep its geometry and embedded materials.
   board.position.sub(center);
+
   const root = new THREE.Group();
+
   root.add(board);
   root.scale.setScalar(10 / Math.max(size.x, size.z));
   scene.add(root);
 
   const shadow = contactShadow();
+
   shadow.position.y = (-size.y * root.scale.x) / 2 - 0.18;
   scene.add(shadow);
 
@@ -117,6 +135,7 @@ export async function createStage(host: HTMLElement, boardFrame: HTMLElement) {
     const title = document.body.classList.contains('on-title');
     const waiting = document.body.classList.contains('is-waiting');
     const portrait = portraitQuery.matches;
+
     return { title, waiting, portrait, desktopHome: title && !waiting && !portrait };
   }
 
@@ -126,8 +145,11 @@ export async function createStage(host: HTMLElement, boardFrame: HTMLElement) {
     const height = frame.height;
     const aspect = width / height;
     const { title, waiting, portrait } = screen();
+
     Object.assign(layout, boardLayout(portrait, title, aspect));
+
     const showBoard = !waiting && !(title && portrait);
+
     board.visible = showBoard;
     shadow.visible = showBoard;
     board.scale.z = layout.depth;
@@ -145,6 +167,7 @@ export async function createStage(host: HTMLElement, boardFrame: HTMLElement) {
           (projected.max.y - projected.min.y) / 2 / (portrait ? 0.96 : 0.82),
           (projected.max.x - projected.min.x) / 2 / aspect / 0.94,
         ) + 0.08;
+
     camera.left = -halfHeight * aspect;
     camera.right = halfHeight * aspect;
     camera.top = title
@@ -157,13 +180,16 @@ export async function createStage(host: HTMLElement, boardFrame: HTMLElement) {
 
     const screenWidth = host.clientWidth;
     const screenHeight = host.clientHeight;
+
     scatter?.resize(screenWidth, screenHeight, title && portrait && !waiting);
     waitingScatter?.resize(screenWidth, screenHeight, waiting);
+
     if (title && !portrait) placeTitleCamera(worldBounds, aspect, frame, screenWidth, screenHeight);
     else {
       applyBoardViewport(camera, frame, screenWidth, screenHeight);
       boardPass.camera = camera;
     }
+
     renderer.setSize(screenWidth, screenHeight);
     composer.setSize(screenWidth, screenHeight);
     backdrop.uniforms.aspect.value = screenWidth / screenHeight;
@@ -184,17 +210,21 @@ export async function createStage(host: HTMLElement, boardFrame: HTMLElement) {
     // A lower viewing angle makes the home-screen board read as a laid-back table.
     // Extend the near edge beyond the viewport so the board fills both lower corners.
     titleCamera.aspect = aspect;
+
     const direction = new THREE.Vector3(0, 0.55, 0.835).normalize();
     const halfWidth = (worldBounds.max.x - worldBounds.min.x) / 2;
     const halfDepth = (worldBounds.max.z - worldBounds.min.z) / 2;
     const distance =
       halfWidth / (Math.tan(THREE.MathUtils.degToRad(17.5)) * aspect * 1.7) +
       halfDepth * direction.z;
+
     titleCamera.position.copy(direction.multiplyScalar(distance));
     titleCamera.lookAt(0, 0, 0);
     titleCamera.updateMatrixWorld();
     titleCamera.updateProjectionMatrix();
+
     const topEdge = projectCorners(worldBounds, (point) => point.project(titleCamera)).max.y;
+
     titleCamera.projectionMatrix.premultiply(
       new THREE.Matrix4().makeTranslation(0, 0.86 - topEdge, 0),
     );
@@ -210,6 +240,7 @@ export async function createStage(host: HTMLElement, boardFrame: HTMLElement) {
     layout,
     attachHome(next: NonNullable<typeof home>) {
       if (home) return;
+
       home = next;
       scene.add(next.group);
     },
@@ -229,11 +260,15 @@ export async function createStage(host: HTMLElement, boardFrame: HTMLElement) {
     render(elapsed: number, motion: boolean, texture: boolean, dt: number) {
       backdrop.uniforms.time.value = elapsed;
       retro.uniforms.time.value = elapsed;
+
       const { desktopHome } = screen();
+
       root.position.y = motion && !desktopHome ? Math.sin(elapsed * 0.65) * 0.035 : 0;
       home?.update(dt, desktopHome && motion);
+
       if (scatter?.pass.enabled) scatter.update?.(elapsed, motion);
       if (waitingScatter?.pass.enabled) waitingScatter.update?.(elapsed, motion);
+
       // Follow the camera actually used by this pass, including seat changes and home.
       faceTableLights(lights, boardPass.camera);
       retro.enabled = texture;
@@ -246,28 +281,35 @@ export async function createStage(host: HTMLElement, boardFrame: HTMLElement) {
 
   function addOverlay(layer: ScatterLayer) {
     composer.insertPass(layer.pass, composer.passes.indexOf(output));
+
     return layer;
   }
 }
 
 function projectCorners(bounds: THREE.Box3, project: (point: THREE.Vector3) => THREE.Vector3) {
   const projected = new THREE.Box3();
+
   for (const x of [bounds.min.x, bounds.max.x])
     for (const y of [bounds.min.y, bounds.max.y])
       for (const z of [bounds.min.z, bounds.max.z])
         projected.expandByPoint(project(new THREE.Vector3(x, y, z)));
+
   return projected;
 }
 
 function contactShadow() {
   const canvas = document.createElement('canvas');
+
   canvas.width = canvas.height = 128;
+
   const context = canvas.getContext('2d')!;
   const gradient = context.createRadialGradient(64, 64, 12, 64, 64, 64);
+
   gradient.addColorStop(0, 'rgba(0,0,0,.65)');
   gradient.addColorStop(1, 'rgba(0,0,0,0)');
   context.fillStyle = gradient;
   context.fillRect(0, 0, 128, 128);
+
   const mesh = new THREE.Mesh(
     new THREE.PlaneGeometry(13, 10),
     new THREE.MeshBasicMaterial({
@@ -276,6 +318,8 @@ function contactShadow() {
       depthWrite: false,
     }),
   );
+
   mesh.rotation.x = -Math.PI / 2;
+
   return mesh;
 }

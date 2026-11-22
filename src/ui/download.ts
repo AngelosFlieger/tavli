@@ -4,6 +4,7 @@ export function downloadJson(filename: string, value: unknown): void {
     type: 'application/json',
   });
   const link = document.createElement('a');
+
   link.href = URL.createObjectURL(blob);
   link.download = filename;
   link.click();

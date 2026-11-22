@@ -11,6 +11,7 @@ test('opposite seats receive identical camera-relative table lighting and reset 
     camera.lookAt(0, 0, 0);
     camera.updateMatrixWorld(true);
     faceTableLights(rig, camera);
+
     return rig.children
       .filter((item) => 'isLight' in item)
       .map((light) => {
@@ -24,13 +25,16 @@ test('opposite seats receive identical camera-relative table lighting and reset 
                 .sub(light.target.getWorldPosition(new Vector3()))
                 .transformDirection(camera.matrixWorldInverse)
             : null;
+
         return { position, direction };
       });
   }
   const baseline = sample(8.3);
+
   for (const z of [-8.3, 8.3, -8.3, 8.3]) {
     sample(z).forEach((light, index) => {
       assert.ok(light.position.distanceTo(baseline[index].position) < 1e-10);
+
       if (light.direction)
         assert.ok(light.direction.distanceTo(baseline[index].direction!) < 1e-10);
     });

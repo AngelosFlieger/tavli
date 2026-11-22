@@ -25,6 +25,7 @@ function effect(
 
 test('temporary board visuals map Frost Seal and Bastion to the current top checker', () => {
   const state = initialGameState(powerupsRules(POWERUPS_V1));
+
   state.powerups!.activeEffects = [
     effect('frost-1', 'frostSeal', 0),
     effect('bastion-1', 'bastion', 12),

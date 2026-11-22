@@ -9,7 +9,9 @@ export function resolvedOpeningSession(rules: RulesContext = CLASSIC_RULES): Ses
     { type: 'resolveOpening', attempts: [[6, 1]] },
     rules,
   );
+
   if (!result.ok) throw new Error('Opening fixture could not be resolved');
+
   return result.session;
 }
 

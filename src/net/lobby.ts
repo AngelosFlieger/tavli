@@ -24,6 +24,7 @@ import {
 } from '../game/clock';
 
 export type PlayerId = string;
+
 export type ActResult = { to: PlayerId[]; update: Update };
 
 export type SeatView = { you: Player; state: GameState; canUndo: boolean };
@@ -44,29 +45,40 @@ export function createLobby(
 
   function leave(id: PlayerId): PlayerId | null {
     const seat = seats.get(id);
+
     if (!seat) return null;
+
     const opponent = seat.match.ids[seat.player === 0 ? 1 : 0];
+
     seats.delete(id);
     seats.delete(opponent);
+
     return opponent;
   }
 
   function act(id: PlayerId, command: unknown): ActResult | null {
     const seat = seats.get(id);
+
     if (!seat || !isCommand(command)) return null;
+
     return seat.match.act(seat.player, command, id);
   }
 
   function seat(id: PlayerId): SeatView | null {
     const found = seats.get(id);
+
     if (!found) return null;
+
     const update = found.match.view();
+
     return { you: found.player, state: update.state, canUndo: update.canUndo };
   }
 
   function snapshot(id: PlayerId): MatchSnapshot | null {
     const found = seats.get(id);
+
     if (!found) return null;
+
     return { id: found.match.id, ids: [...found.match.ids], session: found.match.exportSession() };
   }
 
@@ -83,6 +95,7 @@ export function createLobby(
       session.state.variantConfigHash !== (rules.variantConfig?.hash ?? null)
     )
       return false;
+
     const match = new Match(
       first,
       second,
@@ -94,24 +107,30 @@ export function createLobby(
       clockConfig,
       now,
     );
+
     seats.set(first, { match, player: 0 });
     seats.set(second, { match, player: 1 });
+
     return true;
   }
 
   function end(id: PlayerId, outcome: Outcome): Update | null {
     const found = seats.get(id);
+
     if (!found) return null;
+
     return found.match.end(outcome);
   }
 
   function pause(id: PlayerId): void {
     const found = seats.get(id);
+
     if (found) found.match.pauseClock(now());
   }
 
   function resume(id: PlayerId): void {
     const found = seats.get(id);
+
     if (found) found.match.resumeClock(now());
   }
 
@@ -135,6 +154,7 @@ class Match {
   ) {
     this.ids = [first, second];
     this.session = structuredClone(session);
+
     if (this.session.state.clock === null && this.session.state.phase !== 'GAME_OVER')
       this.session.state.clock = startClock(clockConfig, this.session.state.phase, this.now());
   }
@@ -162,6 +182,7 @@ class Match {
 
   end(outcome: Outcome): Update {
     const events: SessionEvent[] = [{ type: 'GameEnded', outcome }];
+
     this.session = {
       state: {
         ...structuredClone(this.session.state),
@@ -171,6 +192,7 @@ class Match {
       },
       history: [],
     };
+
     return this.view(events);
   }
 
@@ -179,14 +201,18 @@ class Match {
     input = this.session,
   ): Extract<SessionResult, { ok: true }> | null {
     const result = transitionSession(input, command, this.rules);
+
     if (!result.ok) return null;
+
     return result;
   }
 
   private apply(command: SessionCommand): SessionEvent[] | null {
     const previous = this.session.state.phase;
     const result = this.resolve(command);
+
     if (!result) return null;
+
     this.session = result.session;
     this.session.state.clock = advanceClock(
       this.session.state.clock,
@@ -195,14 +221,18 @@ class Match {
       this.clockConfig,
       this.now(),
     );
+
     return result.events;
   }
 
   act(player: Player, command: Command, sender: PlayerId): ActResult {
     const rejected = () => ({ to: [sender], update: this.view() });
+
     if (command.type === 'restart') {
       const events = this.apply({ type: 'restart' });
+
       if (!events) return rejected();
+
       return {
         to: [...this.ids],
         update: {
@@ -218,6 +248,7 @@ class Match {
         abilityId: command.abilityId,
         replaceInstanceId: command.replaceInstanceId,
       });
+
       return events ? { to: [...this.ids], update: this.view(events) } : rejected();
     }
     if (player !== this.session.state.active) return rejected();
@@ -230,15 +261,19 @@ class Match {
           player,
           activation: command.activation,
         });
+
         return events ? { to: [...this.ids], update: this.view(events) } : rejected();
       }
+
       const randomCount = rollAbilityRandomCount(
         this.session.state,
         player,
         command.activation,
         this.rules.variantConfig,
       );
+
       if (randomCount === null) return rejected();
+
       const randomValues = Array.from({ length: randomCount }, () => this.rollDie());
       const events = this.apply({
         type: 'useRollAbility',
@@ -246,7 +281,9 @@ class Match {
         activation: command.activation,
         randomValues,
       });
+
       if (!events) return rejected();
+
       return {
         to: [...this.ids],
         update: {
@@ -270,9 +307,13 @@ class Match {
     }
     if (command.type === 'roll') {
       if (this.session.state.phase !== 'WAITING_FOR_ROLL') return rejected();
+
       const started = this.resolve({ type: 'beginRoll' });
+
       if (!started) return rejected();
+
       let dice: [number, number];
+
       try {
         dice = this.rules.variantConfig
           ? generateMovementRoll(
@@ -286,9 +327,13 @@ class Match {
       } catch {
         return rejected();
       }
+
       const rolled = this.resolve({ type: 'receiveRoll', values: dice }, started.session);
+
       if (!rolled) return rejected();
+
       this.session = rolled.session;
+
       return {
         to: [...this.ids],
         update: {
@@ -299,7 +344,9 @@ class Match {
     }
     if (command.type === 'move') {
       const events = this.apply({ type: 'move', sequence: command.sequence });
+
       if (!events) return rejected();
+
       return {
         to: [...this.ids],
         update: {
@@ -310,12 +357,18 @@ class Match {
     }
     if (command.type === 'undo') {
       const events = this.apply({ type: 'undo' });
+
       return events ? { to: [...this.ids], update: this.view(events) } : rejected();
     }
+
     const events = this.apply({ type: 'endTurn', ability: command.ability });
+
     if (!events) return rejected();
+
     const advanced = advancePendingDraft(this.session, this.rules, this.randomInt);
+
     this.session = advanced.session;
+
     return {
       to: [...this.ids],
       update: this.view([...events, ...advanced.events]),

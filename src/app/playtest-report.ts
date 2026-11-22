@@ -68,11 +68,13 @@ export class PlaytestRecorder {
 
   record(events: SessionEvent[], state: GameState): void {
     if (!this.report || !events.length) return;
+
     const entry: PlaytestEntry = {
       index: this.report.entries.length,
       events: structuredClone(events),
       state: snapshotState(state),
     };
+
     this.report.entries.push(entry);
     updateSummary(this.report.summary, events, state);
   }

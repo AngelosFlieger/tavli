@@ -71,14 +71,17 @@ export function analyzePlaytestReports(
   rejectedCount = 0,
 ): BalanceAnalysis {
   const groups = new Map<string, MutableGroup>();
+
   for (const report of reports) {
     const profileId =
       report.selection.ruleset === 'POWERUPS_V1' ? report.selection.profileId : null;
     const key = `${report.selection.ruleset}:${profileId ?? 'classic'}:${report.configHash ?? 'none'}`;
     const group = groups.get(key) ?? createGroup(report, profileId);
+
     groups.set(key, group);
     aggregateReport(group, report);
   }
+
   return {
     schemaVersion: 1,
     reportCount: reports.length,
@@ -104,6 +107,7 @@ export function parsePlaytestReport(value: unknown): PlaytestReport | null {
   )
     return null;
   if (!value.entries.every(isReportEntry)) return null;
+
   return value as PlaytestReport;
 }
 
@@ -131,6 +135,7 @@ function createGroup(report: PlaytestReport, profileId: string | null): MutableG
 function aggregateReport(group: MutableGroup, report: PlaytestReport): void {
   group.reports++;
   group.seeds.add(report.seed);
+
   const events = report.entries.flatMap((entry) => entry.events);
   const outcome = [...events]
     .reverse()
@@ -139,9 +144,11 @@ function aggregateReport(group: MutableGroup, report: PlaytestReport): void {
     )?.outcome;
   const completed = outcome !== undefined;
   const turnCount = events.filter((event) => isEvent(event, 'TurnEnded')).length;
+
   if (completed) {
     group.completedGames++;
     group.completedTurns += turnCount;
+
     if (outcome.winner === null) group.draws++;
   }
 
@@ -149,8 +156,10 @@ function aggregateReport(group: MutableGroup, report: PlaytestReport): void {
     (event): event is Extract<SessionEvent, { type: 'OpeningResolved' }> =>
       isEvent(event, 'OpeningResolved'),
   )?.player;
+
   if (completed && openingWinner !== undefined) {
     group.openingWinnerGames++;
+
     if (outcome.winner === openingWinner) group.openingWinnerWins++;
   }
 
@@ -159,29 +168,37 @@ function aggregateReport(group: MutableGroup, report: PlaytestReport): void {
       for (const abilityId of event.offer) group.abilities[abilityId].offered++;
     if (isEvent(event, 'AbilityPicked')) {
       const metrics = group.abilities[event.abilityId];
+
       metrics.picked++;
+
       if (completed) {
         metrics.completedGamePicks++;
+
         if (outcome.winner === event.player) metrics.picksByWinner++;
       }
     }
     if (isEvent(event, 'AbilityReplaced')) group.abilities[event.abilityId].replaced++;
     if (isEvent(event, 'AbilityUsed')) {
       const metrics = group.abilities[event.abilityId];
+
       metrics.used++;
+
       if (completed) {
         metrics.completedGameUses++;
+
         if (outcome.winner === event.player) metrics.usesByWinner++;
       }
     }
     if (isEvent(event, 'EffectExpired')) group.abilities[event.abilityId].effectsExpired++;
     if (isEvent(event, 'NoLegalMoves')) {
       const entry = report.entries.find((candidate) => candidate.events.includes(event));
+
       if (entry?.state.active !== null && entry?.state.active !== undefined)
         group.stalledTurns[entry.state.active]++;
     }
     if (completed && isEvent(event, 'DraftOrderChosen')) {
       group.draftFirstPickDecisions++;
+
       if (outcome.winner === event.first) group.draftFirstPickWins++;
     }
   }
@@ -191,24 +208,30 @@ function aggregateReport(group: MutableGroup, report: PlaytestReport): void {
       (event): event is Extract<SessionEvent, { type: 'AbilityPicked' }> =>
         isEvent(event, 'AbilityPicked'),
     );
+
     if (picked && entry.events.some((event) => isEvent(event, 'AbilityReplaced')))
       group.abilities[picked.abilityId].replacementPicks++;
   }
+
   aggregateHoldTimes(group, report, completed);
 }
 
 function aggregateHoldTimes(group: MutableGroup, report: PlaytestReport, completed: boolean): void {
   let turns = 0;
   const held = new Map<string, { abilityId: AbilityId; acquiredTurn: number }>();
+
   for (const entry of report.entries) {
     turns += entry.events.filter((event) => isEvent(event, 'TurnEnded')).length;
+
     const current = new Map(
       (entry.state.loadouts ?? [])
         .flatMap((loadout) => [...loadout.powerups, ...loadout.passives])
         .map((instance) => [instance.instanceId, instance] as const),
     );
+
     for (const [instanceId, tracked] of held) {
       if (current.has(instanceId)) continue;
+
       closeHold(group.abilities[tracked.abilityId], turns - tracked.acquiredTurn, false);
       held.delete(instanceId);
     }
@@ -243,6 +266,7 @@ function finalizeGroup(group: MutableGroup): BalanceGroup {
     metrics.pickWinRate = rate(metrics.picksByWinner, metrics.completedGamePicks);
     metrics.useWinRate = rate(metrics.usesByWinner, metrics.completedGameUses);
   }
+
   return {
     ...group,
     seeds: [...group.seeds].sort((left, right) => left - right),
@@ -291,6 +315,7 @@ function isEvent<Type extends SessionEvent['type']>(
 function isReportSelection(value: unknown): value is PlaytestReport['selection'] {
   if (!isRecord(value)) return false;
   if (value.ruleset === 'CLASSIC') return value.profileId === undefined;
+
   return (
     value.ruleset === 'POWERUPS_V1' && typeof value.profileId === 'string' && !!value.profileId
   );
@@ -300,7 +325,9 @@ function isReportEntry(value: unknown): boolean {
   if (!isRecord(value) || !Number.isInteger(value.index) || !Array.isArray(value.events))
     return false;
   if (!value.events.every(isReportEvent) || !isRecord(value.state)) return false;
+
   const state = value.state;
+
   return (
     (state.active === null || state.active === 0 || state.active === 1) &&
     Number.isInteger(state.round) &&
@@ -331,6 +358,7 @@ function isReportEvent(value: unknown): boolean {
     );
   if (value.type === 'DraftOrderChosen') return isPlayer(value.first);
   if (value.type === 'GameEnded') return isOutcome(value.outcome);
+
   return true;
 }
 

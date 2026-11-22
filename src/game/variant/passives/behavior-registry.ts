@@ -46,12 +46,15 @@ export function configuredPowerupCapacity(
 ): number {
   const adjustments = activeBehaviors(powerups, player).flatMap((id) => {
     const adjustment = passiveBehavior(id).inventory?.powerupCapacity?.(config.abilities[id]);
+
     return adjustment ? [adjustment] : [];
   });
   const replacements = adjustments
     .filter((adjustment) => adjustment.mode === 'REPLACE')
     .map((adjustment) => adjustment.slots);
+
   if (replacements.length) return Math.min(...replacements);
+
   return (
     config.inventory.powerupSlots +
     adjustments
@@ -67,6 +70,7 @@ export function configuredCanUsePowerup(
 ): boolean {
   return activeBehaviors(powerups, player).every((id) => {
     const canUse = passiveBehavior(id).powerupUse?.canUse;
+
     return canUse ? canUse(powerups, player, config.abilities[id]) : true;
   });
 }
@@ -110,6 +114,7 @@ export function configuredPassivePolicy(
 ): PassivePolicyState {
   return activeBehaviors(powerups, player).reduce<PassivePolicyState>((policy, id) => {
     const contribution = passiveBehavior(id).movement?.policy(config.abilities[id]);
+
     return contribution ? { ...policy, ...contribution } : policy;
   }, {});
 }
@@ -121,6 +126,7 @@ export function configuredPassiveMoveAllowed(
 ): boolean {
   return (Object.keys(passiveAbilityBehaviors) as PassiveBehaviorId[]).every((id) => {
     const allows = passiveBehavior(id).movement?.allows;
+
     return allows ? allows(position, player, move) : true;
   });
 }
@@ -134,9 +140,11 @@ export function generateConfiguredMovementRoll(
 ): [number, number] {
   if (state.opening.status === 'PENDING' || !state.powerups)
     return [checkedDie(rollDie()), checkedDie(rollDie())];
+
   const id = activeBehaviors(state.powerups, player).find(
     (candidate) => passiveBehavior(candidate).roll,
   );
+
   return id
     ? passiveBehavior(id).roll!.generate(state, player, config.abilities[id], rollDie, randomInt)
     : [checkedDie(rollDie()), checkedDie(rollDie())];
@@ -150,9 +158,11 @@ export function configuredMovementTokens(
 ): number[] {
   if (values[0] !== values[1]) return [...values];
   if (!state.powerups) return Array(4).fill(values[0]);
+
   const id = activeBehaviors(state.powerups, player).find(
     (candidate) => passiveBehavior(candidate).roll,
   );
+
   return id
     ? passiveBehavior(id).roll!.movementTokens(state, player, values, config.abilities[id])
     : Array(4).fill(values[0]);
@@ -160,9 +170,11 @@ export function configuredMovementTokens(
 
 export function configuredRollSource(state: GameState, player: Player): GameState['rollSource'] {
   if (!state.powerups) return null;
+
   const id = activeBehaviors(state.powerups, player).find(
     (candidate) => passiveBehavior(candidate).roll,
   );
+
   return id ? passiveBehavior(id).roll!.source : null;
 }
 
@@ -172,6 +184,7 @@ export function configuredOpponentStalledEvents(
   config: ResolvedVariantConfig,
 ): PassiveLifecycleEvent[] {
   const events: PassiveLifecycleEvent[] = [];
+
   for (const owner of [0, 1] as const)
     for (const id of activeBehaviors(powerups, owner)) {
       const event = passiveBehavior(id).opponentStalled?.(
@@ -180,8 +193,10 @@ export function configuredOpponentStalledEvents(
         stalledPlayer,
         config.abilities[id],
       );
+
       if (event) events.push(event);
     }
+
   return events;
 }
 
@@ -205,5 +220,6 @@ function passiveBehavior<Id extends PassiveBehaviorId>(
 function checkedDie(value: number): number {
   if (!Number.isInteger(value) || value < 1 || value > 6)
     throw new Error('die source returned an out-of-range value');
+
   return value;
 }

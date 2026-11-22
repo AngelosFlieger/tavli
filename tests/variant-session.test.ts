@@ -20,27 +20,38 @@ import {
 function completeTurns(count: number): { session: Session; lastEvents: string[] } {
   const rules = powerupsRules(POWERUPS_V1);
   const state = initialGameState(rules);
+
   state.opening = { status: 'RESOLVED', attempts: [[6, 1]], winner: 0 };
   state.active = 0;
   state.phase = 'TURN_COMPLETE';
+
   let session: Session = { state, history: [] };
   let lastEvents: string[] = [];
+
   for (let turn = 0; turn < count; turn++) {
     const result = transitionSession(session, { type: 'endTurn' }, rules);
+
     assert.equal(result.ok, true);
+
     if (!result.ok) break;
+
     session = result.session;
     lastEvents = result.events.map((event) => event.type);
+
     if (turn + 1 < count) session.state.phase = 'TURN_COMPLETE';
   }
+
   return { session, lastEvents };
 }
 
 test('a configured draft becomes due after both players complete three rounds', () => {
   const afterFive = completeTurns(5);
+
   assert.equal(afterFive.session.state.powerups?.completedRounds, 2);
   assert.equal(afterFive.session.state.phase, 'WAITING_FOR_ROLL');
+
   const afterSix = completeTurns(6);
+
   assert.equal(afterSix.session.state.powerups?.completedRounds, 3);
   assert.equal(afterSix.session.state.phase, 'DRAFT_ORDER');
   assert.deepEqual(afterSix.session.state.powerups?.draft, {
@@ -56,22 +67,33 @@ test('draft offers and tie rolls resolve into an enforced two-player pick order'
   const before = structuredClone(session);
   const offer = ['frostSeal', 'bastion', 'loadedKnuckles'] as const;
   const opened = transitionSession(session, { type: 'openDraft', offer: [...offer] }, rules);
+
   assert.equal(opened.ok, true);
+
   if (!opened.ok) return;
+
   assert.deepEqual(session, before);
   session = opened.session;
+
   const tied = transitionSession(session, { type: 'resolveDraftOrder', rolls: [4, 4] }, rules);
+
   assert.equal(tied.ok, true);
+
   if (!tied.ok) return;
+
   assert.equal(tied.session.state.phase, 'DRAFT_ORDER');
   assert.equal(tied.session.state.powerups?.draft?.stage, 'ORDER_ROLL');
+
   const ordered = transitionSession(
     tied.session,
     { type: 'resolveDraftOrder', rolls: [2, 6] },
     rules,
   );
+
   assert.equal(ordered.ok, true);
+
   if (!ordered.ok) return;
+
   assert.equal(ordered.session.state.phase, 'DRAFT_PICK');
   assert.deepEqual(
     ordered.session.state.powerups?.draft?.stage === 'PICKING'
@@ -96,23 +118,31 @@ test('draft offers and tie rolls resolve into an enforced two-player pick order'
     ),
     { ok: false, reason: 'invalid_pick' },
   );
+
   const first = transitionSession(
     ordered.session,
     { type: 'pickAbility', player: 1, abilityId: 'loadedKnuckles' },
     rules,
   );
+
   assert.equal(first.ok, true);
+
   if (!first.ok) return;
+
   assert.deepEqual(first.session.state.powerups?.loadouts[1].passives, [
     { instanceId: 'ability-1', abilityId: 'loadedKnuckles' },
   ]);
+
   const second = transitionSession(
     first.session,
     { type: 'pickAbility', player: 0, abilityId: 'frostSeal' },
     rules,
   );
+
   assert.equal(second.ok, true);
+
   if (!second.ok) return;
+
   assert.equal(second.session.state.phase, 'WAITING_FOR_ROLL');
   assert.equal(second.session.state.active, 0);
   assert.equal(second.session.state.powerups?.draft, null);
@@ -123,11 +153,14 @@ test('draft offers and tie rolls resolve into an enforced two-player pick order'
 
 test('full configured inventory requires a same-kind replacement', () => {
   const input = createPowerupsV1Input();
+
   input.id = 'one-slot-test';
   input.inventory.powerupSlots = 1;
+
   const config = resolveVariantConfig(input);
   const rules = powerupsRules(config);
   const state = initialGameState(rules);
+
   state.phase = 'DRAFT_PICK';
   state.active = 0;
   state.powerups!.loadouts[0].powerups = [
@@ -142,11 +175,14 @@ test('full configured inventory requires a same-kind replacement', () => {
     currentPick: 0,
     picks: [],
   };
+
   const session = { state, history: [] };
+
   assert.deepEqual(
     transitionSession(session, { type: 'pickAbility', player: 0, abilityId: 'bastion' }, rules),
     { ok: false, reason: 'invalid_pick' },
   );
+
   const picked = transitionSession(
     session,
     {
@@ -157,8 +193,11 @@ test('full configured inventory requires a same-kind replacement', () => {
     },
     rules,
   );
+
   assert.equal(picked.ok, true);
+
   if (!picked.ok) return;
+
   assert.deepEqual(picked.session.state.powerups?.loadouts[0].powerups, [
     { instanceId: 'ability-1', abilityId: 'bastion' },
   ]);
@@ -168,6 +207,7 @@ test('full configured inventory requires a same-kind replacement', () => {
 test('weighted offer sampling is deterministic with an injected random source', () => {
   const state = initialGameState(powerupsRules(POWERUPS_V1));
   const offer = sampleDraftOffer(state.powerups!, POWERUPS_V1, () => 0);
+
   assert.deepEqual(offer, ['frostSeal', 'bastion', 'loadedKnuckles']);
   assert.equal(validateDraftOffer(state.powerups!, offer, POWERUPS_V1), true);
   assert.throws(
@@ -183,17 +223,24 @@ test('authority opens an offer and rerolls ties until player input is needed', (
   let index = 0;
   const advanced = advancePendingDraft(session, rules, (maximum) => {
     const value = values[index++] ?? 0;
+
     assert.ok(value < maximum);
+
     return value;
   });
+
   assert.equal(advanced.session.state.phase, 'DRAFT_PICK');
   assert.deepEqual(advanced.orderRolls, [
     [4, 4],
     [2, 6],
   ]);
+
   const draft = advanced.session.state.powerups?.draft;
+
   assert.equal(draft?.stage, 'PICKING');
+
   if (draft?.stage !== 'PICKING') return;
+
   assert.deepEqual(draft.offer, ['frostSeal', 'bastion', 'loadedKnuckles']);
   assert.deepEqual(draft.pickOrder, [1, 0]);
   assert.deepEqual(draft.attempts, [
@@ -206,6 +253,7 @@ test('invalid draft composition and order dice do not mutate the session', () =>
   const rules = powerupsRules(POWERUPS_V1);
   const session = completeTurns(6).session;
   const before = structuredClone(session);
+
   assert.deepEqual(
     transitionSession(
       session,
@@ -214,13 +262,17 @@ test('invalid draft composition and order dice do not mutate the session', () =>
     ),
     { ok: false, reason: 'invalid_draft' },
   );
+
   const opened = transitionSession(
     session,
     { type: 'openDraft', offer: ['frostSeal', 'bastion', 'loadedKnuckles'] },
     rules,
   );
+
   assert.equal(opened.ok, true);
+
   if (!opened.ok) return;
+
   assert.deepEqual(
     transitionSession(opened.session, { type: 'resolveDraftOrder', rolls: [0, 7] }, rules),
     { ok: false, reason: 'invalid_roll' },
@@ -231,11 +283,13 @@ test('invalid draft composition and order dice do not mutate the session', () =>
 test('Frost Seal is consumed atomically, blocks its point, and expires at target turn end', () => {
   const rules = powerupsRules(POWERUPS_V1);
   const state = initialGameState(rules);
+
   state.opening = { status: 'RESOLVED', attempts: [[6, 1]], winner: 0 };
   state.active = 0;
   state.phase = 'TURN_COMPLETE';
   state.board[18].push(state.board[12].pop()!);
   state.powerups!.loadouts[0].powerups = [{ instanceId: 'frost-1', abilityId: 'frostSeal' }];
+
   const input: Session = { state, history: [] };
   const used = transitionSession(
     input,
@@ -245,8 +299,11 @@ test('Frost Seal is consumed atomically, blocks its point, and expires at target
     },
     rules,
   );
+
   assert.equal(used.ok, true);
+
   if (!used.ok) return;
+
   assert.deepEqual(input.state.powerups!.loadouts[0].powerups, [
     { instanceId: 'frost-1', abilityId: 'frostSeal' },
   ]);
@@ -272,9 +329,13 @@ test('Frost Seal is consumed atomically, blocks its point, and expires at target
     { ok: false, reason: 'illegal_move' },
   );
   used.session.state.phase = 'TURN_COMPLETE';
+
   const expired = transitionSession(used.session, { type: 'endTurn' }, rules);
+
   assert.equal(expired.ok, true);
+
   if (!expired.ok) return;
+
   assert.deepEqual(expired.session.state.powerups!.activeEffects, []);
   assert.ok(expired.events.some((event) => event.type === 'EffectExpired'));
 });
@@ -282,6 +343,7 @@ test('Frost Seal is consumed atomically, blocks its point, and expires at target
 test('Frost Seal and Bastion reject excluded targets without consuming their cards', () => {
   const rules = powerupsRules(POWERUPS_V1);
   const state = initialGameState(rules);
+
   state.opening = { status: 'RESOLVED', attempts: [[6, 1]], winner: 0 };
   state.active = 0;
   state.phase = 'TURN_COMPLETE';
@@ -289,8 +351,10 @@ test('Frost Seal and Bastion reject excluded targets without consuming their car
     { instanceId: 'frost-1', abilityId: 'frostSeal' },
     { instanceId: 'bastion-1', abilityId: 'bastion' },
   ];
+
   const session: Session = { state, history: [] };
   const before = structuredClone(session);
+
   assert.deepEqual(
     transitionSession(
       session,
@@ -305,6 +369,7 @@ test('Frost Seal and Bastion reject excluded targets without consuming their car
   assert.deepEqual(session, before);
 
   state.board[6].push(state.board[0].pop()!);
+
   const protectedTurn = transitionSession(
     session,
     {
@@ -313,8 +378,11 @@ test('Frost Seal and Bastion reject excluded targets without consuming their car
     },
     rules,
   );
+
   assert.equal(protectedTurn.ok, true);
+
   if (!protectedTurn.ok) return;
+
   assert.equal(
     moveAllowedByActiveEffects(protectedTurn.session.state, 1, {
       from: 7,
@@ -335,16 +403,20 @@ test('Frost Seal and Bastion reject excluded targets without consuming their car
 
 test('configured effect duration counts target turns rather than global turns', () => {
   const input = createPowerupsV1Input();
+
   input.id = 'two-turn-frost';
   input.abilities.frostSeal.duration.count = 2;
+
   const config = resolveVariantConfig(input);
   const rules = powerupsRules(config);
   const state = initialGameState(rules);
+
   state.opening = { status: 'RESOLVED', attempts: [[6, 1]], winner: 0 };
   state.active = 0;
   state.phase = 'TURN_COMPLETE';
   state.board[18].push(state.board[12].pop()!);
   state.powerups!.loadouts[0].powerups = [{ instanceId: 'frost-1', abilityId: 'frostSeal' }];
+
   let result = transitionSession(
     { state, history: [] },
     {
@@ -353,15 +425,20 @@ test('configured effect duration counts target turns rather than global turns', 
     },
     rules,
   );
+
   assert.equal(result.ok, true);
+
   if (!result.ok) return;
+
   assert.equal(result.session.state.powerups!.activeEffects[0].remaining, 2);
 
   for (const expected of [1, 1, 0]) {
     result.session.state.phase = 'TURN_COMPLETE';
     result = transitionSession(result.session, { type: 'endTurn' }, rules);
     assert.equal(result.ok, true);
+
     if (!result.ok) return;
+
     assert.equal(result.session.state.powerups!.activeEffects[0]?.remaining ?? 0, expected);
   }
 });
@@ -369,6 +446,7 @@ test('configured effect duration counts target turns rather than global turns', 
 test('Jinx targets the opponent and modifies only the next effective movement token', () => {
   const rules = powerupsRules(POWERUPS_V1);
   const state = initialGameState(rules);
+
   state.opening = { status: 'RESOLVED', attempts: [[6, 1]], winner: 0 };
   state.active = 0;
   state.phase = 'TURN_COMPLETE';
@@ -394,8 +472,11 @@ test('Jinx targets the opponent and modifies only the next effective movement to
     },
     rules,
   );
+
   assert.equal(cast.ok, true);
+
   if (!cast.ok) return;
+
   assert.deepEqual(cast.session.state.powerups!.loadouts[0].powerups, []);
   assert.deepEqual(
     cast.session.state.powerups!.activeEffects[0].constraints.find(
@@ -413,8 +494,11 @@ test('Jinx targets the opponent and modifies only the next effective movement to
   );
 
   const rolled = transitionSession(cast.session, { type: 'receiveRoll', values: [2, 5] }, rules);
+
   assert.equal(rolled.ok, true);
+
   if (!rolled.ok) return;
+
   assert.deepEqual(rolled.session.state.roll, [2, 5]);
   assert.deepEqual(rolled.session.state.remaining, [2, 4]);
   assert.deepEqual(rolled.session.state.diceModifiers, [
@@ -436,10 +520,12 @@ test('Jinx targets the opponent and modifies only the next effective movement to
 test('the default Jinx is consumed without modifying an actual double', () => {
   const rules = powerupsRules(POWERUPS_V1);
   const state = initialGameState(rules);
+
   state.opening = { status: 'RESOLVED', attempts: [[6, 1]], winner: 0 };
   state.active = 0;
   state.phase = 'TURN_COMPLETE';
   state.powerups!.loadouts[0].powerups = [{ instanceId: 'jinx-1', abilityId: 'jinx' }];
+
   const cast = transitionSession(
     { state, history: [] },
     {
@@ -448,11 +534,17 @@ test('the default Jinx is consumed without modifying an actual double', () => {
     },
     rules,
   );
+
   assert.equal(cast.ok, true);
+
   if (!cast.ok) return;
+
   const rolled = transitionSession(cast.session, { type: 'receiveRoll', values: [3, 3] }, rules);
+
   assert.equal(rolled.ok, true);
+
   if (!rolled.ok) return;
+
   assert.deepEqual(rolled.session.state.roll, [3, 3]);
   assert.deepEqual(rolled.session.state.remaining, [3, 3, 3, 3]);
   assert.deepEqual(rolled.session.state.diceModifiers, []);
@@ -461,14 +553,18 @@ test('the default Jinx is consumed without modifying an actual double', () => {
 
 test('Jinx double consumption and token handling follow the resolved profile', () => {
   const persistentInput = createPowerupsV1Input();
+
   persistentInput.id = 'persistent-jinx';
   persistentInput.abilities.jinx.unaffectedDoubleConsumes = false;
+
   const persistentRules = powerupsRules(resolveVariantConfig(persistentInput));
   const persistentState = initialGameState(persistentRules);
+
   persistentState.opening = { status: 'RESOLVED', attempts: [[6, 1]], winner: 0 };
   persistentState.active = 0;
   persistentState.phase = 'TURN_COMPLETE';
   persistentState.powerups!.loadouts[0].powerups = [{ instanceId: 'jinx-1', abilityId: 'jinx' }];
+
   const cast = transitionSession(
     { state: persistentState, history: [] },
     {
@@ -477,41 +573,55 @@ test('Jinx double consumption and token handling follow the resolved profile', (
     },
     persistentRules,
   );
+
   assert.equal(cast.ok, true);
+
   if (!cast.ok) return;
+
   const ignored = transitionSession(
     cast.session,
     { type: 'receiveRoll', values: [4, 4] },
     persistentRules,
   );
+
   assert.equal(ignored.ok, true);
+
   if (!ignored.ok) return;
+
   assert.deepEqual(ignored.session.state.remaining, [4, 4, 4, 4]);
   assert.equal(ignored.session.state.powerups!.activeEffects.length, 1);
   assert.deepEqual(ignored.session.state.diceModifiers, []);
 
   ignored.session.state.phase = 'WAITING_FOR_ROLL';
+
   const later = transitionSession(
     ignored.session,
     { type: 'receiveRoll', values: [6, 2] },
     persistentRules,
   );
+
   assert.equal(later.ok, true);
+
   if (!later.ok) return;
+
   assert.deepEqual(later.session.state.remaining, [5, 2]);
   assert.deepEqual(later.session.state.powerups!.activeEffects, []);
 
   const matchingInput = createPowerupsV1Input();
+
   matchingInput.id = 'matching-double-jinx';
   matchingInput.abilities.jinx.penalty = 2;
   matchingInput.abilities.jinx.affectDoubles = true;
   matchingInput.abilities.jinx.doubleHandling = 'CHANGE_MATCHING_TOKENS';
+
   const matchingRules = powerupsRules(resolveVariantConfig(matchingInput));
   const matchingState = initialGameState(matchingRules);
+
   matchingState.opening = { status: 'RESOLVED', attempts: [[6, 1]], winner: 0 };
   matchingState.active = 0;
   matchingState.phase = 'TURN_COMPLETE';
   matchingState.powerups!.loadouts[0].powerups = [{ instanceId: 'jinx-2', abilityId: 'jinx' }];
+
   const matchingCast = transitionSession(
     { state: matchingState, history: [] },
     {
@@ -520,15 +630,21 @@ test('Jinx double consumption and token handling follow the resolved profile', (
     },
     matchingRules,
   );
+
   assert.equal(matchingCast.ok, true);
+
   if (!matchingCast.ok) return;
+
   const matchingRoll = transitionSession(
     matchingCast.session,
     { type: 'receiveRoll', values: [4, 4] },
     matchingRules,
   );
+
   assert.equal(matchingRoll.ok, true);
+
   if (!matchingRoll.ok) return;
+
   assert.deepEqual(matchingRoll.session.state.roll, [4, 4]);
   assert.deepEqual(matchingRoll.session.state.remaining, [2, 2, 2, 2]);
 });
@@ -536,10 +652,12 @@ test('Jinx double consumption and token handling follow the resolved profile', (
 test('an unused Jinx expires at its configured next-draft boundary', () => {
   const rules = powerupsRules(POWERUPS_V1);
   const state = initialGameState(rules);
+
   state.opening = { status: 'RESOLVED', attempts: [[6, 1]], winner: 0 };
   state.active = 0;
   state.phase = 'TURN_COMPLETE';
   state.powerups!.loadouts[0].powerups = [{ instanceId: 'jinx-1', abilityId: 'jinx' }];
+
   const cast = transitionSession(
     { state, history: [] },
     {
@@ -548,15 +666,21 @@ test('an unused Jinx expires at its configured next-draft boundary', () => {
     },
     rules,
   );
+
   assert.equal(cast.ok, true);
+
   if (!cast.ok) return;
+
   cast.session.state.powerups!.completedRounds = 2;
   cast.session.state.powerups!.actedThisRound = [true, false];
   cast.session.state.phase = 'TURN_COMPLETE';
 
   const draft = transitionSession(cast.session, { type: 'endTurn' }, rules);
+
   assert.equal(draft.ok, true);
+
   if (!draft.ok) return;
+
   assert.equal(draft.session.state.phase, 'DRAFT_ORDER');
   assert.deepEqual(draft.session.state.powerups!.activeEffects, []);
   assert.ok(
@@ -567,11 +691,13 @@ test('an unused Jinx expires at its configured next-draft boundary', () => {
 test('Clear Skies removes a selected hostile effect before rolling', () => {
   const rules = powerupsRules(POWERUPS_V1);
   const state = initialGameState(rules);
+
   state.opening = { status: 'RESOLVED', attempts: [[6, 1]], winner: 0 };
   state.active = 1;
   state.phase = 'TURN_COMPLETE';
   state.powerups!.loadouts[1].powerups = [{ instanceId: 'jinx-1', abilityId: 'jinx' }];
   state.powerups!.loadouts[0].powerups = [{ instanceId: 'clear-1', abilityId: 'clearSkies' }];
+
   const jinx = transitionSession(
     { state, history: [] },
     {
@@ -580,9 +706,13 @@ test('Clear Skies removes a selected hostile effect before rolling', () => {
     },
     rules,
   );
+
   assert.equal(jinx.ok, true);
+
   if (!jinx.ok) return;
+
   const before = structuredClone(jinx.session);
+
   assert.deepEqual(
     transitionSession(
       jinx.session,
@@ -612,8 +742,11 @@ test('Clear Skies removes a selected hostile effect before rolling', () => {
     },
     rules,
   );
+
   assert.equal(cleared.ok, true);
+
   if (!cleared.ok) return;
+
   assert.deepEqual(cleared.session.state.powerups!.activeEffects, []);
   assert.deepEqual(cleared.session.state.powerups!.loadouts[0].powerups, []);
   assert.equal(cleared.session.state.powerups!.powerupsUsedThisTurn, 1);
@@ -622,18 +755,24 @@ test('Clear Skies removes a selected hostile effect before rolling', () => {
     abilityId: 'clearSkies',
     removed: [{ instanceId: 'jinx-1', abilityId: 'jinx' }],
   });
+
   const rolled = transitionSession(cleared.session, { type: 'receiveRoll', values: [6, 2] }, rules);
+
   assert.equal(rolled.ok, true);
+
   if (!rolled.ok) return;
+
   assert.deepEqual(rolled.session.state.remaining, [6, 2]);
   assert.deepEqual(rolled.session.state.diceModifiers, []);
 });
 
 test('Clear Skies respects configured tags, removal count, and positive-effect targeting', () => {
   const input = createPowerupsV1Input();
+
   input.id = 'multi-clear-skies';
   input.abilities.clearSkies.maxEffects = 3;
   input.abilities.clearSkies.removableTags = ['CONTROL', 'DICE_PENALTY', 'PROTECTION'];
+
   const config = resolveVariantConfig(input);
   const rules = powerupsRules(config);
   const effects: ActiveEffect[] = [
@@ -672,6 +811,7 @@ test('Clear Skies respects configured tags, removal count, and positive-effect t
     },
   ];
   const state = initialGameState(rules);
+
   state.opening = { status: 'RESOLVED', attempts: [[6, 1]], winner: 0 };
   state.active = 0;
   state.phase = 'WAITING_FOR_ROLL';
@@ -690,8 +830,11 @@ test('Clear Skies respects configured tags, removal count, and positive-effect t
     },
     rules,
   );
+
   assert.equal(cleared.ok, true);
+
   if (!cleared.ok) return;
+
   assert.deepEqual(
     cleared.session.state.powerups!.activeEffects.map((effect) => effect.instanceId),
     ['bastion-1'],
@@ -706,11 +849,14 @@ test('Clear Skies respects configured tags, removal count, and positive-effect t
   });
 
   const positiveInput = createPowerupsV1Input();
+
   positiveInput.id = 'positive-clear-skies';
   positiveInput.abilities.clearSkies.removableTags = ['PROTECTION'];
   positiveInput.abilities.clearSkies.canTargetOpponentPositive = true;
+
   const positiveRules = powerupsRules(resolveVariantConfig(positiveInput));
   const positiveState = initialGameState(positiveRules);
+
   positiveState.opening = { status: 'RESOLVED', attempts: [[6, 1]], winner: 0 };
   positiveState.active = 0;
   positiveState.phase = 'WAITING_FOR_ROLL';
@@ -718,6 +864,7 @@ test('Clear Skies respects configured tags, removal count, and positive-effect t
     { instanceId: 'clear-2', abilityId: 'clearSkies' },
   ];
   positiveState.powerups!.activeEffects = [structuredClone(effects[2])];
+
   const positive = transitionSession(
     { state: positiveState, history: [] },
     {
@@ -730,19 +877,23 @@ test('Clear Skies respects configured tags, removal count, and positive-effect t
     },
     positiveRules,
   );
+
   assert.equal(positive.ok, true);
+
   if (positive.ok) assert.deepEqual(positive.session.state.powerups!.activeEffects, []);
 });
 
 test('Recast records authority randomness and preserves original-double token count', () => {
   const rules = powerupsRules(POWERUPS_V1);
   const state = initialGameState(rules);
+
   state.opening = { status: 'RESOLVED', attempts: [[6, 1]], winner: 0 };
   state.active = 0;
   state.phase = 'WAITING_FOR_MOVE';
   state.roll = [3, 3];
   state.remaining = [3, 3, 3, 3];
   state.powerups!.loadouts[0].powerups = [{ instanceId: 'recast-1', abilityId: 'recast' }];
+
   const session: Session = { state, history: [] };
   const before = structuredClone(session);
   const result = transitionSession(
@@ -755,8 +906,11 @@ test('Recast records authority randomness and preserves original-double token co
     },
     rules,
   );
+
   assert.equal(result.ok, true);
+
   if (!result.ok) return;
+
   assert.deepEqual(session, before);
   assert.deepEqual(result.session.state.roll, [5, 3]);
   assert.deepEqual(
@@ -781,12 +935,14 @@ test('Recast records authority randomness and preserves original-double token co
 test('Nudge changes movement tokens without changing the physical roll', () => {
   const rules = powerupsRules(POWERUPS_V1);
   const state = initialGameState(rules);
+
   state.opening = { status: 'RESOLVED', attempts: [[6, 1]], winner: 0 };
   state.active = 0;
   state.phase = 'WAITING_FOR_MOVE';
   state.roll = [4, 5];
   state.remaining = [4, 5];
   state.powerups!.loadouts[0].powerups = [{ instanceId: 'nudge-1', abilityId: 'nudge' }];
+
   const result = transitionSession(
     { state, history: [] },
     {
@@ -801,8 +957,11 @@ test('Nudge changes movement tokens without changing the physical roll', () => {
     },
     rules,
   );
+
   assert.equal(result.ok, true);
+
   if (!result.ok) return;
+
   assert.deepEqual(result.session.state.roll, [4, 5]);
   assert.deepEqual(result.session.state.remaining, [5, 5]);
   assert.equal(result.session.state.remaining.length, 2);
@@ -812,14 +971,17 @@ test('Nudge changes movement tokens without changing the physical roll', () => {
 test('roll abilities reject stale, late, and authority-invalid activation data', () => {
   const rules = powerupsRules(POWERUPS_V1);
   const state = initialGameState(rules);
+
   state.opening = { status: 'RESOLVED', attempts: [[6, 1]], winner: 0 };
   state.active = 0;
   state.phase = 'WAITING_FOR_MOVE';
   state.roll = [2, 5];
   state.remaining = [2, 5];
   state.powerups!.loadouts[0].powerups = [{ instanceId: 'recast-1', abilityId: 'recast' }];
+
   const session: Session = { state, history: [] };
   const before = structuredClone(session);
+
   for (const command of [
     {
       type: 'useRollAbility' as const,
@@ -844,6 +1006,7 @@ test('roll abilities reject stale, late, and authority-invalid activation data',
       ok: false,
       reason: 'invalid_ability',
     });
+
   state.powerups!.checkerMovedThisTurn = true;
   assert.deepEqual(
     transitionSession(
@@ -864,21 +1027,25 @@ test('roll abilities reject stale, late, and authority-invalid activation data',
 
 test('non-default dice knobs control reroll count, double creation, and bearing off', () => {
   const input = createPowerupsV1Input();
+
   input.id = 'configured-dice-powers';
   input.abilities.recast.rerollCount = 2;
   input.abilities.recast.originalDoubleHandling = 'CHANGE_MATCHING_TOKENS';
   input.abilities.nudge.createdMatchBecomesDouble = true;
   input.abilities.nudge.allowBearingOff = false;
+
   const config = resolveVariantConfig(input);
   const rules = powerupsRules(config);
 
   const recastState = initialGameState(rules);
+
   recastState.opening = { status: 'RESOLVED', attempts: [[6, 1]], winner: 0 };
   recastState.active = 0;
   recastState.phase = 'WAITING_FOR_MOVE';
   recastState.roll = [2, 2];
   recastState.remaining = [2, 2, 2, 2];
   recastState.powerups!.loadouts[0].powerups = [{ instanceId: 'recast-1', abilityId: 'recast' }];
+
   const recast = transitionSession(
     { state: recastState, history: [] },
     {
@@ -889,19 +1056,24 @@ test('non-default dice knobs control reroll count, double creation, and bearing 
     },
     rules,
   );
+
   assert.equal(recast.ok, true);
+
   if (!recast.ok) return;
+
   assert.deepEqual(recast.session.state.roll, [2, 6]);
   assert.deepEqual(recast.session.state.remaining, [6, 6, 6, 6]);
   assert.deepEqual(recast.session.state.diceModifiers[0].randomResults, [3, 6]);
 
   const nudgeState = initialGameState(rules);
+
   nudgeState.opening = { status: 'RESOLVED', attempts: [[6, 1]], winner: 0 };
   nudgeState.active = 0;
   nudgeState.phase = 'WAITING_FOR_MOVE';
   nudgeState.roll = [2, 3];
   nudgeState.remaining = [2, 3];
   nudgeState.powerups!.loadouts[0].powerups = [{ instanceId: 'nudge-1', abilityId: 'nudge' }];
+
   const nudge = transitionSession(
     { state: nudgeState, history: [] },
     {
@@ -916,17 +1088,22 @@ test('non-default dice knobs control reroll count, double creation, and bearing 
     },
     rules,
   );
+
   assert.equal(nudge.ok, true);
+
   if (!nudge.ok) return;
+
   assert.deepEqual(nudge.session.state.remaining, [3, 3, 3, 3]);
 
   const restrictedState = initialGameState(rules);
+
   restrictedState.opening = { status: 'RESOLVED', attempts: [[6, 1]], winner: 0 };
   restrictedState.active = 0;
   restrictedState.phase = 'WAITING_FOR_MOVE';
   restrictedState.roll = [2, 5];
   restrictedState.remaining = [2, 5];
   restrictedState.powerups!.loadouts[0].powerups = [{ instanceId: 'nudge-2', abilityId: 'nudge' }];
+
   const restricted = transitionSession(
     { state: restrictedState, history: [] },
     {
@@ -941,8 +1118,11 @@ test('non-default dice knobs control reroll count, double creation, and bearing 
     },
     rules,
   );
+
   assert.equal(restricted.ok, true);
+
   if (!restricted.ok) return;
+
   assert.equal(
     moveAllowedByActiveEffects(restricted.session.state, 0, { from: 12, to: -1, die: 3 }),
     false,
@@ -951,13 +1131,16 @@ test('non-default dice knobs control reroll count, double creation, and bearing 
 
 test('Loaded Knuckles uses its exact configured chance and double token drawback', () => {
   const input = createPowerupsV1Input();
+
   input.id = 'loaded-knuckles-test';
   input.abilities.loadedKnuckles.matchChance = { numerator: 2, denominator: 5 };
   input.abilities.loadedKnuckles.doubleMoveTokens = 2;
   input.abilities.nudge.createdMatchBecomesDouble = true;
+
   const config = resolveVariantConfig(input);
   const rules = powerupsRules(config);
   const state = initialGameState(rules);
+
   state.opening = { status: 'RESOLVED', attempts: [[6, 1]], winner: 0 };
   state.active = 0;
   state.phase = 'WAITING_FOR_ROLL';
@@ -973,7 +1156,9 @@ test('Loaded Knuckles uses its exact configured chance and double token drawback
     ),
     [4, 4],
   );
+
   const misses = [2, 4];
+
   assert.deepEqual(
     generateMovementRoll(
       state,
@@ -990,12 +1175,16 @@ test('Loaded Knuckles uses its exact configured chance and double token drawback
     { type: 'receiveRoll', values: [4, 4] },
     rules,
   );
+
   assert.equal(rolled.ok, true);
+
   if (!rolled.ok) return;
+
   assert.deepEqual(rolled.session.state.remaining, [4, 4]);
   assert.equal(rolled.session.state.rollSource, 'loadedKnuckles');
 
   const modified = initialGameState(rules);
+
   modified.opening = { status: 'RESOLVED', attempts: [[6, 1]], winner: 0 };
   modified.active = 0;
   modified.phase = 'WAITING_FOR_MOVE';
@@ -1005,6 +1194,7 @@ test('Loaded Knuckles uses its exact configured chance and double token drawback
     powerups: [{ instanceId: 'nudge-1', abilityId: 'nudge' }],
     passives: [{ instanceId: 'loaded-1', abilityId: 'loadedKnuckles' }],
   };
+
   const nudged = transitionSession(
     { state: modified, history: [] },
     {
@@ -1019,20 +1209,25 @@ test('Loaded Knuckles uses its exact configured chance and double token drawback
     },
     rules,
   );
+
   assert.equal(nudged.ok, true);
+
   if (nudged.ok) assert.deepEqual(nudged.session.state.remaining, [3, 3]);
 });
 
 test('Quartermaster expands capacity and blocks powerups for configured own turns', () => {
   const input = createPowerupsV1Input();
+
   input.id = 'quartermaster-test';
   input.inventory.powerupSlots = 1;
   input.draft.intervalRounds = 100;
   input.abilities.quartermaster.extraPowerupSlots = 2;
   input.abilities.quartermaster.cooldownOwnTurns = 2;
+
   const config = resolveVariantConfig(input);
   const rules = powerupsRules(config);
   const state = initialGameState(rules);
+
   state.opening = { status: 'RESOLVED', attempts: [[6, 1]], winner: 0 };
   state.active = 0;
   state.phase = 'DRAFT_PICK';
@@ -1050,19 +1245,25 @@ test('Quartermaster expands capacity and blocks powerups for configured own turn
     picks: [],
   };
   assert.equal(powerupCapacity(state.powerups!, 0, config), 3);
+
   const picked = transitionSession(
     { state, history: [] },
     { type: 'pickAbility', player: 0, abilityId: 'recast' },
     rules,
   );
+
   assert.equal(picked.ok, true);
+
   if (!picked.ok) return;
+
   assert.equal(picked.session.state.powerups!.loadouts[0].powerups.length, 2);
 
   let session = picked.session;
+
   session.state.phase = 'WAITING_FOR_MOVE';
   session.state.roll = [2, 5];
   session.state.remaining = [2, 5];
+
   const used = transitionSession(
     session,
     {
@@ -1073,15 +1274,21 @@ test('Quartermaster expands capacity and blocks powerups for configured own turn
     },
     rules,
   );
+
   assert.equal(used.ok, true);
+
   if (!used.ok) return;
+
   assert.equal(quartermasterCooldown(used.session.state.powerups!, 0), 2);
   session = used.session;
 
   const finishTurn = () => {
     session.state.phase = 'TURN_COMPLETE';
+
     const ended = transitionSession(session, { type: 'endTurn' }, rules);
+
     assert.equal(ended.ok, true);
+
     if (ended.ok) session = ended.session;
   };
   const tryNudge = () => {
@@ -1092,6 +1299,7 @@ test('Quartermaster expands capacity and blocks powerups for configured own turn
       instanceId: `nudge-${quartermasterCooldown(session.state.powerups!, 0)}`,
       abilityId: 'nudge',
     });
+
     return transitionSession(
       session,
       {
@@ -1124,13 +1332,16 @@ test('Quartermaster expands capacity and blocks powerups for configured own turn
 
 test('a replacement capacity passive takes precedence over additive passive capacity', () => {
   const input = createPowerupsV1Input();
+
   input.id = 'combined-passive-capacity';
   input.inventory.passiveSlots = 2;
   input.inventory.powerupSlots = 2;
   input.abilities.quartermaster.extraPowerupSlots = 3;
   input.abilities.opportunist.equippedPowerupSlots = 1;
+
   const config = resolveVariantConfig(input);
   const state = initialGameState(powerupsRules(config));
+
   state.powerups!.loadouts[0].passives = [
     { instanceId: 'quartermaster-1', abilityId: 'quartermaster' },
     { instanceId: 'opportunist-1', abilityId: 'opportunist' },
@@ -1141,11 +1352,14 @@ test('a replacement capacity passive takes precedence over additive passive capa
 
 test('replacing Quartermaster clears its cooldown and grandfathers occupied extra slots', () => {
   const input = createPowerupsV1Input();
+
   input.id = 'quartermaster-replacement-test';
   input.inventory.powerupSlots = 1;
+
   const config = resolveVariantConfig(input);
   const rules = powerupsRules(config);
   const state = initialGameState(rules);
+
   state.phase = 'DRAFT_PICK';
   state.powerups!.loadouts[0] = {
     powerups: [
@@ -1164,6 +1378,7 @@ test('replacing Quartermaster clears its cooldown and grandfathers occupied extr
     currentPick: 0,
     picks: [],
   };
+
   const result = transitionSession(
     { state, history: [] },
     {
@@ -1174,8 +1389,11 @@ test('replacing Quartermaster clears its cooldown and grandfathers occupied extr
     },
     rules,
   );
+
   assert.equal(result.ok, true);
+
   if (!result.ok) return;
+
   assert.equal(result.session.state.powerups!.loadouts[0].powerups.length, 2);
   assert.equal(result.session.state.powerups!.passiveCounters[0].quartermasterCooldown, undefined);
   assert.deepEqual(result.session.state.powerups!.loadouts[0].passives, [
@@ -1186,6 +1404,7 @@ test('replacing Quartermaster clears its cooldown and grandfathers occupied extr
 test('Home Guard derives public policy and blocks configured home-board pins', () => {
   const rules = powerupsRules(POWERUPS_V1);
   const state = initialGameState(rules);
+
   state.opening = { status: 'RESOLVED', attempts: [[6, 1]], winner: 0 };
   state.active = 0;
   state.phase = 'DRAFT_PICK';
@@ -1198,13 +1417,17 @@ test('Home Guard derives public policy and blocks configured home-board pins', (
     currentPick: 0,
     picks: [],
   };
+
   const picked = transitionSession(
     { state, history: [] },
     { type: 'pickAbility', player: 0, abilityId: 'homeGuard' },
     rules,
   );
+
   assert.equal(picked.ok, true);
+
   if (!picked.ok) return;
+
   assert.deepEqual(picked.session.state.powerups!.passivePolicies[0], {
     homeGuard: {
       protectOwnHome: true,
@@ -1214,6 +1437,7 @@ test('Home Guard derives public policy and blocks configured home-board pins', (
   });
 
   const guarded = picked.session.state;
+
   guarded.board = Array.from({ length: 24 }, () => []);
   guarded.board[17] = [0];
   guarded.board[16] = [15];
@@ -1249,10 +1473,13 @@ test('Home Guard derives public policy and blocks configured home-board pins', (
 
 test('Home Guard protection and offensive restriction are independently configurable', () => {
   const input = createPowerupsV1Input();
+
   input.id = 'home-guard-offense-only';
   input.abilities.homeGuard.protectOwnHome = false;
+
   const config = resolveVariantConfig(input);
   const state = initialGameState(powerupsRules(config));
+
   state.powerups!.loadouts[0].passives = [{ instanceId: 'home-guard-1', abilityId: 'homeGuard' }];
   rebuildPassivePolicies(state.powerups!, 0, config);
 
@@ -1268,11 +1495,14 @@ test('Home Guard protection and offensive restriction are independently configur
   assert.equal(moveAllowedByActiveEffects(state, 0, { from: 4, to: 5, die: 1 }), false);
 
   const startsInput = createPowerupsV1Input();
+
   startsInput.id = 'home-guard-includes-starts';
   startsInput.abilities.homeGuard.restrictOpponentHome = false;
   startsInput.abilities.homeGuard.excludeStartPoints = false;
+
   const startsConfig = resolveVariantConfig(startsInput);
   const startsState = initialGameState(powerupsRules(startsConfig));
+
   startsState.powerups!.loadouts[0].passives = [
     { instanceId: 'home-guard-1', abilityId: 'homeGuard' },
   ];
@@ -1285,11 +1515,14 @@ test('Home Guard protection and offensive restriction are independently configur
 
 test('Opportunist gains public Focus from an opponent stalled on their initial roll', () => {
   const input = createPowerupsV1Input();
+
   input.id = 'opportunist-focus-cap';
   input.abilities.opportunist.focusCap = 2;
+
   const config = resolveVariantConfig(input);
   const rules = powerupsRules(config);
   const state = initialGameState(rules);
+
   state.opening = { status: 'RESOLVED', attempts: [[6, 1]], winner: 0 };
   state.active = 0;
   state.phase = 'WAITING_FOR_ROLL';
@@ -1304,6 +1537,7 @@ test('Opportunist gains public Focus from an opponent stalled on their initial r
   state.powerups!.loadouts[1].passives = [
     { instanceId: 'opportunist-1', abilityId: 'opportunist' },
   ];
+
   let session: Session = { state, history: [] };
 
   for (const [expected, gains] of [
@@ -1313,9 +1547,13 @@ test('Opportunist gains public Focus from an opponent stalled on their initial r
   ] as const) {
     session.state.phase = 'WAITING_FOR_ROLL';
     session.state.active = 0;
+
     const rolled = transitionSession(session, { type: 'receiveRoll', values: [1, 2] }, rules);
+
     assert.equal(rolled.ok, true);
+
     if (!rolled.ok) return;
+
     session = rolled.session;
     assert.equal(session.state.phase, 'TURN_COMPLETE');
     assert.equal(opportunistFocus(session.state.powerups!, 1), expected);
@@ -1330,6 +1568,7 @@ test('Opportunist gains public Focus from an opponent stalled on their initial r
 
 test('Opportunist spends Focus through configured dice rules without consuming a card', () => {
   const input = createPowerupsV1Input();
+
   input.id = 'configured-opportunist';
   input.abilities.opportunist.focusAdjustment = 2;
   input.abilities.opportunist.focusUsesPerRoll = 2;
@@ -1338,9 +1577,11 @@ test('Opportunist spends Focus through configured dice rules without consuming a
   input.abilities.opportunist.allowBearingOff = false;
   input.abilities.opportunist.createdMatchBecomesDouble = true;
   input.abilities.opportunist.equippedPowerupSlots = 0;
+
   const config = resolveVariantConfig(input);
   const rules = powerupsRules(config);
   const state = initialGameState(rules);
+
   state.opening = { status: 'RESOLVED', attempts: [[6, 1]], winner: 0 };
   state.active = 0;
   state.phase = 'WAITING_FOR_MOVE';
@@ -1351,7 +1592,9 @@ test('Opportunist spends Focus through configured dice rules without consuming a
   ];
   state.powerups!.passiveCounters[0].opportunistFocus = 2;
   assert.equal(powerupCapacity(state.powerups!, 0, config), 0);
+
   const session: Session = { state, history: [] };
+
   assert.deepEqual(
     transitionSession(
       session,
@@ -1369,6 +1612,7 @@ test('Opportunist spends Focus through configured dice rules without consuming a
     ),
     { ok: false, reason: 'invalid_ability' },
   );
+
   const used = transitionSession(
     session,
     {
@@ -1383,8 +1627,11 @@ test('Opportunist spends Focus through configured dice rules without consuming a
     },
     rules,
   );
+
   assert.equal(used.ok, true);
+
   if (!used.ok) return;
+
   assert.deepEqual(used.session.state.remaining, [3, 3, 3, 3]);
   assert.equal(opportunistFocus(used.session.state.powerups!, 0), 1);
   assert.deepEqual(used.session.state.powerups!.loadouts[0].passives, [
@@ -1408,8 +1655,11 @@ test('Opportunist spends Focus through configured dice rules without consuming a
     },
     rules,
   );
+
   assert.equal(usedAgain.ok, true);
+
   if (!usedAgain.ok) return;
+
   assert.deepEqual(
     usedAgain.session.state.remaining.slice().sort((a, b) => a - b),
     [1, 3, 3, 3],
@@ -1421,6 +1671,7 @@ test('Opportunist spends Focus through configured dice rules without consuming a
 test('replacing Opportunist clears stored Focus', () => {
   const rules = powerupsRules(POWERUPS_V1);
   const state = initialGameState(rules);
+
   state.phase = 'DRAFT_PICK';
   state.powerups!.loadouts[0].passives = [
     { instanceId: 'opportunist-1', abilityId: 'opportunist' },
@@ -1435,6 +1686,7 @@ test('replacing Opportunist clears stored Focus', () => {
     currentPick: 0,
     picks: [],
   };
+
   const replaced = transitionSession(
     { state, history: [] },
     {
@@ -1445,7 +1697,10 @@ test('replacing Opportunist clears stored Focus', () => {
     },
     rules,
   );
+
   assert.equal(replaced.ok, true);
+
   if (!replaced.ok) return;
+
   assert.equal(replaced.session.state.powerups!.passiveCounters[0].opportunistFocus, undefined);
 });

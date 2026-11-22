@@ -4,11 +4,14 @@ import { t, translateDOM } from './i18n';
 type AuthHooks = { onSignedIn: () => void };
 
 let creating = true;
+
 let hooks: AuthHooks = { onSignedIn() {} };
 
 export function initAuthScreen(next: AuthHooks) {
   hooks = next;
+
   const form = document.querySelector<HTMLFormElement>('#auth-form')!;
+
   document.querySelector('#auth-switch')!.addEventListener('click', () => {
     creating = !creating;
     renderMode();
@@ -25,15 +28,22 @@ export function initAuthScreen(next: AuthHooks) {
 export async function restoreSession() {
   if (!sameOrigin()) {
     revealGame();
+
     return false;
   }
+
   const user = await whoami();
+
   document.body.classList.remove('auth-pending');
+
   if (!user) {
     showAuth();
+
     return false;
   }
+
   revealGame();
+
   return true;
 }
 
@@ -58,19 +68,25 @@ function renderMode() {
   document.querySelector('#auth-switch')!.textContent = creating
     ? t('auth.iHaveAccount')
     : t('auth.createAnother');
+
   const username = document.querySelector<HTMLElement>('#auth-username-label')!;
   const email = document.querySelector<HTMLElement>('#auth-email-label')!;
   const identifier = document.querySelector<HTMLElement>('#auth-identifier-label')!;
+
   username.hidden = !creating;
   email.hidden = !creating;
   identifier.hidden = creating;
+
   const usernameInput = field('username');
   const emailInput = field('email');
   const identifierInput = field('identifier');
+
   if (usernameInput) usernameInput.required = creating;
   if (emailInput) emailInput.required = creating;
   if (identifierInput) identifierInput.required = !creating;
+
   const password = field('password');
+
   if (password) password.autocomplete = creating ? 'new-password' : 'current-password';
 }
 
@@ -78,15 +94,21 @@ async function submit(form: HTMLFormElement) {
   const data = new FormData(form);
   const password = formText(data, 'password');
   const button = document.querySelector<HTMLButtonElement>('#auth-submit')!;
+
   button.disabled = true;
+
   const result = creating
     ? await register(formText(data, 'email'), formText(data, 'username'), password)
     : await login(formText(data, 'identifier'), password);
+
   button.disabled = false;
+
   if (!result.ok) {
     setError(result.error);
+
     return;
   }
+
   setError('');
   revealGame();
   hooks.onSignedIn();
@@ -94,6 +116,7 @@ async function submit(form: HTMLFormElement) {
 
 function formText(data: FormData, name: string): string {
   const value = data.get(name);
+
   return typeof value === 'string' ? value : '';
 }
 

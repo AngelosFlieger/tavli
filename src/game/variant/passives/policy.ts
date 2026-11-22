@@ -67,6 +67,7 @@ export function gainOpportunistFocus(
   config: ResolvedVariantConfig,
 ): { player: Player; focus: number } | null {
   const event = configuredOpponentStalledEvents(powerups, stalledPlayer, config)[0];
+
   return event ? { player: event.player, focus: event.focus } : null;
 }
 
@@ -80,8 +81,11 @@ export function passiveStallEvents(
 
 export function spendOpportunistFocus(powerups: PowerupsState, player: Player): boolean {
   const current = opportunistFocus(powerups, player);
+
   if (current <= 0) return false;
+
   setPassiveCounter(powerups, player, OPPORTUNIST_FOCUS, current - 1);
+
   return true;
 }
 

@@ -28,16 +28,20 @@ function seatPowerups(lobby: ReturnType<typeof createLobby>) {
 
 const die = (values: number[]) => {
   let index = 0;
+
   return () => values[index++] ?? 1;
 };
 
 test('registered balance profiles use their own authoritative matchmaking queues', () => {
   const fast = { ruleset: 'POWERUPS_V1', profileId: 'fast-balance' } as const;
   const standard = { ruleset: 'POWERUPS_V1', profileId: 'powerups-v1' } as const;
+
   assert.equal(isMatchSelection(fast), true);
   assert.equal(isMatchSelection({ ...fast, profileId: 'unknown' }), false);
+
   const fastRules = rulesForSelection(fast);
   const standardRules = rulesForSelection(standard);
+
   assert.equal(fastRules.variantConfig?.hash, FAST_BALANCE.hash);
   assert.equal(standardRules.variantConfig?.hash, POWERUPS_V1.hash);
   assert.notEqual(matchKey(fastRules), matchKey(standardRules));
@@ -65,8 +69,11 @@ test('the wire protocol accepts only non-empty public effect targets', () => {
 
 test('the online authority rejects a player roll while automatic opening is pending', () => {
   const lobby = createLobby(() => 4);
+
   assert.equal(lobby.restore('ada', 'basil', initialPresentedSession(), 'pending'), true);
+
   const rejected = lobby.act('ada', { type: 'roll' });
+
   assert.deepEqual(rejected?.to, ['ada']);
   assert.deepEqual(rejected?.update.presentations, []);
   assert.equal(rejected?.update.state.phase, 'OPENING');
@@ -74,9 +81,12 @@ test('the online authority rejects a player roll while automatic opening is pend
 
 test('opening is automatic, and only the player to move can request movement dice', () => {
   const lobby = createLobby(die([4, 4]));
+
   seat(lobby);
   assert.equal(lobby.act('basil', { type: 'roll' })?.to.length, 1);
+
   const rolled = lobby.act('ada', { type: 'roll' });
+
   assert.deepEqual(rolled?.update.presentations, [
     { type: 'DICE', blocking: true, values: [4, 4] },
   ]);
@@ -90,43 +100,60 @@ test('opening is automatic, and only the player to move can request movement dic
 
 test('a move is checked on the server and undo restores it for the same player', () => {
   const lobby = createLobby(die([2, 1]));
+
   seat(lobby);
+
   const state = lobby.act('ada', { type: 'roll' })!.update.state;
+
   assert.equal(state.phase, 'WAITING_FOR_MOVE');
+
   const move = { from: 0, to: 2, die: 2 };
+
   assert.equal(lobby.act('basil', { type: 'move', sequence: [move] })?.to.length, 1);
+
   const played = lobby.act('ada', { type: 'move', sequence: [move] });
+
   assert.equal(played?.update.state.board[2].length, 1);
   assert.equal(played?.update.canUndo, true);
+
   const undone = lobby.act('ada', { type: 'undo' });
+
   assert.equal(undone?.update.state.board[0].length, 15);
   assert.equal(undone?.update.canUndo, false);
 });
 
 test('an out-of-range move is rejected without interrupting the online match', () => {
   const lobby = createLobby(die([2, 1]));
+
   seat(lobby);
+
   const before = lobby.act('ada', { type: 'roll' })!.update.state;
   const rejected = lobby.act('ada', {
     type: 'move',
     sequence: [{ from: 99, to: 2, die: 2 }],
   });
+
   assert.deepEqual(rejected?.to, ['ada']);
   assert.deepEqual(rejected?.update.state, before);
+
   const played = lobby.act('ada', {
     type: 'move',
     sequence: [{ from: 0, to: 2, die: 2 }],
   });
+
   assert.equal(played?.update.state.board[2].length, 1);
 });
 
 test('leaving a match tells the opponent, and a restart clears the dice', () => {
   const lobby = createLobby(() => 3);
+
   seat(lobby);
   assert.equal(lobby.leave('ada'), 'basil');
   assert.equal(lobby.act('basil', { type: 'roll' }), null);
   seat(lobby, 'ada', 'cleo');
+
   const restarted = lobby.act('cleo', { type: 'restart' });
+
   assert.deepEqual(restarted?.update.presentations, [{ type: 'RESET_DICE', blocking: false }]);
   assert.equal(restarted?.update.state.phase, 'OPENING');
   assert.equal(restarted?.to.includes('ada'), true);
@@ -136,32 +163,45 @@ test('authoritative session transitions match the local facade through a turn', 
   const rolls = [2, 1];
   const lobby = createLobby(die(rolls));
   const local = new Game();
+
   local.state = resolvedOpeningSession().state;
   seat(lobby);
   assert.equal(local.beginRoll(), true);
   local.receiveRoll([2, 1]);
+
   const rolled = lobby.act('ada', { type: 'roll' });
+
   assert.deepEqual(rolled?.update.state, local.state);
   assert.equal(rolled?.update.canUndo, local.history.length > 0);
+
   while (local.state.phase === 'WAITING_FOR_MOVE') {
     const move = local.moves()[0];
+
     assert.equal(local.move(move), true);
+
     const result = lobby.act('ada', { type: 'move', sequence: [move] });
+
     assert.deepEqual(result?.update.state, local.state);
     assert.equal(result?.update.canUndo, local.history.length > 0);
   }
+
   assert.equal(local.state.phase, 'TURN_COMPLETE');
   assert.equal(local.endTurn(), true);
+
   const ended = lobby.act('ada', { type: 'end' });
+
   assert.deepEqual(ended?.update.state, local.state);
   assert.equal(ended?.update.canUndo, false);
 });
 
 test('a rejected server die leaves the match unchanged', () => {
   const lobby = createLobby(() => 7);
+
   seat(lobby);
+
   const before = lobby.seat('ada')?.state;
   const rejected = lobby.act('ada', { type: 'roll' });
+
   assert.deepEqual(rejected?.to, ['ada']);
   assert.deepEqual(rejected?.update.state, before);
   assert.deepEqual(rejected?.update.presentations, []);
@@ -169,8 +209,11 @@ test('a rejected server die leaves the match unchanged', () => {
 
 test('a saved match can be restored for the same two accounts', () => {
   const lobby = createLobby(() => 1);
+
   seat(lobby);
+
   const snap = lobby.snapshot('basil');
+
   assert.ok(snap);
   assert.equal(lobby.leave('ada'), 'basil');
   assert.equal(lobby.restore(snap.ids[0], snap.ids[1], snap.session, snap.id), true);
@@ -186,25 +229,35 @@ test('powerup match authority supplies Recast randomness after an authoritative 
     () => forcedDice.shift() ?? 2,
     (maximum) => {
       const value = draftRandom.shift() ?? 0;
+
       assert.ok(value >= 0 && value < maximum);
+
       return value;
     },
   );
+
   seatPowerups(lobby);
+
   let state = lobby.seat('ada')!.state;
 
   const ids = ['ada', 'basil'] as const;
+
   for (let completedTurns = 0; completedTurns < 6; completedTurns++) {
     const player = state.active!;
+
     forcedDice.push(1, 2);
     state = lobby.act(ids[player], { type: 'roll' })!.update.state;
+
     let moves = 0;
+
     while (state.phase === 'WAITING_FOR_MOVE') {
       const move = legalMoves(state, player, state.remaining)[0];
+
       assert.ok(move);
       state = lobby.act(ids[player], { type: 'move', sequence: [move] })!.update.state;
       assert.ok(++moves <= 4);
     }
+
     assert.equal(state.phase, 'TURN_COMPLETE');
     state = lobby.act(ids[player], { type: 'end' })!.update.state;
   }
@@ -224,10 +277,12 @@ test('powerup match authority supplies Recast randomness after an authoritative 
   state = lobby.act('ada', { type: 'roll' })!.update.state;
   assert.equal(state.phase, 'WAITING_FOR_MOVE');
   forcedDice.push(6);
+
   const recast = lobby.act('ada', {
     type: 'playAbility',
     activation: { instanceId: 'ability-1', target: { type: 'DIE', index: 0 } },
   });
+
   assert.deepEqual(recast?.to, ['ada', 'basil']);
   assert.deepEqual(recast?.update.presentations, [
     { type: 'DICE', blocking: true, values: recast.update.state.roll, rerolledDie: 0 },
@@ -236,13 +291,18 @@ test('powerup match authority supplies Recast randomness after an authoritative 
   assert.deepEqual(recast?.update.state.diceModifiers[0].randomResults, [6]);
 
   state = recast!.update.state;
+
   while (state.phase === 'WAITING_FOR_MOVE') {
     const move = legalMoves(state, 0, state.remaining)[0];
+
     assert.ok(move);
     state = lobby.act('ada', { type: 'move', sequence: [move] })!.update.state;
   }
+
   assert.ok(lobby.act('ada', { type: 'end' }));
+
   const loaded = lobby.act('basil', { type: 'roll' });
+
   assert.deepEqual(loaded?.update.presentations, [
     { type: 'DICE', blocking: true, values: [2, 2] },
   ]);
@@ -257,23 +317,31 @@ test('online authority rejects Opportunist spending until public Focus is earned
     () => forcedDice.shift() ?? 2,
     (maximum) => {
       const value = draftRandom.shift() ?? 0;
+
       assert.ok(value >= 0 && value < maximum);
+
       return value;
     },
   );
+
   seatPowerups(lobby);
+
   let state = lobby.seat('ada')!.state;
   const ids = ['ada', 'basil'] as const;
 
   for (let completedTurns = 0; completedTurns < 6; completedTurns++) {
     const player = state.active!;
+
     forcedDice.push(1, 2);
     state = lobby.act(ids[player], { type: 'roll' })!.update.state;
+
     while (state.phase === 'WAITING_FOR_MOVE') {
       const move = legalMoves(state, player, state.remaining)[0];
+
       assert.ok(move);
       state = lobby.act(ids[player], { type: 'move', sequence: [move] })!.update.state;
     }
+
     state = lobby.act(ids[player], { type: 'end' })!.update.state;
   }
 
@@ -286,6 +354,7 @@ test('online authority rejects Opportunist spending until public Focus is earned
   assert.ok(lobby.act('basil', { type: 'pickAbility', abilityId: 'nudge' }));
   forcedDice.push(2, 5);
   state = lobby.act('ada', { type: 'roll' })!.update.state;
+
   const before = structuredClone(state);
   const rejected = lobby.act('ada', {
     type: 'playAbility',
@@ -295,6 +364,7 @@ test('online authority rejects Opportunist spending until public Focus is earned
       option: 'INCREASE',
     },
   });
+
   assert.deepEqual(rejected?.to, ['ada']);
   assert.deepEqual(rejected?.update.state, before);
   assert.equal(rejected?.update.state.powerups?.passiveCounters[0].opportunistFocus, undefined);
@@ -307,23 +377,31 @@ test('online authority validates and broadcasts Clear Skies before the roll', ()
     () => forcedDice.shift() ?? 2,
     (maximum) => {
       const value = draftRandom.shift() ?? 0;
+
       assert.ok(value >= 0 && value < maximum);
+
       return value;
     },
   );
+
   seatPowerups(lobby);
+
   let state = lobby.seat('ada')!.state;
   const ids = ['ada', 'basil'] as const;
 
   for (let completedTurns = 0; completedTurns < 6; completedTurns++) {
     const player = state.active!;
+
     forcedDice.push(1, 2);
     state = lobby.act(ids[player], { type: 'roll' })!.update.state;
+
     while (state.phase === 'WAITING_FOR_MOVE') {
       const move = legalMoves(state, player, state.remaining)[0];
+
       assert.ok(move);
       state = lobby.act(ids[player], { type: 'move', sequence: [move] })!.update.state;
     }
+
     state = lobby.act(ids[player], { type: 'end' })!.update.state;
   }
 
@@ -336,11 +414,14 @@ test('online authority validates and broadcasts Clear Skies before the roll', ()
   assert.ok(lobby.act('basil', { type: 'pickAbility', abilityId: 'clearSkies' }));
   forcedDice.push(2, 3);
   state = lobby.act('ada', { type: 'roll' })!.update.state;
+
   while (state.phase === 'WAITING_FOR_MOVE') {
     const move = legalMoves(state, 0, state.remaining)[0];
+
     assert.ok(move);
     state = lobby.act('ada', { type: 'move', sequence: [move] })!.update.state;
   }
+
   state = lobby.act('ada', {
     type: 'end',
     ability: { instanceId: 'ability-1', target: { type: 'PLAYER', player: 1 } },
@@ -355,6 +436,7 @@ test('online authority validates and broadcasts Clear Skies before the roll', ()
       target: { type: 'EFFECT', instanceId: 'ability-1' },
     },
   });
+
   assert.deepEqual(rejected?.to, ['ada']);
   assert.equal(rejected?.update.state.powerups?.activeEffects.length, 1);
 
@@ -365,12 +447,15 @@ test('online authority validates and broadcasts Clear Skies before the roll', ()
       target: { type: 'EFFECT', instanceId: 'ability-1' },
     },
   });
+
   assert.deepEqual(cleared?.to, ['ada', 'basil']);
   assert.deepEqual(cleared?.update.state.powerups?.activeEffects, []);
   assert.deepEqual(cleared?.update.state.powerups?.loadouts[1].powerups, []);
 
   forcedDice.push(5, 2);
+
   const rolled = lobby.act('basil', { type: 'roll' });
+
   assert.deepEqual(rolled?.update.state.roll, [5, 2]);
   assert.deepEqual(rolled?.update.state.remaining, [5, 2]);
   assert.deepEqual(rolled?.update.state.diceModifiers, []);

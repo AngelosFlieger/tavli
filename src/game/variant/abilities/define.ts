@@ -57,15 +57,19 @@ export type AbilityDefinition<Id extends string, Config extends AbilityConfigBas
 export function defineAbility<Id extends string, Config extends AbilityConfigBase>(
   definition: PowerupDefinition<Id, Config, 'WITH_END_TURN'>,
 ): PowerupDefinition<Id, Config, 'WITH_END_TURN'>;
+
 export function defineAbility<Id extends string, Config extends AbilityConfigBase>(
   definition: PowerupDefinition<Id, Config, 'BEFORE_ROLL'>,
 ): PowerupDefinition<Id, Config, 'BEFORE_ROLL'>;
+
 export function defineAbility<Id extends string, Config extends AbilityConfigBase>(
   definition: PowerupDefinition<Id, Config, 'AFTER_ROLL_BEFORE_MOVE'>,
 ): PowerupDefinition<Id, Config, 'AFTER_ROLL_BEFORE_MOVE'>;
+
 export function defineAbility<Id extends string, Config extends AbilityConfigBase>(
   definition: PassiveDefinition<Id, Config>,
 ): PassiveDefinition<Id, Config>;
+
 export function defineAbility(definition: object) {
   return Object.freeze(definition);
 }

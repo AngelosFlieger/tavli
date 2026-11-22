@@ -143,7 +143,9 @@ export function transitionSession(
 
   if (command.type === 'resolveOpening') {
     if (state.phase !== 'OPENING' || state.opening.status !== 'PENDING') return rejected('phase');
+
     const attempts = command.attempts;
+
     if (
       !attempts.length ||
       attempts.some(
@@ -155,9 +157,11 @@ export function transitionSession(
       attempts.at(-1)![0] === attempts.at(-1)![1]
     )
       return rejected('invalid_roll');
+
     const final = attempts.at(-1)!;
     const player: Player = final[0] > final[1] ? 0 : 1;
     const openingAttempts = attempts.map((attempt) => [...attempt] as [number, number]);
+
     state.opening = { status: 'RESOLVED', attempts: openingAttempts, winner: player };
     state.roll = [...final];
     state.active = player;
@@ -165,6 +169,7 @@ export function transitionSession(
     state.remaining = [];
     state.diceModifiers = [];
     state.rollSource = null;
+
     return {
       ok: true,
       session: { state, history: [] },
@@ -175,13 +180,16 @@ export function transitionSession(
   if (command.type === 'useBeforeRollAbility') {
     if (!rules.variantConfig || active === null || command.player !== active)
       return rejected('invalid_ability');
+
     const result = activateBeforeRollAbility(
       state,
       active,
       command.activation,
       rules.variantConfig,
     );
+
     if (!result) return rejected('invalid_ability');
+
     return {
       ok: true,
       session: { state, history: [] },
@@ -206,6 +214,7 @@ export function transitionSession(
 
   if (command.type === 'openDraft') {
     const powerups = state.powerups;
+
     if (
       !rules.variantConfig ||
       state.phase !== 'DRAFT_ORDER' ||
@@ -213,12 +222,14 @@ export function transitionSession(
       !validateDraftOffer(powerups, command.offer, rules.variantConfig)
     )
       return rejected('invalid_draft');
+
     powerups.draft = {
       stage: 'ORDER_ROLL',
       offer: [...command.offer],
       resumePlayer: powerups.draft.resumePlayer,
       attempts: [],
     };
+
     return {
       ok: true,
       session: { state, history: [] },
@@ -228,31 +239,40 @@ export function transitionSession(
 
   if (command.type === 'resolveDraftOrder') {
     const powerups = state.powerups;
+
     if (
       !rules.variantConfig ||
       state.phase !== 'DRAFT_ORDER' ||
       powerups?.draft?.stage !== 'ORDER_ROLL'
     )
       return rejected('phase');
+
     let result: ReturnType<typeof resolveDraftOrder>;
+
     try {
       result = resolveDraftOrder(powerups.draft, command.rolls, rules.variantConfig);
     } catch {
       return rejected('invalid_roll');
     }
+
     powerups.draft = result.draft;
+
     const events: SessionEvent[] = [{ type: 'DraftOrderRolled', rolls: [...command.rolls] }];
+
     if (result.tied) events.push({ type: 'DraftOrderTied', rolls: [...command.rolls] });
     else {
       state.phase = 'DRAFT_PICK';
       events.push({ type: 'DraftOrderChosen', first: result.first });
     }
+
     return { ok: true, session: { state, history: [] }, events };
   }
 
   if (command.type === 'pickAbility') {
     const powerups = state.powerups;
+
     if (!rules.variantConfig || state.phase !== 'DRAFT_PICK' || !powerups) return rejected('phase');
+
     const picked = pickDraftAbility(
       powerups,
       command.player,
@@ -260,10 +280,13 @@ export function transitionSession(
       command.replaceInstanceId,
       rules.variantConfig,
     );
+
     if (!picked.ok) return rejected('invalid_pick');
+
     const events: SessionEvent[] = [
       { type: 'AbilityPicked', player: command.player, abilityId: command.abilityId },
     ];
+
     if (picked.replacedAbilityId)
       events.push({
         type: 'AbilityReplaced',
@@ -276,12 +299,14 @@ export function transitionSession(
       powerups.draft = null;
       events.push({ type: 'DraftCompleted' });
     }
+
     return { ok: true, session: { state, history: [] }, events };
   }
 
   if (command.type === 'useRollAbility') {
     if (!rules.variantConfig || active === null || command.player !== active)
       return rejected('invalid_ability');
+
     const modifier = activateRollAbility(
       state,
       active,
@@ -289,7 +314,9 @@ export function transitionSession(
       command.randomValues,
       rules.variantConfig,
     );
+
     if (!modifier) return rejected('invalid_ability');
+
     const events: SessionEvent[] = [
       {
         type: 'AbilityUsed',
@@ -305,18 +332,23 @@ export function transitionSession(
         after: modifier.after,
       },
     ];
+
     if (legalMoves(state, active, state.remaining).length) events.push({ type: 'MovesAvailable' });
     else {
       state.phase = nextPhase(state.phase, 'movesExhausted')!;
       events.push({ type: 'NoLegalMoves' });
     }
+
     return { ok: true, session: { state, history: [] }, events };
   }
 
   if (command.type === 'beginRoll') {
     const phase = nextPhase(state.phase, 'beginRoll');
+
     if (!phase || active === null) return rejected('phase');
+
     state.phase = phase;
+
     return {
       ok: true,
       session: { state, history },
@@ -326,9 +358,12 @@ export function transitionSession(
 
   if (command.type === 'receiveRoll') {
     if (state.phase !== 'WAITING_FOR_ROLL' || active === null) return rejected('phase');
+
     const values = command.values;
+
     if (values.length !== 2 || values.some((v) => !Number.isInteger(v) || v < 1 || v > 6))
       return rejected('invalid_roll');
+
     state.roll = [...values];
     state.diceModifiers = [];
     state.rollSource = rules.variantConfig ? movementRollSource(state, active) : null;
@@ -338,9 +373,12 @@ export function transitionSession(
         ? Array(4).fill(values[0])
         : [...values];
     state.phase = nextPhase(state.phase, 'rollReady')!;
+
     const events: SessionEvent[] = [{ type: 'DiceRolled', player: active, values: [...values] }];
+
     if (rules.variantConfig) {
       const resolution = resolvePendingRollEffects(state, active);
+
       for (const modifier of resolution.modifiers)
         events.push({
           type: 'DiceModified',
@@ -355,27 +393,37 @@ export function transitionSession(
       if (state.powerups && rules.variantConfig) {
         events.push(...passiveStallEvents(state.powerups, active, rules.variantConfig));
       }
+
       state.phase = nextPhase(state.phase, 'movesExhausted')!;
       events.push({ type: 'NoLegalMoves' });
     }
+
     return { ok: true, session: { state, history: [] }, events };
   }
 
   if (command.type === 'move') {
     if (state.phase !== 'WAITING_FOR_MOVE' || active === null) return rejected('phase');
+
     const sequence = command.sequence;
+
     if (!sequence.length) return rejected('illegal_move');
+
     const first = sequence[0];
+
     if (!Number.isInteger(first.from) || first.from < 0 || first.from >= state.board.length)
       return rejected('illegal_move');
+
     const checker = state.board[first.from].at(-1);
+
     if (checker === undefined || owner(checker) !== active) return rejected('illegal_move');
+
     const stages: Position[] = [];
     const events: SessionEvent[] = [];
     // Preserve variant effect data on intermediate positions so every step is checked by the
     // same active move policy as the initial landing.
     let position: Position = structuredClone(state);
     let left = [...state.remaining];
+
     for (const move of sequence) {
       if (
         !Number.isInteger(move.from) ||
@@ -391,28 +439,35 @@ export function transitionSession(
         )
       )
         return rejected('illegal_move');
+
       const victim = move.to === -1 ? undefined : position.board[move.to].at(-1);
       const pins =
         move.to !== -1 &&
         position.board[move.to].length === 1 &&
         victim !== undefined &&
         owner(victim) !== active;
+
       position = applyMove(position, active, move);
       left = spendDie(left, move.die);
       stages.push(position);
       events.push({ type: 'CheckerMoved', checker, ...move });
+
       if (pins) events.push({ type: 'CheckerPinned', checker, victim: victim!, point: move.to });
       if (move.to === -1) events.push({ type: 'CheckerBorneOff', checker, player: active });
       if (outcome(position) && stages.length !== sequence.length) return rejected('illegal_move');
     }
+
     history.push(structuredClone(input.state));
     state.board = position.board;
     state.off = position.off;
     state.remaining = left;
+
     for (const effect of pruneInvalidEffects(state))
       events.push({ type: 'EffectExpired', abilityId: effect.abilityId });
     if (state.powerups) state.powerups.checkerMovedThisTurn = true;
+
     const result = outcome(state);
+
     if (result) {
       state.outcome = result;
       state.phase = nextPhase(state.phase, 'gameFinished')!;
@@ -423,12 +478,14 @@ export function transitionSession(
       state.phase = nextPhase(state.phase, 'movesExhausted')!;
       events.push({ type: 'MovesComplete' });
     }
+
     return { ok: true, session: { state, history }, events, stages };
   }
 
   if (command.type === 'undo') {
     if (!canUndoInPhase(state.phase)) return rejected('phase');
     if (!history.length) return rejected('no_history');
+
     return {
       ok: true,
       session: { state: structuredClone(history.at(-1)!), history: history.slice(0, -1) },
@@ -438,12 +495,18 @@ export function transitionSession(
 
   if (command.type === 'endTurn') {
     const phase = nextPhase(state.phase, 'endTurn');
+
     if (!phase || active === null) return rejected('phase');
+
     const events: SessionEvent[] = [];
+
     if (command.ability) {
       if (!rules.variantConfig) return rejected('invalid_ability');
+
       const effect = activateEndTurnAbility(state, active, command.ability, rules.variantConfig);
+
       if (!effect) return rejected('invalid_ability');
+
       events.push({
         type: 'AbilityUsed',
         player: active,
@@ -453,38 +516,47 @@ export function transitionSession(
     }
     for (const effect of expireTargetTurnEffects(state, active))
       events.push({ type: 'EffectExpired', abilityId: effect.abilityId });
+
     const next = other(active);
+
     state.phase = phase;
     state.active = next;
     state.remaining = [];
     state.diceModifiers = [];
     state.rollSource = null;
     events.push({ type: 'TurnEnded', player: active, next });
+
     if (state.powerups && rules.variantConfig) {
       const powerups = state.powerups;
       const usedPowerupThisTurn = powerups.powerupsUsedThisTurn > 0;
+
       powerups.actedThisRound[active] = true;
       advancePassiveCountersAtTurnEnd(powerups, active, usedPowerupThisTurn, rules.variantConfig);
       powerups.powerupsUsedThisTurn = 0;
       powerups.checkerMovedThisTurn = false;
+
       if (powerups.actedThisRound.every(Boolean)) {
         powerups.completedRounds++;
         powerups.actedThisRound = [false, false];
         events.push({ type: 'RoundCompleted', round: powerups.completedRounds });
+
         if (powerups.completedRounds % rules.variantConfig.draft.intervalRounds === 0) {
           for (const effect of expireNextDraftEffects(state))
             events.push({ type: 'EffectExpired', abilityId: effect.abilityId });
+
           state.phase = 'DRAFT_ORDER';
           powerups.draft = { stage: 'AWAITING_OFFER', resumePlayer: next };
           events.push({ type: 'DraftDue', round: powerups.completedRounds });
         }
       }
     }
+
     return {
       ok: true,
       session: { state, history: [] },
       events,
     };
   }
+
   return rejected('phase');
 }

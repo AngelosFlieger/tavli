@@ -25,6 +25,7 @@ export const bastion = defineAbility<'bastion', BastionConfig>({
   timing: 'WITH_END_TURN',
   validateConfig(value) {
     const input = record(value, 'bastion');
+
     exactKeys(
       input,
       [
@@ -38,6 +39,7 @@ export const bastion = defineAbility<'bastion', BastionConfig>({
       ],
       'bastion',
     );
+
     return {
       ...baseConfig(input, 'bastion'),
       duration: duration(input.duration, 'bastion.duration', ['TARGET_TURN_END']),
@@ -64,11 +66,13 @@ export const bastion = defineAbility<'bastion', BastionConfig>({
           return [];
         if (!config.allowStartPoints && START_POINTS.has(point)) return [];
         if (!config.allowHomePoints && HOME_POINTS.has(point)) return [];
+
         return [{ type: 'POINT' as const, point }];
       });
     },
     effect(state, activation, player, config) {
       const point = activation.target.type === 'POINT' ? activation.target.point : -1;
+
       return {
         abilityId: 'bastion',
         source: player,
@@ -87,8 +91,11 @@ export const bastion = defineAbility<'bastion', BastionConfig>({
     },
     effectIsValid(position, effect) {
       if (effect.target.type !== 'POINT') return true;
+
       const anchor = effect.constraints.find((constraint) => constraint.kind === 'ANCHOR_CHECKER');
+
       if (!anchor) return false;
+
       return position.board[effect.target.point].includes(anchor.checker);
     },
   },

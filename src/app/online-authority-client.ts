@@ -43,12 +43,14 @@ export class OnlineAuthorityClient implements OnlineAuthorityPort {
   send(command: Command): void {
     const connection = this.requireConnection();
     const request = this.request(command);
+
     this.pending = request.commandId;
     connection.send(request);
   }
 
   sendUntracked(command: Command): void {
     const connection = this.requireConnection();
+
     connection.send(this.request(command));
   }
 
@@ -63,6 +65,7 @@ export class OnlineAuthorityClient implements OnlineAuthorityPort {
   private requireConnection() {
     if (!this.connection)
       throw new Error('online command requested without an authority connection');
+
     return this.connection;
   }
 }

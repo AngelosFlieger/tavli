@@ -29,5 +29,6 @@ function renderCopy(descriptor: AbilityCopyDescriptor): AbilityCopy {
 function render(reference: TextRef): string {
   const params = reference.params ?? {};
   const count = typeof params.count === 'number' ? params.count : undefined;
+
   return t(reference.key, count === undefined ? params : { ...params, s: pluralSuffix(count) });
 }

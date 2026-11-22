@@ -37,6 +37,7 @@ export const opportunist = defineAbility<'opportunist', OpportunistConfig>({
   timing: 'AFTER_ROLL_BEFORE_MOVE',
   validateConfig(value) {
     const input = record(value, 'opportunist');
+
     exactKeys(
       input,
       [
@@ -55,12 +56,15 @@ export const opportunist = defineAbility<'opportunist', OpportunistConfig>({
       ],
       'opportunist',
     );
+
     const focusDirections = uniqueList(
       input.focusDirections,
       ['INCREASE', 'DECREASE'],
       'opportunist.focusDirections',
     );
+
     if (!focusDirections.length) throw new Error('opportunist.focusDirections must not be empty');
+
     const result = {
       ...baseConfig(input, 'opportunist'),
       trigger: oneOf(input.trigger, ['OPPONENT_NO_LEGAL_MOVES'], 'opportunist.trigger'),
@@ -77,7 +81,9 @@ export const opportunist = defineAbility<'opportunist', OpportunistConfig>({
       ),
       equippedPowerupSlots: integer(input.equippedPowerupSlots, 'opportunist.equippedPowerupSlots'),
     };
+
     if (result.focusUsesPerRoll > 2) throw new Error('opportunist.focusUsesPerRoll must be 1 or 2');
+
     return result;
   },
   copy(config) {
@@ -107,10 +113,14 @@ export const opportunist = defineAbility<'opportunist', OpportunistConfig>({
     },
     opponentStalled(powerups, owner, stalledPlayer, config) {
       if (owner !== other(stalledPlayer)) return null;
+
       const current = passiveCounter(powerups, owner, OPPORTUNIST_FOCUS);
       const focus = Math.min(config.focusCap, current + config.focusGain);
+
       if (focus === current) return null;
+
       setPassiveCounter(powerups, owner, OPPORTUNIST_FOCUS, focus);
+
       return { type: 'FocusGained', player: owner, focus };
     },
     unequipped(powerups, player) {
@@ -123,6 +133,7 @@ export const opportunist = defineAbility<'opportunist', OpportunistConfig>({
       const used = state.diceModifiers.filter(
         (modifier) => modifier.abilityId === 'opportunist' && modifier.source === player,
       ).length;
+
       return (
         passiveCounter(state.powerups!, player, OPPORTUNIST_FOCUS) > 0 &&
         used < config.focusUsesPerRoll
@@ -156,6 +167,7 @@ export const opportunist = defineAbility<'opportunist', OpportunistConfig>({
     },
     commit(state, player) {
       const focus = passiveCounter(state.powerups!, player, OPPORTUNIST_FOCUS);
+
       if (focus > 0) setPassiveCounter(state.powerups!, player, OPPORTUNIST_FOCUS, focus - 1);
     },
   },

@@ -16,6 +16,7 @@ function entry(
   active: 0 | 1 | null = 0,
 ): PlaytestEntry {
   const ended = events.find((event) => event.type === 'GameEnded');
+
   return {
     index,
     events,
@@ -56,7 +57,9 @@ function report(seed: number, configHash: string, entries: PlaytestEntry[]): Pla
 
 test('aggregate analysis separates config hashes and derives completed and censored metrics', () => {
   const frostLoadout = emptyLoadouts();
+
   frostLoadout[0].powerups.push({ instanceId: 'frost-1', abilityId: 'frostSeal' });
+
   const completed = report(10, 'hash-a', [
     entry(0, [
       { type: 'OpeningResolved', attempts: [[6, 1]], player: 0 },
@@ -88,7 +91,9 @@ test('aggregate analysis separates config hashes and derives completed and censo
   ]);
 
   const guardLoadout = emptyLoadouts();
+
   guardLoadout[1].passives.push({ instanceId: 'guard-1', abilityId: 'homeGuard' });
+
   const incomplete = report(11, 'hash-a', [
     entry(0, [{ type: 'AbilityPicked', player: 1, abilityId: 'homeGuard' }], guardLoadout, 1),
     entry(1, [{ type: 'NoLegalMoves' }], guardLoadout, 1),
@@ -99,7 +104,9 @@ test('aggregate analysis separates config hashes and derives completed and censo
   const analysis = analyzePlaytestReports([completed, incomplete, otherConfig]);
 
   assert.equal(analysis.groups.length, 2);
+
   const group = analysis.groups.find((candidate) => candidate.configHash === 'hash-a')!;
+
   assert.equal(group.reports, 2);
   assert.deepEqual(group.seeds, [10, 11]);
   assert.equal(group.completedGames, 1);
@@ -142,17 +149,20 @@ test('import validation accepts generated reports and rejects unsafe metric shap
   const valid = report(99, 'hash-a', [
     entry(0, [{ type: 'AbilityPicked', player: 0, abilityId: 'recast' }]),
   ]);
+
   assert.deepEqual(parsePlaytestReport(structuredClone(valid)), valid);
 
   const missingPlayer = structuredClone(valid) as unknown as {
     entries: { events: Record<string, unknown>[] }[];
   };
+
   delete missingPlayer.entries[0].events[0].player;
   assert.equal(parsePlaytestReport(missingPlayer), null);
 
   const unknownAbility = structuredClone(valid) as unknown as {
     entries: { events: Record<string, unknown>[] }[];
   };
+
   unknownAbility.entries[0].events[0].abilityId = 'not-a-card';
   assert.equal(parsePlaytestReport(unknownAbility), null);
 });

@@ -72,7 +72,9 @@ export function createTitleScreen(session: Session, playtest: PlaytestTools): Ti
   });
   roomJoin.addEventListener('click', () => {
     const code = roomCode.value.trim().toUpperCase();
+
     if (!code) return;
+
     roomPanel.hidden = true;
     session.onJoinRoom(code);
   });
@@ -92,6 +94,7 @@ export function createTitleScreen(session: Session, playtest: PlaytestTools): Ti
   document.addEventListener('keydown', (event) => {
     if (event.key !== 'Escape' || !searching) return;
     if (document.querySelector<HTMLDialogElement>('#overlay')?.open) return;
+
     session.onMultiplayer(selectedMatch());
   });
 
@@ -123,8 +126,10 @@ export function createTitleScreen(session: Session, playtest: PlaytestTools): Ti
     document.querySelector<HTMLElement>('#waiting-screen')!.hidden = !on;
     startScreen.hidden = on || !document.body.classList.contains('on-title');
     window.dispatchEvent(new Event('resize'));
+
     if (on) document.querySelector<HTMLButtonElement>('#waiting-cancel')!.focus();
     else if (document.body.classList.contains('on-title')) multiplayerButton.focus();
+
     matchLabel.textContent = on ? t('menu.searching') : t('menu.multiplayer');
     waitingStatus.textContent = t(
       status === 'CONNECTING' ? 'waiting.connecting' : 'waiting.searching',
@@ -133,6 +138,7 @@ export function createTitleScreen(session: Session, playtest: PlaytestTools): Ti
     localButton.disabled = on || !playEnabled;
     roomButton.disabled = on || !playEnabled;
     rulesetPicker.disabled = on;
+
     if (on) roomPanel.hidden = true;
   }
 
@@ -150,7 +156,9 @@ export function createTitleScreen(session: Session, playtest: PlaytestTools): Ti
 
   function enablePlay() {
     playEnabled = true;
+
     if (!searching) localButton.disabled = false;
+
     multiplayerButton.disabled = false;
     roomButton.disabled = false;
   }
@@ -167,6 +175,7 @@ export function createTitleScreen(session: Session, playtest: PlaytestTools): Ti
   function updateRulesetCopy() {
     const selection = selectedMatch();
     const powerups = selection.ruleset === 'POWERUPS_V1';
+
     waitingRuleset.textContent = powerups
       ? `Powerups · ${POWERUPS_V1.id} v${POWERUPS_V1.version}`
       : t('menu.classic.matchmaking');

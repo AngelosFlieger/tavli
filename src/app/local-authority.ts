@@ -66,28 +66,39 @@ export class LocalAuthority implements LocalAuthorityPort {
 
   transition(command: SessionCommand): SessionResult {
     const result = transitionSession(this.session, command, this.context);
+
     if (!result.ok) return result;
+
     this.session = result.session;
+
     return result;
   }
 
   resolveOpening(): OpeningResolution | null {
     const resolution = resolveAutomaticOpening(this.session, this.context, this.randomInt);
+
     if (!resolution) return null;
+
     this.session = resolution.session;
+
     return resolution;
   }
 
   advanceDraft(): SessionEvent[] {
     const advanced = advancePendingDraft(this.session, this.context, this.randomInt);
+
     this.session = advanced.session;
+
     return advanced.events;
   }
 
   movementRoll(): [number, number] | null {
     const active = this.state.active;
+
     if (active === null) return null;
+
     const config = this.context.variantConfig;
+
     return config
       ? generateMovementRoll(
           this.state,

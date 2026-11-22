@@ -6,10 +6,14 @@ test('local authority owns transitions, history, semantic events, and injected r
   const authority = new LocalAuthority(undefined, () => 0);
 
   assert.equal(authority.transition({ type: 'resolveOpening', attempts: [[6, 1]] }).ok, true);
+
   const started = authority.transition({ type: 'beginRoll' });
+
   assert.equal(started.ok, true);
   assert.deepEqual(authority.movementRoll(), [1, 1]);
+
   const rolled = authority.transition({ type: 'receiveRoll', values: [6, 1] });
+
   assert.equal(rolled.ok, true);
   assert.equal(authority.state.active, 0);
   assert.equal(rolled.ok && rolled.events.some((event) => event.type === 'MovesAvailable'), true);
@@ -23,6 +27,7 @@ test('local authority owns transitions, history, semantic events, and injected r
 test('local authority adopts snapshots without retaining incompatible history', () => {
   const authority = new LocalAuthority();
   const state = structuredClone(authority.state);
+
   state.opening = { status: 'RESOLVED', attempts: [[6, 1]], winner: 0 };
   state.phase = 'WAITING_FOR_MOVE';
   state.roll = [2, 3];
@@ -33,6 +38,7 @@ test('local authority adopts snapshots without retaining incompatible history', 
     type: 'move',
     sequence: [{ from: 0, to: 2, die: 2 }],
   });
+
   assert.equal(moved.ok, true);
   assert.equal(authority.canUndo, true);
   authority.adopt(authority.state);

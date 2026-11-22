@@ -16,8 +16,10 @@ export function moveAllowedByActiveEffects(
   move: Move,
 ): boolean {
   if (!moveAllowedByPassives(position, player, move)) return false;
+
   const powerups = (position as EffectPosition).powerups;
   const variantPosition = position as EffectPosition;
+
   if (
     move.to === -1 &&
     variantPosition.diceModifiers?.some(
@@ -31,10 +33,13 @@ export function moveAllowedByActiveEffects(
   )
     return false;
   if (!powerups) return true;
+
   return powerups.activeEffects.every((effect) => {
     if (effect.affectedPlayer !== player || effect.target.type !== 'POINT') return true;
     if (!activeEffectIsValid(position, effect)) return true;
+
     const point = effect.target.point;
+
     return effect.constraints.every((constraint) => {
       switch (constraint.kind) {
         case 'BLOCK_LEAVING':

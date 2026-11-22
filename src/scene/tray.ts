@@ -12,6 +12,7 @@ export function trayPosition(
   const point = stage === 'start' ? path[0] : path[path.length - 1];
   const adjacent = pointPosition(point);
   const spacing = Math.min(thickness + 0.0007, 0.0095) * depth;
+
   return {
     x: adjacent.x < 0 ? -0.282 : 0.282,
     y: 0.0265 + 0.0152,

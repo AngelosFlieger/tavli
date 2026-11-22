@@ -80,6 +80,7 @@ export type Store = {
 type StoreOptions = { url?: string; name?: string };
 
 const schemaVersion = 4;
+
 const usernameCollation = { locale: 'en', strength: 2 };
 
 export async function openStore(options: StoreOptions = {}): Promise<Store> {
@@ -89,6 +90,7 @@ export async function openStore(options: StoreOptions = {}): Promise<Store> {
     // One local mongod. Report a down database in 5s instead of the 30s default.
     serverSelectionTimeoutMS: 5_000,
   });
+
   try {
     await client.connect();
   } catch (error) {
@@ -97,8 +99,11 @@ export async function openStore(options: StoreOptions = {}): Promise<Store> {
       { cause: error },
     );
   }
+
   const db = client.db(name);
+
   await ensureSchema(db);
+
   const users = db.collection<UserDocument>('users');
   const sessions = db.collection<SessionDocument>('sessions');
   const matches = db.collection<MatchDocument>('matches');
@@ -135,15 +140,20 @@ export async function openStore(options: StoreOptions = {}): Promise<Store> {
     },
     async userForSession(tokenHash, now) {
       const session = await sessions.findOne({ _id: tokenHash });
+
       if (!session || session.expiresAt.getTime() <= now) {
         if (session) await sessions.deleteOne({ _id: tokenHash });
+
         return null;
       }
+
       const user = await users.findOne(
         { _id: session.userId },
         { projection: { passwordHash: 0 } },
       );
+
       if (!user) return null;
+
       return { id: user._id, email: user.email, username: user.username };
     },
     async deleteSession(tokenHash) {
@@ -151,16 +161,22 @@ export async function openStore(options: StoreOptions = {}): Promise<Store> {
     },
     async matchForUser(userId) {
       const seat = await playing.findOne({ _id: userId });
+
       if (!seat) return null;
+
       const match = await matches.findOne({ _id: seat.matchId });
+
       if (!match) {
         await playing.deleteOne({ _id: userId, matchId: seat.matchId });
+
         return null;
       }
+
       return readMatch(match);
     },
     async match(id) {
       const found = await matches.findOne({ _id: id });
+
       return found ? readMatch(found) : null;
     },
     async insertMatch(match) {
@@ -171,14 +187,17 @@ export async function openStore(options: StoreOptions = {}): Promise<Store> {
         ]);
       } catch {
         await playing.deleteMany({ matchId: match.id });
+
         return false;
       }
       try {
         await matches.insertOne(matchDocument(match));
       } catch {
         await playing.deleteMany({ matchId: match.id });
+
         return false;
       }
+
       return true;
     },
     async saveMatch(match) {
@@ -186,6 +205,7 @@ export async function openStore(options: StoreOptions = {}): Promise<Store> {
         { _id: match.id, revision: match.revision, endedAt: null },
         { $set: liveFields(match) },
       );
+
       return result.matchedCount === 1;
     },
     async markAway(match) {
@@ -199,6 +219,7 @@ export async function openStore(options: StoreOptions = {}): Promise<Store> {
           },
         },
       );
+
       return result.matchedCount === 1;
     },
     async setConnected(matchId, index, connected) {
@@ -215,6 +236,7 @@ export async function openStore(options: StoreOptions = {}): Promise<Store> {
           },
         },
       );
+
       return result.matchedCount === 1;
     },
     async followOn(previousId, match) {
@@ -222,16 +244,20 @@ export async function openStore(options: StoreOptions = {}): Promise<Store> {
         { _id: match.seats[0], matchId: previousId },
         { $set: { matchId: match.id } },
       );
+
       if (claimed.modifiedCount !== 1) return false;
+
       const other = await playing.updateOne(
         { _id: match.seats[1], matchId: previousId },
         { $set: { matchId: match.id } },
       );
+
       if (other.modifiedCount !== 1) {
         await playing.updateOne(
           { _id: match.seats[0], matchId: match.id },
           { $set: { matchId: previousId } },
         );
+
         return false;
       }
       try {
@@ -245,8 +271,10 @@ export async function openStore(options: StoreOptions = {}): Promise<Store> {
           { _id: match.seats[1], matchId: match.id },
           { $set: { matchId: previousId } },
         );
+
         return false;
       }
+
       return true;
     },
     async release(id) {
@@ -266,6 +294,7 @@ export async function openStore(options: StoreOptions = {}): Promise<Store> {
     async ping() {
       try {
         await db.command({ ping: 1 });
+
         return true;
       } catch {
         return false;
@@ -273,8 +302,11 @@ export async function openStore(options: StoreOptions = {}): Promise<Store> {
     },
     async claimOpponent(userId, matchKey) {
       await joinQueue(userId, matchKey);
+
       const me = await queue.findOne({ _id: userId });
+
       if (!me) return null;
+
       const claimed = await queue.findOneAndDelete(
         {
           _id: { $ne: userId },
@@ -286,8 +318,11 @@ export async function openStore(options: StoreOptions = {}): Promise<Store> {
         },
         { sort: { joinedAt: 1, _id: 1 } },
       );
+
       if (!claimed) return null;
+
       await queue.deleteOne({ _id: userId });
+
       return claimed._id;
     },
     async leaveQueue(userId) {
@@ -305,16 +340,22 @@ export async function openStore(options: StoreOptions = {}): Promise<Store> {
         })
         .toArray();
       const expired: { match: StoredMatch; expired: [boolean, boolean] }[] = [];
+
       for (const document of stale) {
         const match = readMatch(document);
+
         if (!match) continue;
+
         const gone: [boolean, boolean] = [0, 1].map((index) => {
           const left = match.away[index];
           const cutoff = match.connected[index] ? graceBefore : noShowBefore;
+
           return left !== null && left <= cutoff;
         }) as [boolean, boolean];
+
         if (gone[0] || gone[1]) expired.push({ match, expired: gone });
       }
+
       return expired;
     },
     async close() {
@@ -351,12 +392,15 @@ type MatchDocument = {
 };
 
 type PlayingDocument = { _id: string; matchId: string };
+
 type QueueDocument = { _id: string; joinedAt: Date; matchKey?: string };
 
 async function ensureSchema(db: Db) {
   const meta = db.collection<{ _id: string; version: number }>('meta');
   const current = await meta.findOne({ _id: 'schema' });
+
   if (current?.version === schemaVersion) return;
+
   await createCollection(db, 'users', {
     bsonType: 'object',
     required: ['_id', 'email', 'username', 'passwordHash', 'createdAt'],
@@ -392,7 +436,9 @@ async function ensureSchema(db: Db) {
       winner: { bsonType: ['string', 'null'] },
     },
   });
+
   const users = db.collection('users');
+
   await users.createIndex({ email: 1 }, { unique: true });
   await users.createIndex({ username: 1 }, { unique: true, collation: usernameCollation });
   await db.collection('sessions').createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 });
@@ -447,11 +493,17 @@ function matchDocument(match: StoredMatch): MatchDocument {
 
 function readMatch(document: MatchDocument): StoredMatch | null {
   if (!Array.isArray(document.seats) || document.seats.length !== 2) return null;
+
   const [first, second] = document.seats;
+
   if (typeof first !== 'string' || typeof second !== 'string' || first === second) return null;
+
   const session = readSession(document.session);
+
   if (!session) return null;
+
   let variantConfig: ResolvedVariantConfig | null = null;
+
   try {
     if (document.variantConfig != null)
       variantConfig = resolveVariantConfig(document.variantConfig);
@@ -464,12 +516,16 @@ function readMatch(document: MatchDocument): StoredMatch | null {
       session.state.variantConfigHash !== variantConfig.hash)
   )
     return null;
+
   const endedAt = document.endedAt instanceof Date ? document.endedAt.getTime() : null;
   const winner = typeof document.winner === 'string' ? document.winner : null;
+
   if (document.winner != null && document.winner !== null && typeof document.winner !== 'string')
     return null;
   if (endedAt !== null && winner !== null && !document.seats.includes(winner)) return null;
+
   const outcomeWinner = session.state.outcome?.winner;
+
   if (
     endedAt !== null &&
     winner !== null &&
@@ -478,6 +534,7 @@ function readMatch(document: MatchDocument): StoredMatch | null {
     document.seats[outcomeWinner] !== winner
   )
     return null;
+
   return {
     id: document._id,
     seats: [first, second],
@@ -497,7 +554,9 @@ function readMatch(document: MatchDocument): StoredMatch | null {
 
 function readRevisionUpdate(value: unknown): StoredRevisionUpdate | null {
   if (!value || typeof value !== 'object') return null;
+
   const envelope = value as { revision?: unknown; details?: unknown };
+
   if (
     !Number.isSafeInteger(envelope.revision) ||
     Number(envelope.revision) < 1 ||
@@ -505,15 +564,20 @@ function readRevisionUpdate(value: unknown): StoredRevisionUpdate | null {
     typeof envelope.details !== 'object'
   )
     return null;
+
   const details = envelope.details as Record<string, unknown>;
   const presentations = readPresentations(details);
+
   if (!presentations) return null;
+
   const current = structuredClone(details);
+
   delete current.dice;
   delete current.rerolledDie;
   delete current.sequence;
   delete current.resetDice;
   delete current.presentations;
+
   return {
     revision: Number(envelope.revision),
     details: { ...current, presentations } as StoredRevisionUpdate['details'],
@@ -525,6 +589,7 @@ function readPresentations(details: Record<string, unknown>): PresentationJob[] 
     return details.presentations.every(isPresentationJob)
       ? structuredClone(details.presentations)
       : null;
+
   const legacy =
     details.resetDice === true
       ? { type: 'RESET_DICE' as const, blocking: false as const }
@@ -538,18 +603,23 @@ function readPresentations(details: Record<string, unknown>): PresentationJob[] 
         : Array.isArray(details.sequence)
           ? { type: 'MOVE' as const, blocking: true as const, sequence: details.sequence }
           : null;
+
   if (!legacy) return [];
+
   return isPresentationJob(legacy) ? [structuredClone(legacy)] : null;
 }
 
 async function createCollection(db: Db, name: string, validator: object) {
   const existing = await db.listCollections({ name }).hasNext();
+
   if (existing) return;
+
   await db.createCollection(name, { validator: { $jsonSchema: validator } });
 }
 
 function readUser(document: UserDocument | null): StoredUser | null {
   if (!document) return null;
+
   return {
     id: document._id,
     email: document.email,
@@ -560,11 +630,16 @@ function readUser(document: UserDocument | null): StoredUser | null {
 
 function readSession(value: unknown): Session | null {
   if (!value || typeof value !== 'object') return null;
+
   const candidate = value as { state?: unknown; history?: unknown };
   const state = readState(candidate.state);
+
   if (!state || !Array.isArray(candidate.history)) return null;
+
   const history = candidate.history.map(readState);
+
   if (history.some((entry) => entry === null)) return null;
+
   return { state, history: history as GameState[] };
 }
 
@@ -582,15 +657,21 @@ const outcomeKinds: readonly OutcomeKind[] = [
 
 function readState(value: unknown): GameState | null {
   if (!value || typeof value !== 'object') return null;
+
   const state = structuredClone(value) as Partial<GameState> & Record<string, unknown>;
+
   migrateLegacyOpening(state);
+
   if (!Array.isArray(state.board) || state.board.length !== 24) return null;
   if (!Array.isArray(state.off) || state.off.length !== 2) return null;
+
   const checkers: number[] = [];
+
   for (const stack of [...state.board, ...state.off]) {
     if (!Array.isArray(stack)) return null;
     for (const checker of stack) {
       if (!Number.isInteger(checker) || checker < 0 || checker > 29) return null;
+
       checkers.push(checker);
     }
   }
@@ -609,7 +690,9 @@ function readState(value: unknown): GameState | null {
   if (state.rollSource !== null && state.rollSource !== 'loadedKnuckles') return null;
   if (state.clock !== undefined && state.clock !== null && !isClock(state.clock)) return null;
   if (state.clock === undefined) state.clock = null;
+
   const decoded = state as GameState;
+
   return isNetworkGameState(decoded) ? decoded : null;
 }
 
@@ -617,10 +700,12 @@ function migrateLegacyOpening(state: Record<string, unknown>) {
   delete state.message;
   delete state.messageKey;
   delete state.messageParams;
+
   if (state.phase === 'OPENING_ROLL') state.phase = 'OPENING';
   if (state.opening && typeof state.opening === 'object') {
     delete state.openingRolls;
     delete state.openingAttempts;
+
     return;
   }
   if (state.opening === true) {
@@ -645,20 +730,25 @@ function migrateLegacyOpening(state: Record<string, unknown>) {
       : state.active === 1
         ? 1
         : 0;
+
     state.opening = {
       status: 'RESOLVED',
       attempts: validAttempts.length ? validAttempts : [winner === 0 ? [6, 1] : [1, 6]],
       winner,
     };
   }
+
   delete state.openingRolls;
   delete state.openingAttempts;
 }
 
 function isStoredOpening(value: unknown): value is GameState['opening'] {
   if (!value || typeof value !== 'object') return false;
+
   const opening = value as Record<string, unknown>;
+
   if (opening.status === 'PENDING') return true;
+
   return (
     opening.status === 'RESOLVED' &&
     (opening.winner === 0 || opening.winner === 1) &&
@@ -676,16 +766,24 @@ function isStoredOpening(value: unknown): value is GameState['opening'] {
  */
 function readPowerups(powerups: NonNullable<GameState['powerups']>): boolean {
   const effects = (powerups as unknown as { activeEffects?: unknown }).activeEffects;
+
   if (!Array.isArray(effects)) return false;
+
   const migrated: unknown[] = [];
+
   for (const effect of effects) {
     if (!effect || typeof effect !== 'object') return false;
+
     const entry = effect as Record<string, unknown>;
     const constraints = readConstraints(entry);
+
     if (!constraints) return false;
+
     migrated.push({ ...entry, constraints });
   }
+
   (powerups as unknown as { activeEffects: unknown[] }).activeEffects = migrated;
+
   return true;
 }
 
@@ -698,20 +796,27 @@ type LegacyEffectModifiers = {
 
 function readConstraints(effect: Record<string, unknown>): EffectConstraint[] | null {
   if (Array.isArray(effect.constraints)) return effect.constraints as EffectConstraint[];
+
   const modifiers = effect.modifiers as LegacyEffectModifiers | undefined;
+
   if (!modifiers || typeof modifiers !== 'object') return null;
+
   const constraints: EffectConstraint[] = [];
+
   if (modifiers.blockLeaving) constraints.push({ kind: 'BLOCK_LEAVING' });
   if (modifiers.blockLanding) constraints.push({ kind: 'BLOCK_LANDING' });
   if (typeof modifiers.anchorChecker === 'number')
     constraints.push({ kind: 'ANCHOR_CHECKER', checker: modifiers.anchorChecker });
   if (modifiers.dicePenalty) constraints.push({ kind: 'DICE_PENALTY', ...modifiers.dicePenalty });
+
   return constraints;
 }
 
 function isClock(value: unknown): value is GameClock {
   if (!value || typeof value !== 'object') return false;
+
   const clock = value as Record<string, unknown>;
+
   return (
     Number.isFinite(clock.remainingMs) &&
     Number(clock.remainingMs) >= 0 &&
@@ -730,13 +835,16 @@ function isDie(value: unknown): boolean {
 
 function isOutcome(value: unknown): value is Outcome {
   if (!value || typeof value !== 'object') return false;
+
   const outcome = value as Record<string, unknown>;
+
   if (outcome.winner !== null && outcome.winner !== 0 && outcome.winner !== 1) return false;
   if (!Number.isInteger(outcome.points) || Number(outcome.points) < 0) return false;
   if (typeof outcome.reason !== 'string') return false;
   if (outcome.kind !== undefined && !outcomeKinds.includes(outcome.kind as OutcomeKind))
     return false;
   if (outcome.kind === undefined) outcome.kind = inferredOutcomeKind(outcome.reason);
+
   return true;
 }
 
@@ -744,5 +852,6 @@ function inferredOutcomeKind(reason: string): OutcomeKind {
   if (reason.includes('Mother')) return 'MOTHER_VICTORY';
   if (reason.includes('Mars')) return 'MARS';
   if (reason.includes('draw')) return 'DRAW';
+
   return 'BEAR_OFF';
 }

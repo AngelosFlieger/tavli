@@ -25,8 +25,8 @@
     "test:browser:local": "node scripts/browser-smoke.mjs --local",
     "test:browser:headed": "node scripts/browser-smoke.mjs --headed",
     "ios:sync": "npm run build && cap sync ios",
-    "format": "prettier --write src server tests scripts index.html vite.config.ts stryker.config.mjs tsconfig.json .oxlintrc.json package.json",
-    "format:check": "prettier --check src server tests scripts index.html vite.config.ts stryker.config.mjs tsconfig.json .oxlintrc.json package.json"
+    "format": "prettier --write src server tests scripts index.html vite.config.ts stryker.config.mjs tsconfig.json .oxlintrc.json package.json && node scripts/readability.mjs --write",
+    "format:check": "prettier --check src server tests scripts index.html vite.config.ts stryker.config.mjs tsconfig.json .oxlintrc.json package.json && node scripts/readability.mjs"
   },
   "dependencies": {
     "@capacitor/core": "^8.6.2",

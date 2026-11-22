@@ -4,7 +4,7 @@
 
 Tavli is a two-player Plakoto game with a Classic ruleset and a configurable Powerups variant. Treat Classic as the baseline and record every variant rule explicitly before changing it.
 
-Read [docs/game-spec.md](docs/game-spec.md) for implemented rules, [docs/architecture.md](docs/architecture.md) for the current code map, [docs/refactor-plan.md](docs/refactor-plan.md) for the staged target structure, and [docs/runtime-robustness-refactor-plan.md](docs/runtime-robustness-refactor-plan.md) for the active authority/presentation hardening work. Keep the current-state documents aligned with behavior changes.
+Read [docs/game-spec.md](docs/game-spec.md) for implemented rules, [docs/architecture.md](docs/architecture.md) for the current code map, [docs/code-style.md](docs/code-style.md) for readability and semantic-spacing conventions, [docs/refactor-plan.md](docs/refactor-plan.md) for the staged target structure, and [docs/runtime-robustness-refactor-plan.md](docs/runtime-robustness-refactor-plan.md) for the active authority/presentation hardening work. Keep the current-state documents aligned with behavior changes.
 
 ## Where changes belong
 
@@ -68,5 +68,9 @@ Read [docs/game-spec.md](docs/game-spec.md) for implemented rules, [docs/archite
    undo, reconnect, clock, and presentation-interruption behavior before implementation. Test its
    pure transition, authority path, projection, stale/duplicate update handling, and one user-visible
    path as applicable.
+6. Structure functions into visible semantic phases: guards, derivation, effects, and projection.
+   Keep related statements together, separate different phases with one blank line, and extract a
+   named helper when spacing alone cannot make the flow obvious. Run `npm run format`; it applies
+   Prettier and the repository's AST-based readability pass.
 
 For future random mechanics, decide trigger timing, eligible targets, effect duration, stacking, undo behavior, and online randomness before implementation. Keep the server authoritative and make any random outcome visible in game state so both clients can reproduce it.

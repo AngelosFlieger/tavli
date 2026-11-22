@@ -18,7 +18,9 @@ export function initOverlay(panels: Record<string, OverlayPanel>) {
   document.querySelectorAll<HTMLButtonElement>('[data-open]').forEach((button) =>
     button.addEventListener('click', () => {
       const panel = panels[button.dataset.open ?? ''];
+
       if (!panel) return;
+
       opener = button;
       content.innerHTML = panel.markup();
       panel.wire?.(content, dialog);
@@ -30,12 +32,14 @@ export function initOverlay(panels: Record<string, OverlayPanel>) {
     .forEach((button) => button.addEventListener('click', () => dialog.close()));
   dialog.addEventListener('click', (event) => {
     if (event.target !== dialog) return;
+
     const rect = dialog.getBoundingClientRect();
     const outside =
       event.clientX < rect.left ||
       event.clientX > rect.right ||
       event.clientY < rect.top ||
       event.clientY > rect.bottom;
+
     if (outside) dialog.close();
   });
   dialog.addEventListener('close', () => opener?.focus());

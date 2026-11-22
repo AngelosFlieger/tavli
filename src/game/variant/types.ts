@@ -7,7 +7,9 @@ import type { AbilityConfigMap, AbilityId } from './abilities/catalog';
  * catalog and base modules so there is one source for them.
  */
 export type { AbilityId, AbilityConfigMap } from './abilities/catalog';
+
 export { ABILITY_IDS, abilityRegistry } from './abilities/catalog';
+
 export type {
   AbilityActivation,
   AbilityConfigBase,
@@ -117,10 +119,12 @@ export type VariantConfig = {
 export type ResolvedVariantConfig = Readonly<VariantConfig & { hash: string }>;
 
 export type ClassicRulesContext = { ruleset: 'CLASSIC'; variantConfig: null };
+
 export type PowerupsRulesContext = {
   ruleset: 'POWERUPS_V1';
   variantConfig: ResolvedVariantConfig;
 };
+
 export type RulesContext = ClassicRulesContext | PowerupsRulesContext;
 
 export const CLASSIC_RULES: ClassicRulesContext = Object.freeze({

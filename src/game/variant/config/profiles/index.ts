@@ -10,6 +10,7 @@ const profiles = Object.freeze({
 });
 
 export type VariantProfileId = keyof typeof profiles;
+
 export const VARIANT_PROFILE_IDS = Object.freeze(Object.keys(profiles) as VariantProfileId[]);
 
 export function isVariantProfileId(value: unknown): value is VariantProfileId {

@@ -25,6 +25,7 @@ export const nudge = defineAbility<'nudge', NudgeConfig>({
   timing: 'AFTER_ROLL_BEFORE_MOVE',
   validateConfig(value) {
     const input = record(value, 'nudge');
+
     exactKeys(
       input,
       [
@@ -38,8 +39,11 @@ export const nudge = defineAbility<'nudge', NudgeConfig>({
       ],
       'nudge',
     );
+
     const directions = uniqueList(input.directions, ['INCREASE', 'DECREASE'], 'nudge.directions');
+
     if (!directions.length) throw new Error('nudge.directions must not be empty');
+
     return {
       ...baseConfig(input, 'nudge'),
       adjustment: integer(input.adjustment, 'nudge.adjustment', 1),
@@ -55,6 +59,7 @@ export const nudge = defineAbility<'nudge', NudgeConfig>({
   copy(config) {
     const sign =
       config.directions.length === 2 ? '±' : config.directions[0] === 'INCREASE' ? '+' : '−';
+
     return {
       name: { key: 'ability.nudge.name' },
       summary: { key: 'ability.nudge.summary', params: { amount: `${sign}${config.adjustment}` } },

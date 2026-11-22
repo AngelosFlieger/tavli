@@ -7,12 +7,14 @@ export type { Locale } from './i18n/types';
 const storageKey = 'plakoto-locale';
 
 const catalogs: Record<Locale, Catalog> = { en, el };
+
 const fallback = en;
 
 let current: Locale = 'en';
 
 function interpolate(template: string, params?: Params): string {
   if (!params) return template;
+
   return template.replace(/\{(\w+)\}/g, (token, key: string) =>
     key in params ? String(params[key]) : token,
   );
@@ -20,6 +22,7 @@ function interpolate(template: string, params?: Params): string {
 
 export function setLocale(locale: Locale) {
   current = locale;
+
   try {
     localStorage.setItem(storageKey, locale);
   } catch {
@@ -34,15 +37,18 @@ export function getLocale(): Locale {
 export function loadLocalePreference(): Locale {
   try {
     const stored = localStorage.getItem(storageKey);
+
     if (stored === 'en' || stored === 'el') current = stored;
   } catch {
     // Keep the default.
   }
+
   return current;
 }
 
 export function t(key: string, params?: Params): string {
   const catalog = catalogs[current];
+
   return interpolate(catalog[key] ?? fallback[key] ?? key, params);
 }
 
