@@ -381,7 +381,7 @@ test('concurrent commands for one match serialize around one authoritative revis
         event.message.type === 'update' ? event.message.commandResult?.status : undefined,
       )
       .filter(Boolean)
-      .sort();
+      .sort((a, b) => a.localeCompare(b));
     assert.deepEqual(statuses, ['ACCEPTED', 'REJECTED']);
     assert.equal((await store.match(initial.matchId))?.revision, initial.revision + 1);
   } finally {

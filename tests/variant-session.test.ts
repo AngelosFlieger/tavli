@@ -759,7 +759,10 @@ test('Recast records authority randomness and preserves original-double token co
   if (!result.ok) return;
   assert.deepEqual(session, before);
   assert.deepEqual(result.session.state.roll, [5, 3]);
-  assert.deepEqual(result.session.state.remaining.slice().sort(), [3, 3, 3, 5]);
+  assert.deepEqual(
+    result.session.state.remaining.slice().sort((a, b) => a - b),
+    [3, 3, 3, 5],
+  );
   assert.deepEqual(result.session.state.powerups!.loadouts[0].powerups, []);
   assert.deepEqual(result.session.state.diceModifiers, [
     {
@@ -1407,7 +1410,10 @@ test('Opportunist spends Focus through configured dice rules without consuming a
   );
   assert.equal(usedAgain.ok, true);
   if (!usedAgain.ok) return;
-  assert.deepEqual(usedAgain.session.state.remaining.slice().sort(), [1, 3, 3, 3]);
+  assert.deepEqual(
+    usedAgain.session.state.remaining.slice().sort((a, b) => a - b),
+    [1, 3, 3, 3],
+  );
   assert.equal(opportunistFocus(usedAgain.session.state.powerups!, 0), 0);
   assert.equal(usedAgain.session.state.diceModifiers.length, 2);
 });

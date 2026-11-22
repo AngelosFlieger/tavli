@@ -298,11 +298,10 @@ export function createTables(
         }
         waiting.delete(userId);
         const index = found.seats[0] === userId ? 0 : 1;
-        let match = found;
         const connected: [boolean, boolean] = [...found.connected];
         connected[index] = true;
         await store.setConnected(found.id, index as 0 | 1, true);
-        match = { ...found, connected };
+        let match = { ...found, connected };
         if (found.away[index] !== null) {
           const nextAway: [number | null, number | null] = [...found.away];
           nextAway[index] = null;

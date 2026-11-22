@@ -508,14 +508,12 @@ function readRevisionUpdate(value: unknown): StoredRevisionUpdate | null {
   const details = envelope.details as Record<string, unknown>;
   const presentations = readPresentations(details);
   if (!presentations) return null;
-  const {
-    dice: _dice,
-    rerolledDie: _rerolledDie,
-    sequence: _sequence,
-    resetDice: _resetDice,
-    presentations: _presentations,
-    ...current
-  } = structuredClone(details);
+  const current = structuredClone(details);
+  delete current.dice;
+  delete current.rerolledDie;
+  delete current.sequence;
+  delete current.resetDice;
+  delete current.presentations;
   return {
     revision: Number(envelope.revision),
     details: { ...current, presentations } as StoredRevisionUpdate['details'],

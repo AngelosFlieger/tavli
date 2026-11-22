@@ -7,7 +7,6 @@ import {
   canBearOff,
   initialPosition,
   pinned,
-  owner,
   type Position,
 } from '../src/game/rules/position';
 import { moveSequences, rawMoves, legalMoves } from '../src/game/rules/moves';

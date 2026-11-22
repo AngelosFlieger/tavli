@@ -9,16 +9,18 @@
     "start": "node dist-server/index.mjs --static",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
+    "lint": "oxlint --type-aware --report-unused-disable-directives --max-warnings=0 .",
     "check": "node scripts/check.mjs",
     "verify": "npm run check && npm run test:browser:local",
     "verify:full": "npm run check && npm run test:browser",
     "test": "node scripts/test.mjs",
+    "test:coverage": "node scripts/test.mjs --coverage",
     "test:browser": "node scripts/browser-smoke.mjs",
     "test:browser:local": "node scripts/browser-smoke.mjs --local",
     "test:browser:headed": "node scripts/browser-smoke.mjs --headed",
     "ios:sync": "npm run build && cap sync ios",
-    "format": "prettier --write src server tests scripts index.html vite.config.ts tsconfig.json package.json",
-    "format:check": "prettier --check src server tests scripts index.html vite.config.ts tsconfig.json package.json"
+    "format": "prettier --write src server tests scripts index.html vite.config.ts tsconfig.json .oxlintrc.json package.json",
+    "format:check": "prettier --check src server tests scripts index.html vite.config.ts tsconfig.json .oxlintrc.json package.json"
   },
   "dependencies": {
     "@capacitor/core": "^8.6.2",
@@ -35,8 +37,11 @@
     "@types/ws": "^8.18.2",
     "esbuild": "0.25.12",
     "mongodb-memory-server": "^11.3.0",
+    "oxlint": "^1.94.0",
     "playwright-core": "1.56.1",
     "prettier": "3.6.2",
+    "tsrs": "^7.1.0-beta.tsrs4",
+    "tsx": "^4.23.15",
     "typescript": "~5.9.3",
     "vite": "^7.1.12"
   }

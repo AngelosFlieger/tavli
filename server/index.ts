@@ -93,7 +93,10 @@ async function attach(socket: Socket, request: IncomingMessage) {
   handshakeTimer.unref();
 
   socket.on('message', (data) => {
-    if (Buffer.byteLength(String(data)) > maxSocketPayload) {
+    const payloadBytes = Array.isArray(data)
+      ? data.reduce((total, chunk) => total + chunk.byteLength, 0)
+      : data.byteLength;
+    if (payloadBytes > maxSocketPayload) {
       socket.close(1009, 'payload too large');
       return;
     }
@@ -310,7 +313,7 @@ function lanAddresses() {
 
 async function serveStatic(request: IncomingMessage, response: ServerResponse) {
   const url = new URL(request.url ?? '/', 'http://localhost');
-  let pathname = '/';
+  let pathname: string;
   try {
     pathname = decodeURIComponent(url.pathname);
   } catch {

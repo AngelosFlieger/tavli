@@ -76,12 +76,12 @@ function renderMode() {
 
 async function submit(form: HTMLFormElement) {
   const data = new FormData(form);
-  const password = String(data.get('password') ?? '');
+  const password = formText(data, 'password');
   const button = document.querySelector<HTMLButtonElement>('#auth-submit')!;
   button.disabled = true;
   const result = creating
-    ? await register(String(data.get('email') ?? ''), String(data.get('username') ?? ''), password)
-    : await login(String(data.get('identifier') ?? ''), password);
+    ? await register(formText(data, 'email'), formText(data, 'username'), password)
+    : await login(formText(data, 'identifier'), password);
   button.disabled = false;
   if (!result.ok) {
     setError(result.error);
@@ -90,6 +90,11 @@ async function submit(form: HTMLFormElement) {
   setError('');
   revealGame();
   hooks.onSignedIn();
+}
+
+function formText(data: FormData, name: string): string {
+  const value = data.get(name);
+  return typeof value === 'string' ? value : '';
 }
 
 function setError(message: string) {

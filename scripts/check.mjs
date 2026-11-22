@@ -1,13 +1,14 @@
 import { spawn } from 'node:child_process';
 
 /**
- * Mirrors the CI verify job (typecheck+unit+format+build) in one command, running the
+ * Mirrors the CI verify job (build+coverage+lint+format) in one command, running the
  * independent steps concurrently. `npm run build` already typechecks, so a separate
  * `tsc --noEmit` pass would only duplicate work.
  */
 const steps = [
   { name: 'build', args: ['run', 'build'] },
-  { name: 'unit', args: ['test'] },
+  { name: 'coverage', args: ['run', 'test:coverage'] },
+  { name: 'lint', args: ['run', 'lint'] },
   { name: 'format', args: ['run', 'format:check'] },
 ];
 const verbose = process.argv.includes('--verbose');

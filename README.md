@@ -20,8 +20,10 @@ Open http://localhost:3000. Vite also prints a Network address: anyone on the sa
 ```sh
 npm run verify      # check plus the local browser path (about 20s): run before most commits
 npm run verify:full # check plus both browser paths (about 70s): run before pushing
-npm run check       # build (which typechecks), unit tests, and formatting in parallel (about 10s)
+npm run check       # build, coverage-gated tests, lint, and formatting in parallel (about 10s)
 npm test
+npm run test:coverage
+npm run lint
 npm run typecheck
 npm run test:browser        # local play plus two-seat online drafts/ability smoke test (about 1 min)
 npm run test:browser:local  # local play path only, for presentation changes (about 10s)
@@ -30,7 +32,7 @@ npm start          # serve dist/ and the game server on port 3000
 npm run format:check
 ```
 
-GitHub Actions runs the type, unit, formatting, build, and browser checks. The browser smoke test finds Chrome in the common Linux locations. Set `PLAKOTO_CHROME_PATH` when using another compatible executable. Both smoke variants log elapsed seconds per stage, pick a free port pair so leftover servers never block a run, and `npm run test:browser:headed` shows the browser window at full resolution.
+GitHub Actions runs the type, coverage, lint, formatting, build, and browser checks. Coverage must stay above 89% of lines, 79% of branches, and 87% of functions across loaded `src` and `server` modules. The browser smoke test finds Chrome in the common Linux locations. Set `PLAKOTO_CHROME_PATH` when using another compatible executable. Both smoke variants log elapsed seconds per stage, pick a free port pair so leftover servers never block a run, and `npm run test:browser:headed` shows the browser window at full resolution.
 
 Development builds also show local balance-playtest controls in Settings. Leave the seed blank for fresh cryptographic randomness on every new game, or enter an unsigned 32-bit seed when a balance run must be reproducible. The same profile and explicit seed reproduce dice, draft offers/order, passive probability checks, and powerup rerolls. During that game, Settings can download an in-memory JSON report with semantic events, public effect snapshots, picks, uses, stalled turns, and the result. Settings can also import multiple reports, show a compact comparison, and download aggregate JSON. Aggregation keeps distinct configuration hashes separate and distinguishes completed hold times from unfinished, censored observations. Production builds do not expose these controls, and no report data is sent anywhere.
 

@@ -24,10 +24,12 @@ export function wirePlaytestAnalysis(root: HTMLElement): void {
   const analysisOutput = root.querySelector<HTMLOutputElement>('#playtest-analysis-output');
   let analysis: BalanceAnalysis | null = null;
   selectReports?.addEventListener('click', () => files?.click());
-  files?.addEventListener('change', async () => {
+  files?.addEventListener('change', () => void analyzeSelectedReports());
+
+  async function analyzeSelectedReports() {
     const reports: PlaytestReport[] = [];
     let rejected = 0;
-    for (const file of Array.from(files.files ?? [])) {
+    for (const file of Array.from(files?.files ?? [])) {
       try {
         const report = parsePlaytestReport(JSON.parse(await file.text()));
         if (report) reports.push(report);
@@ -39,7 +41,7 @@ export function wirePlaytestAnalysis(root: HTMLElement): void {
     analysis = analyzePlaytestReports(reports, rejected);
     if (analysisOutput) analysisOutput.textContent = describeAnalysis(analysis);
     if (downloadAnalysis) downloadAnalysis.disabled = reports.length === 0;
-  });
+  }
   downloadAnalysis?.addEventListener('click', () => {
     if (analysis) downloadJson('plakoto-balance-analysis.json', analysis);
   });

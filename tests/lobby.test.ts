@@ -215,7 +215,7 @@ test('powerup match authority supplies Recast randomness after an authoritative 
     'nudge',
     'loadedKnuckles',
   ]);
-  state = lobby.act('ada', { type: 'pickAbility', abilityId: 'recast' })!.update.state;
+  assert.ok(lobby.act('ada', { type: 'pickAbility', abilityId: 'recast' }));
   state = lobby.act('basil', { type: 'pickAbility', abilityId: 'loadedKnuckles' })!.update.state;
   assert.equal(state.phase, 'WAITING_FOR_ROLL');
   assert.equal(state.active, 0);
@@ -241,7 +241,7 @@ test('powerup match authority supplies Recast randomness after an authoritative 
     assert.ok(move);
     state = lobby.act('ada', { type: 'move', sequence: [move] })!.update.state;
   }
-  state = lobby.act('ada', { type: 'end' })!.update.state;
+  assert.ok(lobby.act('ada', { type: 'end' }));
   const loaded = lobby.act('basil', { type: 'roll' });
   assert.deepEqual(loaded?.update.presentations, [
     { type: 'DICE', blocking: true, values: [2, 2] },
@@ -282,8 +282,8 @@ test('online authority rejects Opportunist spending until public Focus is earned
     'nudge',
     'opportunist',
   ]);
-  state = lobby.act('ada', { type: 'pickAbility', abilityId: 'opportunist' })!.update.state;
-  state = lobby.act('basil', { type: 'pickAbility', abilityId: 'nudge' })!.update.state;
+  assert.ok(lobby.act('ada', { type: 'pickAbility', abilityId: 'opportunist' }));
+  assert.ok(lobby.act('basil', { type: 'pickAbility', abilityId: 'nudge' }));
   forcedDice.push(2, 5);
   state = lobby.act('ada', { type: 'roll' })!.update.state;
   const before = structuredClone(state);
@@ -332,8 +332,8 @@ test('online authority validates and broadcasts Clear Skies before the roll', ()
     'clearSkies',
     'loadedKnuckles',
   ]);
-  state = lobby.act('ada', { type: 'pickAbility', abilityId: 'jinx' })!.update.state;
-  state = lobby.act('basil', { type: 'pickAbility', abilityId: 'clearSkies' })!.update.state;
+  assert.ok(lobby.act('ada', { type: 'pickAbility', abilityId: 'jinx' }));
+  assert.ok(lobby.act('basil', { type: 'pickAbility', abilityId: 'clearSkies' }));
   forcedDice.push(2, 3);
   state = lobby.act('ada', { type: 'roll' })!.update.state;
   while (state.phase === 'WAITING_FOR_MOVE') {

@@ -434,8 +434,8 @@ async function activateDraftedPower(pages, owner, ability) {
         `button.ability-slot[data-instance="${ability.instanceId}"]`,
       );
       if (!(await chip.isVisible())) {
-        state = await exhaustOnlineMoves(pages);
-        state = await endOnlineTurn(pages);
+        await exhaustOnlineMoves(pages);
+        await endOnlineTurn(pages);
         continue;
       }
       await chip.click();

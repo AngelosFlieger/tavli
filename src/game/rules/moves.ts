@@ -44,7 +44,10 @@ export function legalMoves(position: Position, player: Player, dice: number[]): 
     const key =
       pos.board.map((stack) => stack.map(owner).join('')).join('/') +
       '|' +
-      left.slice().sort().join(',');
+      left
+        .slice()
+        .sort((a, b) => a - b)
+        .join(',');
     const cached = memo.get(key);
     if (cached !== undefined) return cached;
     let best = 0;
@@ -98,7 +101,7 @@ export function moveSequences(
       '|' +
       sequence
         .map((move) => move.die)
-        .sort()
+        .sort((a, b) => a - b)
         .join(',');
     if (!unique.has(key)) unique.set(key, sequence);
   }
