@@ -6,6 +6,7 @@ import type { CommandRequest } from '../src/net/messages';
 test('online authority owns seat, command identity, acknowledgement, and reconnect lifetime', () => {
   const authority = new OnlineAuthorityClient();
   const sent: CommandRequest[] = [];
+
   authority.join(1, (request) => sent.push(request));
 
   assert.equal(authority.connected, true);

@@ -31,6 +31,7 @@ export const abilityDefinitions = {
 };
 
 export type AbilityId = keyof typeof abilityDefinitions;
+
 export type DefinitionOf<Id extends AbilityId> = (typeof abilityDefinitions)[Id];
 
 type ConfigOf<Definition> = Definition extends {
@@ -63,5 +64,6 @@ export function abilityCopy(
   const definition = abilityDefinitions[id] as unknown as {
     copy: (config: AbilityConfigBase) => import('../base').AbilityCopyDescriptor;
   };
+
   return definition.copy(abilities[id]);
 }

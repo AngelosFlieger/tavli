@@ -5,7 +5,9 @@ import type { CheckerSpot } from './board-presentation';
 export type AnimationStage = { position: Position; pinPoint: number | null };
 
 const PIN_MOVE_SECONDS = 1.5;
+
 const PIN_IMPACT_SECONDS = 0.5;
+
 const PIN_ZOOM = 0.38;
 
 /** Describe each landing before the game or server state is finalized for presentation. */
@@ -16,6 +18,7 @@ export function prepareAnimationStages(
   positions?: Position[],
 ): AnimationStage[] {
   let before = start;
+
   return sequence.map((move, index) => {
     const destination = move.to < 0 ? [] : before.board[move.to];
     // A combined move may pass over an enemy singleton and immediately leave it again. The
@@ -26,7 +29,9 @@ export function prepareAnimationStages(
         ? move.to
         : null;
     const position = positions?.[index] ?? applyMove(before, player, move);
+
     before = position;
+
     return { position, pinPoint };
   });
 }
@@ -81,19 +86,25 @@ export function createMoveAnimator({
     clearImpact();
     animationTime = 0;
     activePinPoint = stage.pinPoint;
+
     const destinations = spots(stage.position);
+
     if (activePinPoint !== null && !reducedMotion.matches && motionEnabled()) {
       root.updateMatrixWorld(true);
+
       const impact = destinations
         .get(movingChecker)!
         .at.clone()
         .applyMatrix4(root.matrixWorld)
         .project(camera);
+
       canvas.style.transformOrigin = `${(impact.x + 1) * 50}% ${(1 - impact.y) * 50}%`;
       canvas.style.willChange = 'transform, filter';
     }
+
     frames = [...destinations].map(([id, spot]) => {
       applySpot(id, spot);
+
       return {
         object: checkers[id],
         start: checkers[id].position.clone(),
@@ -116,10 +127,13 @@ export function createMoveAnimator({
 
   function start(stages: AnimationStage[], checker: number, done: () => void) {
     cancel();
+
     if (!stages.length) {
       done();
+
       return;
     }
+
     movingChecker = checker;
     onComplete = done;
     pending = stages.slice(1);
@@ -128,12 +142,15 @@ export function createMoveAnimator({
 
   function update(dt: number) {
     if (!onComplete) return;
+
     animationTime += dt;
+
     const impact = activePinPoint !== null && !reducedMotion.matches && motionEnabled();
     const moveDuration = reducedMotion.matches ? 0.02 : impact ? PIN_MOVE_SECONDS : 0.32;
     const impactHold = impact ? PIN_IMPACT_SECONDS : 0;
     const t = Math.min(animationTime / moveDuration, 1),
       ease = impact ? t ** 3.2 : t * t * (3 - 2 * t);
+
     for (const animation of frames) {
       animation.object.position.lerpVectors(animation.start, animation.end, ease);
       animation.object.quaternion.slerpQuaternions(
@@ -141,6 +158,7 @@ export function createMoveAnimator({
         animation.toRotation,
         ease,
       );
+
       if (animation.moving)
         animation.object.position.y += impact
           ? Math.sin(Math.PI * t ** 0.65) * 0.11
@@ -158,14 +176,18 @@ export function createMoveAnimator({
       const shakeY =
         hitTime > 0 ? (Math.cos(hitTime * 147) + 0.35 * Math.sin(hitTime * 307)) * 9 * rumble : 0;
       const flash = hitTime > 0 ? Math.exp(-hitTime * 12) : 0;
+
       canvas.style.transform = `translate(${shakeX}px, ${shakeY}px) scale(${zoom})`;
       canvas.style.filter = `brightness(${1 + 0.3 * flash}) saturate(${1 + 0.42 * flash})`;
     }
     if (animationTime < moveDuration + impactHold) return;
+
     clearImpact();
+
     if (pending.length) animateStage(pending.shift()!);
     else {
       const done = onComplete;
+
       onComplete = null;
       frames = [];
       done();

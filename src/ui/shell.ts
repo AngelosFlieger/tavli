@@ -11,6 +11,7 @@ import { createTitleScreen, type TitleScreen } from './title-screen';
 export type { Session } from './session';
 
 let titleScreen: TitleScreen;
+
 let settingsPanel: SettingsPanel;
 
 /**
@@ -32,7 +33,9 @@ export function initShell(session: Session) {
   });
   document.addEventListener('click', (event) => {
     const target = event.target;
+
     if (!(target instanceof Element) || !target.closest('button')) return;
+
     playClick();
   });
   document.querySelector('#portrait1')!.innerHTML = portrait(false);
@@ -40,6 +43,7 @@ export function initShell(session: Session) {
   document.querySelector('#waiting-portrait')!.innerHTML = portrait(false);
 
   const playtest = createPlaytestTools();
+
   titleScreen = createTitleScreen(session, playtest);
   settingsPanel = createSettingsPanel({
     session,

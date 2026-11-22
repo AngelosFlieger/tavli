@@ -20,6 +20,7 @@ export function createDieSelectionOverlay(
   const targets = dice.map((_die, index) => {
     const dieIndex = index as DieIndex;
     const target = document.createElement('button');
+
     target.type = 'button';
     target.className = 'die-target';
     target.dataset.die = String(index);
@@ -27,6 +28,7 @@ export function createDieSelectionOverlay(
     target.hidden = true;
     target.addEventListener('pointerenter', () => (hovered = dieIndex));
     target.addEventListener('pointerleave', () => (hovered = null));
+
     const select = () => {
       if (selectable.includes(dieIndex)) callbacks.selectDie(dieIndex);
     };
@@ -34,6 +36,7 @@ export function createDieSelectionOverlay(
       event.preventDefault();
       select();
     };
+
     target.addEventListener('pointerdown', selectOnPress);
     // Keep desktop selection reliable when assistive input does not synthesize pointer events. A
     // successful press clears eligibility, so the following mouse event cannot activate twice.
@@ -43,6 +46,7 @@ export function createDieSelectionOverlay(
       if (event.detail === 0) select();
     });
     document.body.append(target);
+
     return target;
   });
 
@@ -51,17 +55,22 @@ export function createDieSelectionOverlay(
       selectable = rolling ? [] : callbacks.selectableDice();
       dice.forEach((die, index) => {
         const target = targets[index];
+
         target.hidden = !selectable.includes(index as DieIndex) || !die.visible;
+
         if (target.hidden) positionsLocked[index] = false;
         else if (!positionsLocked[index]) {
           die.getWorldPosition(projected).project(camera);
+
           const rect = canvas.getBoundingClientRect();
+
           target.style.left = `${rect.left + ((projected.x + 1) / 2) * rect.width}px`;
           target.style.top = `${rect.top + ((1 - projected.y) / 2) * rect.height}px`;
           positionsLocked[index] = true;
         }
       });
       canvas.dataset.selectableDice = selectable.join(',');
+
       return selectable;
     },
     hovered: () => hovered,

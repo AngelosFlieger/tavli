@@ -23,17 +23,21 @@ export const clearSkies = defineAbility<'clearSkies', ClearSkiesConfig>({
   timing: 'BEFORE_ROLL',
   validateConfig(value) {
     const input = record(value, 'clearSkies');
+
     exactKeys(
       input,
       ['enabled', 'offerWeight', 'maxEffects', 'removableTags', 'canTargetOpponentPositive'],
       'clearSkies',
     );
+
     const removableTags = uniqueList(
       input.removableTags,
       ['CONTROL', 'DICE_PENALTY', 'PROTECTION'],
       'clearSkies.removableTags',
     );
+
     if (!removableTags.length) throw new Error('clearSkies.removableTags must not be empty');
+
     return {
       ...baseConfig(input, 'clearSkies'),
       maxEffects: integer(input.maxEffects, 'clearSkies.maxEffects', 1),
@@ -60,17 +64,22 @@ export const clearSkies = defineAbility<'clearSkies', ClearSkiesConfig>({
     },
     apply(state, player, target, config) {
       if (target.type !== 'EFFECT') return [];
+
       const eligible = removableEffects(state, player, config);
       const selected = eligible.find((effect) => effect.instanceId === target.instanceId);
+
       if (!selected) return [];
+
       const removed = [selected, ...eligible.filter((effect) => effect !== selected)].slice(
         0,
         config.maxEffects,
       );
       const removedIds = new Set(removed.map((effect) => effect.instanceId));
+
       state.powerups!.activeEffects = state.powerups!.activeEffects.filter(
         (effect) => !removedIds.has(effect.instanceId),
       );
+
       return removed;
     },
   },
@@ -83,10 +92,12 @@ function removableEffects(
 ): ActiveEffect[] {
   return (state.powerups?.activeEffects ?? []).filter((effect) => {
     if (effect.source === player) return false;
+
     const matchedTags = effect.tags.filter((tag) => config.removableTags.includes(tag));
     const hostile =
       effect.affectedPlayer === player && matchedTags.some((tag) => tag !== 'PROTECTION');
     const opponentPositive = config.canTargetOpponentPositive && matchedTags.includes('PROTECTION');
+
     return hostile || opponentPositive;
   });
 }

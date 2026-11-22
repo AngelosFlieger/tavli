@@ -26,7 +26,9 @@ const frozenIds = [
   'homeGuard',
   'opportunist',
 ] as const;
+
 const frozenHashes = { 'powerups-v1': 'v1-cabaf9b7', 'fast-balance': 'v1-fe28e959' };
+
 const frozenOffers = [
   { seed: 123456789, profile: 'powerups-v1', offer: ['nudge', 'recast', 'opportunist'] },
   { seed: 987654321, profile: 'fast-balance', offer: ['nudge', 'jinx', 'homeGuard'] },
@@ -35,8 +37,10 @@ const frozenOffers = [
 /** Small deterministic generator; the exact stream is part of the frozen draft expectations. */
 function lcg(start: number) {
   let seed = start;
+
   return (maximum: number) => {
     seed = (seed * 1664525 + 1013904223) >>> 0;
+
     return seed % maximum;
   };
 }
@@ -55,6 +59,7 @@ test('seeded draft offers stay stable', () => {
   for (const expected of frozenOffers) {
     const profile = expected.profile === 'powerups-v1' ? POWERUPS_V1 : FAST_BALANCE;
     const state = initialGameState(powerupsRules(profile));
+
     assert.deepEqual(
       sampleDraftOffer(state.powerups!, profile, lcg(expected.seed)),
       [...expected.offer],
@@ -80,9 +85,12 @@ test('every ability has a name and summary entry in both catalogs', () => {
 
 test('presenter entries are optional and every ability has default copy', () => {
   assert.equal(rollAbilityPrompt('frostSeal', 'Frost Seal'), 'Choose how to use Frost Seal');
+
   for (const abilityId of frozenIds) {
     const prompt = rollAbilityPrompt(abilityId, 'Ability');
+
     assert.ok(prompt.length > 0, `no roll prompt copy for ${abilityId}`);
+
     if (abilityId in abilityPresenters) assert.ok(abilityPresenters[abilityId]);
   }
 });

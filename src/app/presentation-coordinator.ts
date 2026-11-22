@@ -20,13 +20,17 @@ export class PresentationCoordinator {
 
   begin(kind: PresentationKind): PresentationTicket {
     const ticket = { id: ++this.sequence, kind };
+
     this.active = ticket;
+
     return ticket;
   }
 
   complete(ticket: PresentationTicket): boolean {
     if (this.active?.id !== ticket.id) return false;
+
     this.active = null;
+
     return true;
   }
 

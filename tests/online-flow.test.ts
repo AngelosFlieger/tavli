@@ -14,6 +14,7 @@ import { PresentationCoordinator } from '../src/app/presentation-coordinator';
 import { resolvedOpeningState } from './support/resolved-opening';
 
 const cursor = { matchId: 'match-1', revision: 0 } as const;
+
 const update = <T extends object>(revision: number, value: T) => ({
   matchId: cursor.matchId,
   revision,
@@ -26,6 +27,7 @@ test('online opening adopts resolved authority before presenting all paired atte
   const presentation = new PresentationCoordinator();
   const calls: string[] = [];
   const state = structuredClone(controller.state);
+
   state.opening = {
     status: 'RESOLVED',
     attempts: [
@@ -37,6 +39,7 @@ test('online opening adopts resolved authority before presenting all paired atte
   state.phase = 'WAITING_FOR_ROLL';
   state.active = 0;
   state.roll = [6, 1];
+
   const scene: OnlineScene = {
     faceSeat() {},
     presentState() {
@@ -52,6 +55,7 @@ test('online opening adopts resolved authority before presenting all paired atte
     reset() {},
   };
   const flow = createOnlineGameFlow(controller, scene, dice, presentation);
+
   flow.join(0, () => {}, state, false, null, cursor, [
     { type: 'OPENING', blocking: true, attempts: state.opening.attempts },
   ]);
@@ -71,10 +75,12 @@ test('online opening cannot retain an input lock when its renderer is unavailabl
   const controller = new GameController();
   const presentation = new PresentationCoordinator();
   const state = structuredClone(controller.state);
+
   state.opening = { status: 'RESOLVED', attempts: [[6, 1]], winner: 0 };
   state.phase = 'WAITING_FOR_ROLL';
   state.active = 0;
   state.roll = [6, 1];
+
   const scene: OnlineScene = {
     faceSeat() {},
     presentState() {},
@@ -82,6 +88,7 @@ test('online opening cannot retain an input lock when its renderer is unavailabl
   };
   const dice: OnlineDice = { play() {}, reset() {} };
   const flow = createOnlineGameFlow(controller, scene, dice, presentation);
+
   flow.join(0, () => {}, state, false, null, cursor, [
     { type: 'OPENING', blocking: true, attempts: state.opening.attempts },
   ]);
@@ -112,11 +119,13 @@ test('online flow adopts authority immediately while presentations block input',
     reset: () => calls.push('dice-reset'),
   };
   const flow = createOnlineGameFlow(controller, scene, dice, presentation);
+
   flow.join(0, () => {}, controller.state, false, null, cursor);
   assert.deepEqual(calls, ['face', 'present', 'dice-reset']);
   assert.equal(controller.seat, 0);
 
   const rolled = structuredClone(controller.state);
+
   rolled.active = 1;
   flow.receive(
     update(1, {
@@ -151,12 +160,15 @@ test('online flow adopts authority immediately while presentations block input',
   flow.presentedRoll();
 
   const ready = structuredClone(controller.state);
+
   ready.active = 0;
   ready.opening = { status: 'RESOLVED', attempts: [[6, 1]], winner: 0 };
   ready.phase = 'WAITING_FOR_MOVE';
   ready.remaining = [2];
   flow.receive(update(3, { state: ready, canUndo: false }));
+
   const moved = structuredClone(ready);
+
   moved.board[2] = [moved.board[0].pop()!];
   moved.remaining = [];
   moved.phase = 'TURN_COMPLETE';
@@ -196,7 +208,9 @@ test('online flow adopts authority immediately while presentations block input',
   flow.leave();
   assert.equal(controller.seat, null);
   assert.equal(controller.state.phase, 'OPENING');
+
   const afterLeave = calls.length;
+
   flow.receive(update(6, { state: rolled, canUndo: false }));
   assert.equal(controller.state.phase, 'OPENING');
   assert.equal(calls.length, afterLeave);
@@ -218,13 +232,18 @@ test('interrupted remote presentation adopts once and ignores a late completion'
   };
   const dice: OnlineDice = { play() {}, reset() {} };
   const flow = createOnlineGameFlow(controller, scene, dice, presentation);
+
   flow.join(0, () => {}, controller.state, false, null, cursor);
+
   const ready = structuredClone(controller.state);
+
   ready.opening = { status: 'RESOLVED', attempts: [[6, 1]], winner: 0 };
   ready.phase = 'WAITING_FOR_MOVE';
   ready.remaining = [2];
   flow.receive(update(1, { state: ready, canUndo: false }));
+
   const moved = structuredClone(ready);
+
   moved.board[2] = [moved.board[0].pop()!];
   moved.remaining = [];
   moved.phase = 'TURN_COMPLETE';
@@ -246,7 +265,9 @@ test('interrupted remote presentation adopts once and ignores a late completion'
   assert.deepEqual(controller.state.board[2], [14]);
   assert.equal(controller.busy, false);
   assert.equal(presentation.blocking, false);
+
   const afterInterruption = presents;
+
   done();
   assert.equal(presents, afterInterruption);
 });
@@ -273,9 +294,11 @@ test('a newer authoritative update cancels an unfinished dice presentation', () 
     },
     presentation,
   );
+
   flow.join(0, () => {}, controller.state, false, null, cursor);
 
   const rolled = structuredClone(controller.state);
+
   rolled.active = 1;
   flow.receive(
     update(1, {
@@ -285,16 +308,20 @@ test('a newer authoritative update cancels an unfinished dice presentation', () 
     }),
   );
   assert.equal(presentation.blocking, true);
+
   const resetBeforeInterruption = resets;
 
   const newer = structuredClone(rolled);
+
   newer.phase = 'WAITING_FOR_ROLL';
   flow.receive(update(2, { state: newer, canUndo: false }));
 
   assert.equal(controller.state.phase, 'WAITING_FOR_ROLL');
   assert.equal(presentation.blocking, false);
   assert.equal(resets, resetBeforeInterruption + 1);
+
   const afterInterruption = presents;
+
   flow.presentedRoll();
   assert.equal(presents, afterInterruption);
 });
@@ -313,14 +340,19 @@ test('online flow ignores older revisions and updates from another match', () =>
     },
     { play() {}, reset() {} },
   );
+
   flow.join(0, () => {}, controller.state, false, null, cursor);
+
   const current = structuredClone(controller.state);
+
   current.active = 1;
   flow.receive(update(2, { state: current, canUndo: false }));
   assert.equal(controller.state.active, 1);
+
   const afterCurrent = presentations;
 
   const stale = structuredClone(current);
+
   stale.active = 0;
   flow.receive(update(1, { state: stale, canUndo: false }));
   flow.receive({
@@ -343,10 +375,13 @@ test('only the matching command result releases an online operation', () => {
     { faceSeat() {}, presentState() {}, playRemoteMove() {} },
     { play() {}, reset() {} },
   );
+
   flow.join(0, (request) => requests.push(request), resolvedOpeningState(), false, null, cursor);
 
   assert.equal(controller.beginRoll(), true);
+
   const first = requests.at(-1)!.commandId;
+
   flow.receive({
     ...cursor,
     state: controller.state,
@@ -357,7 +392,9 @@ test('only the matching command result releases an online operation', () => {
   assert.equal(controller.busy, false);
 
   assert.equal(controller.beginRoll(), true);
+
   const second = requests.at(-1)!.commandId;
+
   assert.notEqual(second, first);
   flow.receive({
     ...cursor,

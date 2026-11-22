@@ -28,17 +28,22 @@ export function createGameplayActions(
   return {
     move(sequence: Move[]) {
       const request = controller.requestMove(sequence, setupLocked());
+
       if (!request) return;
       if (request.type === 'sent') {
         scene.refresh(false);
+
         return;
       }
+
       const complete = () => {
         if (pendingMoveCompletion !== complete) return;
+
         pendingMoveCompletion = null;
         controller.finishLocalMove();
         scene.refresh();
       };
+
       pendingMoveCompletion = complete;
       scene.playLocalMove(sequence, request, complete);
       scene.refresh(false);
@@ -48,7 +53,9 @@ export function createGameplayActions(
     },
     restart() {
       if (controller.restart(setupLocked()) !== 'local') return;
+
       const attempts = controller.resolveLocalOpening();
+
       dice.reset();
       scene.startSetup(() => {
         if (attempts) dice.playOpening(attempts);
@@ -57,12 +64,15 @@ export function createGameplayActions(
     },
     forfeit() {
       if (!controller.forfeit(setupLocked())) return;
+
       scene.refresh(false);
     },
     canRestart: () => controller.canRestart(setupLocked()),
     beginRoll() {
       const accepted = controller.beginRoll(setupLocked());
+
       if (accepted) scene.refresh(false);
+
       return accepted;
     },
     receiveRoll(values: number[]) {
@@ -71,25 +81,33 @@ export function createGameplayActions(
     },
     finishTurn() {
       if (!controller.endTurn(setupLocked())) return false;
+
       scene.refresh();
+
       return true;
     },
     playRollAbility(option: RollAbilityOption) {
       const request = controller.requestRollAbility(option);
+
       if (!request) return;
+
       scene.refresh();
+
       if (request.type === 'local' && request.dice) dice.play(request.dice, request.rerolledDie);
     },
     playBeforeRollAbility(target: AbilityTarget) {
       if (!controller.requestBeforeRollAbility(target)) return;
+
       scene.refresh();
     },
     finishInterruptedMove() {
       if (!controller.hasLocalMove) return;
       if (pendingMoveCompletion) {
         pendingMoveCompletion();
+
         return;
       }
+
       controller.finishLocalMove();
       scene.refresh();
     },

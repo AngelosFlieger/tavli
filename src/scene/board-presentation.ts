@@ -15,6 +15,7 @@ export function createBoardPresentation(
 ) {
   function trayWorld(player: number, index: number, stage: 'start' | 'finish' = 'finish') {
     const tray = trayPosition(player, index, heights[player] - 0.0004, layout.depth, stage);
+
     return new THREE.Vector3(
       tray.x - center.x,
       tray.y - center.y,
@@ -24,9 +25,11 @@ export function createBoardPresentation(
 
   function spots(position: Position) {
     const targets = new Map<number, CheckerSpot>();
+
     position.board.forEach((stack, point) => {
       const { x, z } = pointPosition(point);
       const mixed = stack.length > 1 && owner(stack[0]) !== owner(stack.at(-1)!);
+
       stack.forEach((id, index) => {
         // A pinned checker is always physically beneath the controller, sharing its first slot.
         const slot = mixed ? Math.max(0, index - 1) : index;
@@ -34,6 +37,7 @@ export function createBoardPresentation(
           0.0274 +
           Math.floor(slot / layout.stackSlots) * heights[owner(id)] +
           (mixed && index > 0 ? heights[owner(stack[0])] : 0);
+
         targets.set(id, {
           at: new THREE.Vector3(
             x - center.x,
@@ -51,6 +55,7 @@ export function createBoardPresentation(
         targets.set(id, { at: trayWorld(player, index), flat: true, pinned: false }),
       ),
     );
+
     return targets;
   }
 
@@ -70,11 +75,13 @@ export function createBoardPresentation(
 
   function deal(position: Position, elapsed: number) {
     const targets = spots(position);
+
     checkers.forEach((checker, id) => {
       const player = owner(id),
         index = id % 15;
       const t = Math.min(1, Math.max(0, (elapsed - 0.25 - index * 0.045) / 0.82));
       const ease = t * t * (3 - 2 * t);
+
       checker.position.copy(trayWorld(player, index, 'start')).lerp(targets.get(id)!.at, ease);
       checker.position.y += Math.sin(t * Math.PI) * 0.07;
       checker.rotation.set(

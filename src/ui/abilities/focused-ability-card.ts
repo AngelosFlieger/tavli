@@ -26,25 +26,33 @@ export function createFocusedAbilityCard(
     !locked() &&
     controller.abilityIsPlayable(instance.instanceId);
   const detailCard = document.createElement('aside');
+
   detailCard.className = 'ability-focus-card';
   detailCard.dataset.kind = abilityRegistry[instance.abilityId].kind;
   detailCard.dataset.ability = instance.abilityId;
+
   const close = document.createElement('button');
+
   close.className = 'ability-focus-close';
   close.type = 'button';
   close.setAttribute('aria-label', t('ability.close'));
   close.textContent = '×';
   close.onclick = () => {
     if (controller.selectedAbility?.instanceId === instance.instanceId) actions.cancelAbility();
+
     closeCard();
     requestRender();
   };
   detailCard.append(close, createAbilityCardContent(instance.abilityId, config, 'FOCUS'));
+
   const use = document.createElement('button');
+
   use.type = 'button';
   use.className = 'ability-use';
+
   const selected = controller.selectedAbility?.instanceId === instance.instanceId;
   const passive = abilityRegistry[instance.abilityId].kind === 'PASSIVE';
+
   use.disabled = !canUse || selected;
   use.textContent = selected
     ? t('ability.selected')
@@ -57,5 +65,6 @@ export function createFocusedAbilityCard(
     if (actions.selectAbility(instance.instanceId)) requestRender();
   };
   detailCard.append(use);
+
   return detailCard;
 }

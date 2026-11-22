@@ -32,6 +32,7 @@ export function createAbilityDraftDialog(
   function render() {
     const config = controller.variantConfig;
     const powerups = controller.state.powerups;
+
     if (!config || !powerups?.draft) {
       panel.hidden = true;
       pendingAbility = null;
@@ -40,11 +41,14 @@ export function createAbilityDraftDialog(
       revealingOrder = false;
       clearTimeout(revealTimer);
       delete contestants.dataset.rollPresentations;
+
       return;
     }
 
     panel.hidden = false;
+
     const draft = powerups.draft;
+
     if (draft.stage !== 'PICKING') {
       panel.dataset.stage = 'ROLLING';
       status.textContent = t('draft.drawing');
@@ -52,18 +56,22 @@ export function createAbilityDraftDialog(
       contestants.replaceChildren();
       cards.replaceChildren();
       replacement.replaceChildren();
+
       return;
     }
 
     const key = `${draft.currentPick}:${draft.offer.join(',')}`;
+
     if (key !== renderedDraftKey) {
       pendingAbility = null;
       renderedDraftKey = key;
     }
+
     const picker = draft.pickOrder[draft.currentPick];
     const canPick = controller.mine() && !locked();
     const lastRoll = draft.attempts.at(-1);
     const orderKey = `${draft.offer.join(',')}:${draft.attempts.map((roll) => roll.join('-')).join(',')}`;
+
     if (draft.currentPick === 0 && lastRoll && orderKey !== presentedOrderKey) {
       presentedOrderKey = orderKey;
       revealingOrder = true;
@@ -71,13 +79,17 @@ export function createAbilityDraftDialog(
         Number(contestants.dataset.rollPresentations ?? 0) + 1,
       );
       clearTimeout(revealTimer);
+
       const duration = matchMedia('(prefers-reduced-motion: reduce)').matches ? 260 : 1450;
+
       revealTimer = window.setTimeout(() => {
         if (presentedOrderKey !== orderKey) return;
+
         revealingOrder = false;
         requestRender();
       }, duration);
     }
+
     panel.dataset.stage = revealingOrder ? 'ROLLING' : 'PICKING';
     status.textContent = revealingOrder
       ? t('draft.rolling')
@@ -102,11 +114,14 @@ export function createAbilityDraftDialog(
 
   function renderContestants(picker: 0 | 1, roll: [number, number] | undefined, rolling: boolean) {
     const key = `${picker}:${rolling}:${roll?.join('-') ?? ''}`;
+
     if (contestants.dataset.key === key) return;
+
     contestants.dataset.key = key;
     contestants.replaceChildren(
       ...([0, 1] as const).map((player) => {
         const card = document.createElement('article');
+
         card.className = 'draft-contestant';
         card.dataset.player = String(player);
         card.classList.toggle('is-picker', !rolling && player === picker);
@@ -119,14 +134,20 @@ export function createAbilityDraftDialog(
               ? t('draft.choosesNow', { player: player + 1 })
               : t('draft.waits', { player: player + 1 }),
         );
+
         const avatar = document.createElement('div');
+
         avatar.className = 'draft-avatar';
         avatar.innerHTML = portrait(player === 1);
+
         const caption = document.createElement('span');
+
         caption.textContent =
           player === picker && !rolling ? t('draft.chooseShort') : `P${player + 1}`;
         card.append(avatar, caption);
+
         if (roll && rolling) card.append(draftDie(roll[player], player));
+
         return card;
       }),
     );
@@ -136,6 +157,7 @@ export function createAbilityDraftDialog(
     const config = controller.variantConfig!;
     const copy = localizedAbilityCopy(abilityId, config);
     const button = document.createElement('button');
+
     button.className = 'draft-card';
     button.dataset.kind = abilityRegistry[abilityId].kind;
     button.dataset.ability = abilityId;
@@ -144,14 +166,17 @@ export function createAbilityDraftDialog(
     button.setAttribute('aria-label', t('draft.chooseAbilityName', { name: copy.name }));
     button.append(createAbilityCardContent(abilityId, config, 'DRAFT'));
     button.onclick = () => choose(abilityId, picker);
+
     return button;
   }
 
   function choose(abilityId: AbilityId, player: 0 | 1) {
     const inventory = inventoryFor(powerupsLoadout(player), abilityId);
+
     if (inventory.length >= controller.inventoryCapacity(player, abilityId)) {
       pendingAbility = abilityId;
       requestRender();
+
       return;
     }
     if (actions.pickAbility(abilityId)) {
@@ -162,10 +187,13 @@ export function createAbilityDraftDialog(
 
   function renderReplacement(player: 0 | 1, canPick: boolean) {
     replacement.replaceChildren();
+
     if (!pendingAbility) return;
+
     const config = controller.variantConfig!;
     const pendingCopy = localizedAbilityCopy(pendingAbility, config);
     const prompt = document.createElement('p');
+
     prompt.textContent = t('draft.slotsFull', {
       kind:
         abilityRegistry[pendingAbility].kind === 'POWERUP'
@@ -173,10 +201,14 @@ export function createAbilityDraftDialog(
           : t('draft.kind.passive'),
       name: pendingCopy.name,
     });
+
     const choices = document.createElement('div');
+
     choices.className = 'draft-replacement-choices';
+
     for (const instance of inventoryFor(powerupsLoadout(player), pendingAbility)) {
       const button = document.createElement('button');
+
       button.disabled = !canPick;
       button.textContent = t('draft.replace', {
         name: localizedAbilityCopy(instance.abilityId, config).name,
@@ -189,7 +221,9 @@ export function createAbilityDraftDialog(
       };
       choices.append(button);
     }
+
     const cancel = document.createElement('button');
+
     cancel.className = 'draft-replacement-cancel';
     cancel.textContent = t('draft.chooseAnother');
     cancel.onclick = () => {
@@ -221,22 +255,33 @@ const pipPositions: Record<number, number[]> = {
 
 function draftDie(value: number, player: 0 | 1) {
   const scene = document.createElement('div');
+
   scene.className = 'draft-die-scene';
+
   const cube = document.createElement('div');
+
   cube.className = 'draft-die-cube';
   cube.dataset.value = String(value);
   cube.dataset.player = String(player);
+
   for (const face of [1, 2, 3, 4, 5, 6]) {
     const side = document.createElement('span');
+
     side.className = `draft-die-face face-${face}`;
     side.setAttribute('aria-hidden', 'true');
+
     for (let pip = 0; pip < 9; pip++) {
       const dot = document.createElement('i');
+
       if (pipPositions[face].includes(pip)) dot.className = 'visible';
+
       side.append(dot);
     }
+
     cube.append(side);
   }
+
   scene.append(cube);
+
   return scene;
 }

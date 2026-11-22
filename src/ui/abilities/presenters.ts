@@ -38,6 +38,7 @@ export const abilityPresenters: Readonly<Partial<Record<AbilityId, AbilityPresen
     quartermaster: {
       counter: (state, player) => {
         const cooldown = quartermasterCooldown(state.powerups!, player);
+
         return cooldown ? t('ability.cooldown', { count: cooldown }) : null;
       },
     },
@@ -88,6 +89,7 @@ export function usesDirectDieSelection(abilityId: AbilityId): boolean {
 function adjustedDieLabel(state: GameState, option: RollAbilityOption, adjustment: number): string {
   const before = state.roll[option.target.index];
   const after = before + (option.option === 'INCREASE' ? adjustment : -adjustment);
+
   return t('ability.dieAdjusted', {
     die: option.target.index + 1,
     before,

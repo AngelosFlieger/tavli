@@ -42,6 +42,7 @@ test('match session cancels searches and rejects a late pairing', () => {
     },
     (next) => {
       events = next;
+
       return transport;
     },
   );
@@ -91,6 +92,7 @@ test('match session joins, forwards updates, and leaves after disconnect', () =>
     },
     (next) => {
       events = next;
+
       return {
         connect: () => {},
         find: () => calls.push('find'),
@@ -104,7 +106,9 @@ test('match session joins, forwards updates, and leaves after disconnect', () =>
   match.toggleSearch();
   events.onMatched(0, ['Alice', 'Bob'], resolvedOpeningState(), null, cursor);
   assert.deepEqual(calls.slice(-5), ['search-false', 'note-null', 'join-0', 'enter', 'setup']);
+
   const callsAfterMatch = calls.length;
+
   match.toggleSearch();
   assert.equal(match.startLocal(), false);
   assert.equal(calls.length, callsAfterMatch);
@@ -134,7 +138,9 @@ test('match session joins, forwards updates, and leaves after disconnect', () =>
     'note-Can’t reach the game server.',
   ]);
   assert.equal(controller.scripted, false);
+
   const callsAfterClose = calls.length;
+
   events.onUpdate({
     ...cursor,
     revision: 2,
@@ -161,6 +167,7 @@ test('match session forwards an explicit powerup selection to matchmaking', () =
       send() {},
     }),
   );
+
   match.toggleSearch({ ruleset: 'POWERUPS_V1', profileId: 'powerups-v1' });
   assert.deepEqual(selection, { ruleset: 'POWERUPS_V1', profileId: 'powerups-v1' });
 });
@@ -196,6 +203,7 @@ test('match session configures an explicit local powerup game', () => {
   assert.equal(opening, undefined);
   setupComplete?.();
   assert.equal(controller.state.opening.status, 'RESOLVED');
+
   if (controller.state.opening.status === 'RESOLVED')
     assert.deepEqual(opening, controller.state.opening.attempts);
 });
@@ -228,7 +236,9 @@ test('match session restarts the local random stream from an explicit playtest s
 
   assert.equal(match.startLocal({ ruleset: 'CLASSIC' }, 12345), true);
   assert.equal(controller.beginRoll(), true);
+
   const first = controller.takeForcedLocalRoll();
+
   controller.receiveRoll(first!);
 
   assert.equal(match.startLocal({ ruleset: 'CLASSIC' }, 12345), true);
@@ -263,6 +273,7 @@ test('leaving the table resets local play and abandons only an online seat', () 
     },
     (next) => {
       events = next;
+
       return {
         connect: () => {},
         find: () => calls.push('find'),

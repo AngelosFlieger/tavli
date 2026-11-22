@@ -13,6 +13,7 @@ export type HistoryEntry = {
 };
 
 const storageKey = 'plakoto-history';
+
 export const historyLimit = 50;
 
 export function createHistoryEntry(
@@ -47,7 +48,9 @@ export function addHistoryEntry(entries: HistoryEntry[], entry: HistoryEntry): H
 
 export function isHistoryEntry(value: unknown): value is HistoryEntry {
   if (!value || typeof value !== 'object') return false;
+
   const entry = value as Partial<HistoryEntry>;
+
   return (
     entry.version === 1 &&
     typeof entry.id === 'string' &&
@@ -63,6 +66,7 @@ export function isHistoryEntry(value: unknown): value is HistoryEntry {
 
 export function parseHistory(raw: unknown): HistoryEntry[] {
   if (!Array.isArray(raw)) return [];
+
   return raw.filter(isHistoryEntry);
 }
 

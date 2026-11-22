@@ -20,6 +20,7 @@ export function createDraftPanel(
 
   function render() {
     const config = controller.variantConfig;
+
     loadouts.render(config ? controller.state.powerups?.loadouts : undefined);
     draft.render();
   }

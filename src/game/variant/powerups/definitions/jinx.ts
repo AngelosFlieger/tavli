@@ -27,6 +27,7 @@ export const jinx = defineAbility<'jinx', JinxConfig>({
   timing: 'WITH_END_TURN',
   validateConfig(value) {
     const input = record(value, 'jinx');
+
     exactKeys(
       input,
       [
@@ -42,8 +43,11 @@ export const jinx = defineAbility<'jinx', JinxConfig>({
       ],
       'jinx',
     );
+
     const minimumToken = integer(input.minimumToken, 'jinx.minimumToken', 1);
+
     if (minimumToken > 6) throw new Error('jinx.minimumToken must be <= 6');
+
     return {
       ...baseConfig(input, 'jinx'),
       duration: duration(input.duration, 'jinx.duration', ['NEXT_DRAFT']),

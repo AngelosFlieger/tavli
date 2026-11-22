@@ -27,6 +27,7 @@ export function beforeRollAbilityTargets(
   config: ResolvedVariantConfig,
 ): AbilityTarget[] {
   const powerups = state.powerups;
+
   if (
     state.phase !== 'WAITING_FOR_ROLL' ||
     state.opening.status === 'PENDING' ||
@@ -35,15 +36,18 @@ export function beforeRollAbilityTargets(
     !canUsePowerup(powerups, player, config)
   )
     return [];
+
   const instance = powerups.loadouts[player].powerups.find(
     (candidate) => candidate.instanceId === instanceId,
   );
+
   if (
     !instance ||
     abilityRegistry[instance.abilityId].timing !== 'BEFORE_ROLL' ||
     !hasBeforeRollAbilityBehavior(instance.abilityId)
   )
     return [];
+
   return configuredBeforeRollTargets(instance.abilityId, state, player, config);
 }
 
@@ -54,15 +58,21 @@ export function activateBeforeRollAbility(
   config: ResolvedVariantConfig,
 ): BeforeRollAbilityResult | null {
   const powerups = state.powerups;
+
   if (!powerups || !canUsePowerup(powerups, player, config)) return null;
+
   const inventory = powerups.loadouts[player].powerups;
   const index = inventory.findIndex((instance) => instance.instanceId === activation.instanceId);
   const instance = inventory[index];
+
   if (!instance || !hasBeforeRollAbilityBehavior(instance.abilityId)) return null;
+
   const legal = beforeRollAbilityTargets(state, player, activation.instanceId, config).some(
     (target) => sameTarget(target, activation.target),
   );
+
   if (!legal) return null;
+
   const removed = applyConfiguredBeforeRoll(
     instance.abilityId,
     state,
@@ -70,9 +80,12 @@ export function activateBeforeRollAbility(
     activation.target,
     config,
   );
+
   if (!removed.length) return null;
+
   inventory.splice(index, 1);
   recordPowerupUse(powerups, player, config);
+
   return { abilityId: instance.abilityId, removed };
 }
 

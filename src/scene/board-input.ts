@@ -65,21 +65,26 @@ export function createBoardInput({
 
   function refresh() {
     const current = state();
+
     view = pickup.refresh(current, canInteract(), locked());
     preview.select(view.queue);
+
     if (view.queue.length) preview.followPointer(pointer);
     if (!view.queue.length && canvas.style.cursor === 'none') canvas.style.cursor = 'default';
+
     return view;
   }
 
   function hit(event: PointerEvent) {
     const rect = canvas.getBoundingClientRect();
+
     pointer.set(
       ((event.clientX - rect.left) / rect.width) * 2 - 1,
       (-(event.clientY - rect.top) / rect.height) * 2 + 1,
     );
     root.updateMatrixWorld(true);
     raycaster.setFromCamera(pointer, camera);
+
     return raycaster.intersectObjects(hitTargets, false)[0]?.object.userData.point as
       number | undefined;
   }
@@ -87,27 +92,40 @@ export function createBoardInput({
   canvas.addEventListener('pointerdown', (event) => {
     if (canTargetAbility()) {
       const point = hit(event);
+
       if (point !== undefined && abilityTargets().includes(point))
         onIntent({ type: 'abilityTarget', point });
+
       return;
     }
     if (!canInteract()) return;
+
     const point = hit(event);
+
     if (point === undefined) {
       onIntent({ type: 'clear' });
+
       return;
     }
+
     const destinations = selectedSequences().filter((sequence) => sequence.at(-1)!.to === point);
+
     if (destinations.length && !event.shiftKey) {
       onIntent({ type: 'place', sequence: destinations[0] });
+
       return;
     }
+
     const checker = view.pickable[point];
+
     if (checker !== null) {
       onIntent({ type: 'pickUp', point });
+
       return;
     }
+
     const last = pickup.items.at(-1);
+
     if (last !== undefined && state().board[point].includes(last))
       onIntent({ type: 'releaseLast' });
   });
@@ -119,23 +137,32 @@ export function createBoardInput({
       (abilityTargets().includes(point) ||
         view.pickable[point] !== null ||
         selectedSequences().some((sequence) => sequence.at(-1)!.to === point));
+
     canvas.style.cursor = pickup.items.length ? 'none' : legal ? 'pointer' : 'default';
+
     if (pickup.items.length) {
       preview.followPointer(pointer);
+
       const sequence = selectedSequences().find((candidate) => candidate.at(-1)!.to === point);
+
       if (sequence) {
         let position: Position = { board: state().board, off: state().off };
+
         for (const move of sequence) position = applyMove(position, state().active!, move);
+
         preview.showLanding(spots(position).get(pickup.items[0])?.at ?? null);
       } else preview.showLanding(null);
     }
     if (hovered !== undefined) markers[hovered].scale.setScalar(1);
+
     hovered = legal ? point : undefined;
+
     if (hovered !== undefined) markers[hovered].scale.setScalar(1.16);
   });
 
   canvas.addEventListener('pointerleave', () => {
     if (hovered !== undefined) markers[hovered].scale.setScalar(1);
+
     hovered = undefined;
     canvas.style.cursor = 'default';
     preview.hidePointer();

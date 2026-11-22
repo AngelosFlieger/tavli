@@ -6,11 +6,15 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 export function createWaitingScatter(checkers: THREE.Group[], die: THREE.Group) {
   const scene = new THREE.Scene();
   const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 20);
+
   camera.position.z = 8;
   scene.add(new THREE.HemisphereLight(0xffe6ba, 0x1c1632, 2.4));
+
   const key = new THREE.DirectionalLight(0xffd5ad, 2.8);
+
   key.position.set(-3, 5, 7);
   scene.add(key);
+
   const items: {
     model: THREE.Object3D;
     x: number;
@@ -29,31 +33,41 @@ export function createWaitingScatter(checkers: THREE.Group[], die: THREE.Group) 
   ];
   const objects = items.map((item) => {
     const art = item.model.clone(true);
+
     art.position.sub(new THREE.Box3().setFromObject(art).getCenter(new THREE.Vector3()));
+
     const object = new THREE.Group();
+
     object.add(art);
     object.rotation.set(...item.rotation);
     scene.add(object);
+
     return object;
   });
   const breathing = createBreathing(objects);
   const pass = new RenderPass(scene, camera);
+
   pass.clear = false;
   pass.enabled = false;
+
   return {
     pass,
     update: breathing.update,
     resize(width: number, height: number, visible: boolean) {
       const aspect = width / height,
         portrait = width <= height;
+
       camera.left = -aspect;
       camera.right = aspect;
       camera.updateProjectionMatrix();
       objects.forEach((object, index) => {
         const item = items[index];
+
         object.rotation.set(...item.rotation);
         object.scale.setScalar(item.size * (portrait ? 0.63 : 1));
+
         const y = portrait && item.y > 0.2 ? 0.78 + index * 0.025 : item.y;
+
         object.position.set(item.x * aspect, y, 0);
       });
       breathing.capture();

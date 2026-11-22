@@ -15,19 +15,23 @@ export const homeGuard = defineAbility<'homeGuard', HomeGuardConfig>({
   kind: 'PASSIVE',
   validateConfig(value) {
     const input = record(value, 'homeGuard');
+
     exactKeys(
       input,
       ['enabled', 'offerWeight', 'protectOwnHome', 'restrictOpponentHome', 'excludeStartPoints'],
       'homeGuard',
     );
+
     const result = {
       ...baseConfig(input, 'homeGuard'),
       protectOwnHome: boolean(input.protectOwnHome, 'homeGuard.protectOwnHome'),
       restrictOpponentHome: boolean(input.restrictOpponentHome, 'homeGuard.restrictOpponentHome'),
       excludeStartPoints: boolean(input.excludeStartPoints, 'homeGuard.excludeStartPoints'),
     };
+
     if (!result.protectOwnHome && !result.restrictOpponentHome)
       throw new Error('homeGuard must enable its protection, restriction, or both');
+
     return result;
   },
   copy(config) {
@@ -59,23 +63,30 @@ export const homeGuard = defineAbility<'homeGuard', HomeGuardConfig>({
       },
       allows(position, player, move) {
         if (move.to === -1) return true;
+
         const powerups = (
           position as typeof position & {
             powerups?: import('../../types').PowerupsState | null;
           }
         ).powerups;
+
         if (!powerups) return true;
+
         const destination = position.board[move.to];
+
         if (destination.length !== 1 || owner(destination[0]) === player) return true;
+
         const defender = other(player);
         const attackerGuard = powerups.passivePolicies[player].homeGuard;
         const defenderGuard = powerups.passivePolicies[defender].homeGuard;
+
         if (
           (attackerGuard?.excludeStartPoints || defenderGuard?.excludeStartPoints) &&
           START_POINTS.has(move.to)
         )
           return true;
         if (!PLAYER_HOME_POINTS[defender].has(move.to)) return true;
+
         return !attackerGuard?.restrictOpponentHome && !defenderGuard?.protectOwnHome;
       },
     },

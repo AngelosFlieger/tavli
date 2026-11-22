@@ -22,9 +22,12 @@ export function createBoardAnnouncement() {
           player: playerNames?.[player] ?? t('target.player', { player: player + 1 }),
         }),
       );
+
       const ticket = sequence;
+
       window.setTimeout(() => {
         if (ticket !== sequence) return;
+
         element.hidden = true;
       }, 1800);
     },

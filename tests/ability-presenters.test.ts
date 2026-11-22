@@ -21,6 +21,7 @@ test('the UI presenter registry stays a subset of the ability catalog', () => {
 
 test('ability presenters derive counter and roll-option copy from public state and config', () => {
   const state = initialGameState(powerupsRules(POWERUPS_V1));
+
   state.roll = [2, 5];
   state.powerups!.passiveCounters[0].quartermasterCooldown = 2;
   state.powerups!.passiveCounters[0].opportunistFocus = 1;

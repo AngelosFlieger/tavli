@@ -8,6 +8,7 @@ export function createWaterPreview(
   reducedMotion: MediaQueryList,
 ) {
   const button = document.querySelector<HTMLButtonElement>('#test-water')!;
+
   button.disabled = false;
   canvas.dataset.water = 'idle';
   button.addEventListener('click', () => {
@@ -16,11 +17,13 @@ export function createWaterPreview(
     button.setAttribute('aria-busy', 'true');
     canvas.dataset.water = 'playing';
   });
+
   return {
     update(dt: number) {
       const offTable =
         document.body.classList.contains('on-title') ||
         document.body.classList.contains('signed-out');
+
       if (offTable) {
         if (effect.active) effect.reset();
       } else effect.update(dt);

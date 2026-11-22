@@ -13,6 +13,7 @@ import { pluralSuffix, t } from './i18n';
 /** Import, aggregate, and export controls for development balance reports. */
 export function playtestAnalysisMarkup(): string {
   if (!import.meta.env.DEV) return '';
+
   return `<section class="playtest-analysis"><h3>${t('settings.analysis')}</h3><p class="note">${t('settings.analysis.note')}</p><div class="match-controls"><button type="button" id="analyze-playtests">${t('settings.selectReports')}</button><button type="button" id="download-analysis" disabled>${t('settings.downloadAnalysis')}</button><input type="file" id="playtest-files" accept="application/json,.json" multiple hidden></div><output id="playtest-analysis-output" aria-live="polite">${t('settings.noReports')}</output></section>`;
 }
 
@@ -23,25 +24,31 @@ export function wirePlaytestAnalysis(root: HTMLElement): void {
   const downloadAnalysis = root.querySelector<HTMLButtonElement>('#download-analysis');
   const analysisOutput = root.querySelector<HTMLOutputElement>('#playtest-analysis-output');
   let analysis: BalanceAnalysis | null = null;
+
   selectReports?.addEventListener('click', () => files?.click());
   files?.addEventListener('change', () => void analyzeSelectedReports());
 
   async function analyzeSelectedReports() {
     const reports: PlaytestReport[] = [];
     let rejected = 0;
+
     for (const file of Array.from(files?.files ?? [])) {
       try {
         const report = parsePlaytestReport(JSON.parse(await file.text()));
+
         if (report) reports.push(report);
         else rejected++;
       } catch {
         rejected++;
       }
     }
+
     analysis = analyzePlaytestReports(reports, rejected);
+
     if (analysisOutput) analysisOutput.textContent = describeAnalysis(analysis);
     if (downloadAnalysis) downloadAnalysis.disabled = reports.length === 0;
   }
+
   downloadAnalysis?.addEventListener('click', () => {
     if (analysis) downloadJson('plakoto-balance-analysis.json', analysis);
   });
@@ -60,6 +67,7 @@ function describeAnalysis(analysis: BalanceAnalysis): string {
       .slice(0, 5)
       .map(({ abilityId, metrics }) => {
         const name = localizedAbilityCopy(abilityId, POWERUPS_V1).name;
+
         return t('analysis.picks', {
           name,
           picks: metrics.picked,
@@ -67,6 +75,7 @@ function describeAnalysis(analysis: BalanceAnalysis): string {
           uses: formatMetric(metrics.usesPerPick),
         });
       });
+
     return [
       `${identity} · ${group.configHash ?? t('analysis.noHash')}`,
       t('analysis.completed', {
@@ -78,6 +87,7 @@ function describeAnalysis(analysis: BalanceAnalysis): string {
       ...activeAbilities,
     ].join('\n');
   });
+
   return [heading, ...groups].join('\n\n');
 }
 

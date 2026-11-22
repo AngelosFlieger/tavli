@@ -33,6 +33,7 @@ export function rulesForState(
   snapshot?: ResolvedVariantConfig | null,
 ): RulesContext {
   let rules: RulesContext;
+
   if (snapshot !== undefined) {
     rules = snapshot === null ? CLASSIC_RULES : powerupsRules(resolveVariantConfig(snapshot));
   } else if (state.ruleset === 'CLASSIC') {
@@ -41,7 +42,9 @@ export function rulesForState(
     const config = VARIANT_PROFILE_IDS.map(variantProfile).find(
       (candidate) => candidate.hash === state.variantConfigHash,
     );
+
     if (!config) throw new Error(`Unknown variant configuration ${state.variantConfigHash ?? ''}`);
+
     rules = powerupsRules(config);
   }
 
@@ -50,5 +53,6 @@ export function rulesForState(
     state.variantConfigHash !== (rules.variantConfig?.hash ?? null)
   )
     throw new Error('State and variant configuration do not agree');
+
   return rules;
 }

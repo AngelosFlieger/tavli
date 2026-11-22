@@ -20,11 +20,13 @@ export const loadedKnuckles = defineAbility<'loadedKnuckles', LoadedKnucklesConf
   kind: 'PASSIVE',
   validateConfig(value) {
     const input = record(value, 'loadedKnuckles');
+
     exactKeys(
       input,
       ['enabled', 'offerWeight', 'matchChance', 'nonMatchDistribution', 'doubleMoveTokens'],
       'loadedKnuckles',
     );
+
     return {
       ...baseConfig(input, 'loadedKnuckles'),
       matchChance: probability(input.matchChance, 'loadedKnuckles.matchChance'),
@@ -61,9 +63,11 @@ export const loadedKnuckles = defineAbility<'loadedKnuckles', LoadedKnucklesConf
         const first = checkedDie(rollDie());
         const chance = config.matchChance;
         const chanceRoll = checkedRandom(randomInt(chance.denominator), chance.denominator);
+
         if (chanceRoll < chance.numerator) return [first, first];
 
         const alternatives = [1, 2, 3, 4, 5, 6].filter((value) => value !== first);
+
         return [
           first,
           alternatives[checkedRandom(randomInt(alternatives.length), alternatives.length)],
@@ -79,11 +83,13 @@ export const loadedKnuckles = defineAbility<'loadedKnuckles', LoadedKnucklesConf
 function checkedDie(value: number): number {
   if (!Number.isInteger(value) || value < 1 || value > 6)
     throw new Error('die source returned an out-of-range value');
+
   return value;
 }
 
 function checkedRandom(value: number, maximum: number): number {
   if (!Number.isInteger(value) || value < 0 || value >= maximum)
     throw new Error('random source returned an out-of-range value');
+
   return value;
 }

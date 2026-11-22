@@ -51,6 +51,7 @@ type AnyBehavior =
   | AfterRollAbilityBehavior<string, AbilityConfigBase>;
 
 const behaviors: Partial<Record<string, AnyBehavior>> = {};
+
 for (const [id, definition] of Object.entries(abilityDefinitions) as [
   AbilityId,
   DefinitionOf<AbilityId>,
@@ -84,6 +85,7 @@ export const afterRollAbilityBehaviors = Object.freeze(
   Object.fromEntries(
     Object.entries(behaviors).filter(([id]) => {
       const timing = powerupTiming(id);
+
       return timing === 'AFTER_ROLL_BEFORE_MOVE' || timing === undefined;
     }),
   ),
@@ -201,7 +203,9 @@ export function createConfiguredEndTurnEffect<Id extends EndTurnAbilityId>(
 
 export function activeEffectIsValid(position: Position, effect: ActiveEffect): boolean {
   if (!hasEndTurnAbilityBehavior(effect.abilityId)) return true;
+
   const typed = effect as ActiveEffect<EndTurnAbilityId>;
+
   return endTurnBehavior(typed.abilityId).effectIsValid?.(position, typed) ?? true;
 }
 

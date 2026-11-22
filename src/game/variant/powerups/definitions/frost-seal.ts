@@ -19,6 +19,7 @@ export const frostSeal = defineAbility<'frostSeal', FrostSealConfig>({
   timing: 'WITH_END_TURN',
   validateConfig(value) {
     const input = record(value, 'frostSeal');
+
     exactKeys(
       input,
       [
@@ -33,6 +34,7 @@ export const frostSeal = defineAbility<'frostSeal', FrostSealConfig>({
       ],
       'frostSeal',
     );
+
     const result = {
       ...baseConfig(input, 'frostSeal'),
       duration: duration(input.duration, 'frostSeal.duration', ['TARGET_TURN_END']),
@@ -42,8 +44,10 @@ export const frostSeal = defineAbility<'frostSeal', FrostSealConfig>({
       blockLeaving: boolean(input.blockLeaving, 'frostSeal.blockLeaving'),
       blockLanding: boolean(input.blockLanding, 'frostSeal.blockLanding'),
     };
+
     if (!result.blockLeaving && !result.blockLanding)
       throw new Error('frostSeal must block leaving, landing, or both');
+
     return result;
   },
   copy(config) {
@@ -56,12 +60,14 @@ export const frostSeal = defineAbility<'frostSeal', FrostSealConfig>({
     id: 'frostSeal',
     targets(state, player, config) {
       const opponent = other(player);
+
       return state.board.flatMap((stack, point) => {
         if (!stack.length || owner(stack.at(-1)!) !== opponent) return [];
         if (!config.allowStartPoints && START_POINTS.has(point)) return [];
         if (!config.allowHomePoints && HOME_POINTS.has(point)) return [];
         if (!config.allowPinnedStacks && stack.some((checker) => owner(checker) !== opponent))
           return [];
+
         return [{ type: 'POINT' as const, point }];
       });
     },
@@ -82,7 +88,9 @@ export const frostSeal = defineAbility<'frostSeal', FrostSealConfig>({
     },
     effectIsValid(position, effect) {
       if (effect.target.type !== 'POINT') return true;
+
       const stack = position.board[effect.target.point];
+
       return stack.length > 0 && owner(stack.at(-1)!) === effect.affectedPlayer;
     },
   },

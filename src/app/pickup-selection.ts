@@ -44,12 +44,17 @@ export class PickupSelection {
       this.queue.length >= state.remaining.length
     )
       return null;
+
     const stack = state.board[point];
+
     if (!stack) return null;
+
     const checker = [...stack]
       .reverse()
       .find((id) => owner(id) === state.active && !this.queue.includes(id));
+
     if (checker === undefined) return null;
+
     return canPlaceQueue(state, state.active, state.remaining, [...this.queue, checker])
       ? checker
       : null;
@@ -57,18 +62,23 @@ export class PickupSelection {
 
   pickAt(point: number, state: GameState): number | null {
     const checker = this.nextChecker(point, state);
+
     if (checker !== null) this.queue.push(checker);
+
     return checker;
   }
 
   sequences(state: GameState, locked = false): Move[][] {
     if (!this.queue.length || locked || state.phase !== 'WAITING_FOR_MOVE' || state.active === null)
       return [];
+
     const key = JSON.stringify([state.board, state.remaining, state.active, this.queue]);
+
     if (key !== this.sequenceCacheKey) {
       this.sequenceCacheKey = key;
       this.cachedSequences = queuedSequences(state, state.active, state.remaining, this.queue);
     }
+
     return this.cachedSequences;
   }
 
@@ -77,6 +87,7 @@ export class PickupSelection {
     const pickable = Array.from({ length: 24 }, (_, point) =>
       interactive ? this.nextChecker(point, state) : null,
     );
+
     return { queue, pickable, sequences: this.sequences(state, locked) };
   }
 }

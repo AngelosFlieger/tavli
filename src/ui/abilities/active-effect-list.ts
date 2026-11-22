@@ -13,17 +13,23 @@ export function createActiveEffectList(
   config: ResolvedVariantConfig,
 ): HTMLElement | null {
   if (!effects.length) return null;
+
   const list = document.createElement('div');
+
   list.className = 'active-effect-list';
+
   for (const effect of effects) {
     const chip = document.createElement('span');
+
     chip.className = 'ability-slot active-effect';
     chip.dataset.kind = abilityRegistry[effect.abilityId].kind;
     chip.dataset.ability = effect.abilityId;
     chip.dataset.instance = effect.instanceId;
+
     const copy = localizedAbilityCopy(effect.abilityId, config);
     const target = describeEffectTarget(effect.target);
     const expiry = describeEffectExpiry(effect.duration.boundary, effect.remaining);
+
     chip.textContent = t('ability.effectChip', {
       name: copy.name,
       target,
@@ -37,6 +43,7 @@ export function createActiveEffectList(
     });
     list.append(chip);
   }
+
   return list;
 }
 
@@ -62,6 +69,7 @@ export function describeEffectExpiry(boundary: EffectBoundary, remaining: number
       : boundary === 'SOURCE_TURN_END'
         ? t('ability.expiry.source')
         : t('ability.expiry.target');
+
   return t('ability.expiry.remaining', {
     remaining,
     unit,

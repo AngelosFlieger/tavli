@@ -17,6 +17,7 @@ export const recast = defineAbility<'recast', RecastConfig>({
   timing: 'AFTER_ROLL_BEFORE_MOVE',
   validateConfig(value) {
     const input = record(value, 'recast');
+
     exactKeys(
       input,
       [
@@ -30,6 +31,7 @@ export const recast = defineAbility<'recast', RecastConfig>({
       ],
       'recast',
     );
+
     const result = {
       ...baseConfig(input, 'recast'),
       rerollCount: integer(input.rerollCount, 'recast.rerollCount', 1),
@@ -45,10 +47,12 @@ export const recast = defineAbility<'recast', RecastConfig>({
         'recast.originalDoubleHandling',
       ),
     };
+
     if (!result.acceptResult)
       throw new Error(
         'recast.acceptResult must be true until optional reroll acceptance is modeled',
       );
+
     return result;
   },
   copy(config) {
@@ -62,6 +66,7 @@ export const recast = defineAbility<'recast', RecastConfig>({
     options(state, _player, availableDice, config) {
       if (!config.acceptResult) return [];
       if (config.allowedRolls === 'NON_DOUBLE' && state.roll[0] === state.roll[1]) return [];
+
       return availableDice.map((index) => ({ target: { type: 'DIE', index } }));
     },
     randomCount(config) {
@@ -69,14 +74,20 @@ export const recast = defineAbility<'recast', RecastConfig>({
     },
     apply(state, player, activation, randomValues, config, resolvedConfig, services) {
       if (activation.target.type !== 'DIE') return null;
+
       const before = state.roll[activation.target.index];
       const after = randomValues.at(-1);
+
       if (after === undefined) return null;
+
       const wasDouble = state.roll[0] === state.roll[1];
+
       if (wasDouble && config.originalDoubleHandling === 'CHANGE_MATCHING_TOKENS')
         state.remaining = state.remaining.map((token) => (token === before ? after : token));
       else if (!replaceOneMovementToken(state.remaining, before, after)) return null;
+
       state.roll[activation.target.index] = after;
+
       if (!wasDouble && state.roll[0] === state.roll[1] && config.createdMatchBecomesDouble)
         state.remaining = services.movementTokensForRoll(
           state,
@@ -84,6 +95,7 @@ export const recast = defineAbility<'recast', RecastConfig>({
           [after, after],
           resolvedConfig,
         );
+
       return { before, after, allowBearingOff: true };
     },
   },

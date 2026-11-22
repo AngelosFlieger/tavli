@@ -15,6 +15,7 @@ const request = (sequence: number, command: Command): CommandRequest => ({
 test('a player cannot manually roll before local opening authority resolves', () => {
   const values = [5, 0];
   const controller = new GameController(CLASSIC_RULES, () => values.shift()!);
+
   assert.equal(controller.beginRoll(), false);
   assert.deepEqual(controller.resolveLocalOpening(), [[6, 1]]);
   assert.equal(controller.state.phase, 'WAITING_FOR_ROLL');
@@ -24,6 +25,7 @@ test('a player cannot manually roll before local opening authority resolves', ()
 test('local controller preserves facade state and status through a complete turn', () => {
   const controller = new GameController();
   const baseline = new Game();
+
   controller.adopt(resolvedOpeningState(), false);
   baseline.state = resolvedOpeningState();
   assert.deepEqual(controller.state, baseline.state);
@@ -33,6 +35,7 @@ test('local controller preserves facade state and status through a complete turn
   assert.deepEqual(controller.state, baseline.state);
 
   const first = baseline.moves()[0];
+
   assert.equal(controller.requestMove([first])?.type, 'local');
   assert.equal(baseline.move(first), true);
   assert.deepEqual(controller.state, baseline.state);
@@ -41,8 +44,10 @@ test('local controller preserves facade state and status through a complete turn
   assert.deepEqual(controller.state, baseline.state);
 
   let moved = 0;
+
   while (baseline.state.phase === 'WAITING_FOR_MOVE') {
     const move = baseline.moves()[0];
+
     assert.equal(controller.requestMove([move])?.type, 'local');
     assert.equal(baseline.move(move), true);
     controller.finishLocalMove();
@@ -51,6 +56,7 @@ test('local controller preserves facade state and status through a complete turn
     moved++;
     assert.ok(moved <= 4);
   }
+
   assert.equal(controller.endTurn(), baseline.endTurn());
   assert.deepEqual(controller.state, baseline.state);
   assert.equal(controller.restart(), 'local');
@@ -60,15 +66,20 @@ test('local controller preserves facade state and status through a complete turn
 
 test('local controller routes a move, animation completion, and undo through the game', () => {
   const controller = new GameController();
+
   controller.adopt(resolvedOpeningState(), false);
   assert.equal(controller.beginRoll(true), false);
   assert.equal(controller.beginRoll(), true);
   controller.receiveRoll([2, 3]);
+
   const before = structuredClone(controller.state);
   const move = controller.moves()[0];
   const request = controller.requestMove([move]);
+
   assert.equal(request?.type, 'local');
+
   if (request?.type !== 'local') return;
+
   assert.deepEqual(request.start.board, before.board);
   assert.deepEqual(request.stages.at(-1)!.board, controller.state.board);
   assert.equal(controller.state.phase, 'WAITING_FOR_MOVE');
@@ -82,12 +93,14 @@ test('local controller routes a move, animation completion, and undo through the
 
 test('presentation locks input after the authoritative phase advances', () => {
   const controller = new GameController();
+
   controller.adopt(resolvedOpeningState(), false);
   assert.equal(controller.beginRoll(), true);
   assert.equal(controller.state.phase, 'WAITING_FOR_ROLL');
   assert.equal(controller.busy, true);
   assert.equal(controller.beginRoll(), false);
   controller.receiveRoll([2, 3]);
+
   while (controller.state.phase === 'WAITING_FOR_MOVE') {
     assert.equal(controller.requestMove([controller.moves()[0]])?.type, 'local');
     assert.equal(controller.busy, true);
@@ -95,6 +108,7 @@ test('presentation locks input after the authoritative phase advances', () => {
     assert.equal(controller.endTurn(), false);
     controller.finishLocalMove();
   }
+
   assert.equal(controller.state.phase, 'TURN_COMPLETE');
   assert.equal(controller.endTurn(), true);
 });
@@ -102,6 +116,7 @@ test('presentation locks input after the authoritative phase advances', () => {
 test('a late local move completion cannot release a newer operation', () => {
   const controller = new GameController();
   const moving = structuredClone(controller.state);
+
   moving.opening = { status: 'RESOLVED', attempts: [[6, 1]], winner: 0 };
   moving.phase = 'WAITING_FOR_MOVE';
   moving.roll = [2, 3];
@@ -110,6 +125,7 @@ test('a late local move completion cannot release a newer operation', () => {
   assert.equal(controller.requestMove([controller.moves()[0]])?.type, 'local');
 
   const rolling = structuredClone(controller.state);
+
   rolling.phase = 'WAITING_FOR_ROLL';
   rolling.roll = [];
   rolling.remaining = [];
@@ -127,13 +143,16 @@ test('a late local move completion cannot release a newer operation', () => {
 test('online controller sends intentions and adopts authoritative states', () => {
   const controller = new GameController();
   const sent: CommandRequest[] = [];
+
   controller.join(0, (command) => sent.push(command));
   controller.adopt(resolvedOpeningState(), false);
   assert.equal(controller.beginRoll(), true);
   assert.deepEqual(sent, [request(1, { type: 'roll' })]);
   assert.equal(controller.busy, true);
   assert.equal(controller.beginRoll(), false);
+
   const opponentTurn = structuredClone(controller.state);
+
   opponentTurn.active = 1;
   controller.adopt(opponentTurn, false);
   assert.equal(controller.busy, false);
@@ -141,16 +160,21 @@ test('online controller sends intentions and adopts authoritative states', () =>
   assert.equal(controller.beginRoll(), false);
 
   const moving = structuredClone(opponentTurn);
+
   moving.active = 0;
   moving.opening = { status: 'RESOLVED', attempts: [[6, 1]], winner: 0 };
   moving.phase = 'WAITING_FOR_MOVE';
   moving.remaining = [2];
   controller.adopt(moving, false);
+
   const sequence = [{ from: 0, to: 2, die: 2 }];
+
   assert.deepEqual(controller.requestMove(sequence), { type: 'sent' });
   assert.deepEqual(sent.at(-1), request(2, { type: 'move', sequence }));
   assert.equal(controller.busy, true);
+
   const result = structuredClone(moving);
+
   result.board[2] = [result.board[0].pop()!];
   result.phase = 'WAITING_FOR_MOVE';
   controller.pickup.consume(14);
@@ -167,15 +191,20 @@ test('online controller sends intentions and adopts authoritative states', () =>
 
 test('pickup queue keeps the next checker after a local placement and clears on undo', () => {
   const controller = new GameController();
+
   controller.adopt(resolvedOpeningState(), false);
   controller.beginRoll();
   controller.receiveRoll([3, 5]);
+
   const pickup = controller.pickup;
+
   assert.equal(pickup.refresh(controller.state, true, false).pickable[0], 14);
   assert.equal(controller.pickAt(0), 14);
   assert.equal(controller.pickAt(0), 13);
   assert.deepEqual(pickup.items, [14, 13]);
+
   const sequence = pickup.sequences(controller.state)[0];
+
   assert.ok(sequence);
   assert.equal(sequence.length, 1);
   assert.equal(controller.requestMove(sequence)?.type, 'local');
@@ -190,15 +219,20 @@ test('pickup queue keeps the next checker after a local placement and clears on 
 test('authoritative adoption revalidates or clears the held queue', () => {
   const controller = new GameController();
   const state = structuredClone(controller.state);
+
   state.opening = { status: 'RESOLVED', attempts: [[6, 1]], winner: 0 };
   state.phase = 'WAITING_FOR_MOVE';
   state.remaining = [3, 5];
   controller.adopt(state, false);
+
   const pickup = controller.pickup;
+
   controller.pickAt(0);
   controller.pickAt(0);
   assert.deepEqual(pickup.items, [14, 13]);
+
   const accepted = structuredClone(state);
+
   accepted.board[3] = [accepted.board[0].pop()!];
   accepted.remaining = [5];
   pickup.consume(14);
@@ -217,8 +251,11 @@ test('online draft choice locks duplicate input until authority responds', () =>
   const rules = powerupsRules(POWERUPS_V1);
   const controller = new GameController(rules);
   const sent: CommandRequest[] = [];
+
   controller.join(0, (command) => sent.push(command), rules);
+
   const state = structuredClone(controller.state);
+
   state.phase = 'DRAFT_PICK';
   state.powerups!.draft = {
     stage: 'PICKING',
@@ -237,6 +274,7 @@ test('online draft choice locks duplicate input until authority responds', () =>
   assert.equal(controller.pickAbility('bastion'), false);
 
   const accepted = structuredClone(state);
+
   accepted.powerups!.draft = {
     ...state.powerups!.draft,
     offer: ['bastion', 'loadedKnuckles'],
@@ -252,8 +290,11 @@ test('controller sends an atomic targeted end-turn ability', () => {
   const rules = powerupsRules(POWERUPS_V1);
   const controller = new GameController(rules);
   const sent: CommandRequest[] = [];
+
   controller.join(0, (command) => sent.push(command), rules);
+
   const state = structuredClone(controller.state);
+
   state.opening = { status: 'RESOLVED', attempts: [[6, 1]], winner: 0 };
   state.active = 0;
   state.phase = 'TURN_COMPLETE';
@@ -278,8 +319,11 @@ test('controller auto-targets the opponent for Jinx', () => {
   const rules = powerupsRules(POWERUPS_V1);
   const controller = new GameController(rules);
   const sent: CommandRequest[] = [];
+
   controller.join(0, (command) => sent.push(command), rules);
+
   const state = structuredClone(controller.state);
+
   state.opening = { status: 'RESOLVED', attempts: [[6, 1]], winner: 0 };
   state.active = 0;
   state.phase = 'TURN_COMPLETE';
@@ -302,8 +346,11 @@ test('online controller sends a validated Clear Skies effect target', () => {
   const rules = powerupsRules(POWERUPS_V1);
   const controller = new GameController(rules);
   const sent: CommandRequest[] = [];
+
   controller.join(0, (command) => sent.push(command), rules);
+
   const state = structuredClone(controller.state);
+
   state.opening = { status: 'RESOLVED', attempts: [[6, 1]], winner: 0 };
   state.active = 0;
   state.phase = 'WAITING_FOR_ROLL';
@@ -324,6 +371,7 @@ test('online controller sends a validated Clear Skies effect target', () => {
   controller.adopt(state, false);
 
   const target = { type: 'EFFECT', instanceId: 'jinx-1' } as const;
+
   assert.deepEqual(controller.abilityTargets('clear-1'), [target]);
   assert.equal(controller.selectAbility('clear-1'), true);
   assert.equal(controller.beginRoll(), false);
@@ -341,6 +389,7 @@ test('local controller applies Clear Skies before allowing the roll', () => {
   const rules = powerupsRules(POWERUPS_V1);
   const controller = new GameController(rules);
   const state = structuredClone(controller.state);
+
   state.opening = { status: 'RESOLVED', attempts: [[6, 1]], winner: 0 };
   state.active = 0;
   state.phase = 'WAITING_FOR_ROLL';
@@ -373,6 +422,7 @@ test('local controller resolves Recast with injected randomness and locks its pr
   const rules = powerupsRules(POWERUPS_V1);
   const controller = new GameController(rules, () => 5);
   const state = structuredClone(controller.state);
+
   state.opening = { status: 'RESOLVED', attempts: [[6, 1]], winner: 0 };
   state.active = 0;
   state.phase = 'WAITING_FOR_MOVE';
@@ -382,7 +432,9 @@ test('local controller resolves Recast with injected randomness and locks its pr
   controller.adopt(state, false);
 
   assert.equal(controller.selectAbility('recast-1'), true);
+
   const request = controller.requestRollAbility({ target: { type: 'DIE', index: 0 } });
+
   assert.deepEqual(request, { type: 'local', dice: [6, 4], rerolledDie: 0 });
   assert.deepEqual(controller.state.remaining, [6, 4]);
   assert.equal(controller.busy, true);
@@ -395,8 +447,11 @@ test('online controller sends Nudge intent without supplying the result', () => 
   const rules = powerupsRules(POWERUPS_V1);
   const controller = new GameController(rules);
   const sent: CommandRequest[] = [];
+
   controller.join(0, (command) => sent.push(command), rules);
+
   const state = structuredClone(controller.state);
+
   state.opening = { status: 'RESOLVED', attempts: [[6, 1]], winner: 0 };
   state.active = 0;
   state.phase = 'WAITING_FOR_MOVE';
@@ -427,10 +482,13 @@ test('local controller forces Loaded Knuckles rolls through its configured autho
   const values = [3, 0];
   const controller = new GameController(powerupsRules(POWERUPS_V1), (maximum) => {
     const value = values.shift() ?? 0;
+
     assert.ok(value >= 0 && value < maximum);
+
     return value;
   });
   const state = structuredClone(controller.state);
+
   state.opening = { status: 'RESOLVED', attempts: [[6, 1]], winner: 0 };
   state.active = 0;
   state.phase = 'WAITING_FOR_ROLL';
@@ -438,7 +496,9 @@ test('local controller forces Loaded Knuckles rolls through its configured autho
   controller.adopt(state, false);
 
   assert.equal(controller.beginRoll(), true);
+
   const forced = controller.takeForcedLocalRoll();
+
   assert.deepEqual(forced, [4, 4]);
   controller.receiveRoll(forced!);
   assert.deepEqual(controller.state.roll, [4, 4]);
@@ -449,6 +509,7 @@ test('local controller spends Opportunist Focus as a reusable passive action', (
   const rules = powerupsRules(POWERUPS_V1);
   const controller = new GameController(rules);
   const state = structuredClone(controller.state);
+
   state.opening = { status: 'RESOLVED', attempts: [[6, 1]], winner: 0 };
   state.active = 0;
   state.phase = 'WAITING_FOR_MOVE';
@@ -477,9 +538,12 @@ test('local controller routes ordinary dice and semantic events through its auth
   const eventTypes: string[] = [];
   const controller = new GameController(CLASSIC_RULES, (maximum) => {
     const value = values.shift() ?? 0;
+
     assert.ok(value >= 0 && value < maximum);
+
     return value;
   });
+
   controller.setEventSink((events) => eventTypes.push(...events.map((event) => event.type)));
   controller.adopt(resolvedOpeningState(), false);
 

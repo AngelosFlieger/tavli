@@ -44,6 +44,7 @@ test('automatic opening rolls one owned die together and retries both dice on ti
 
 test('opening resolution rejects incomplete, invalid, and post-winner attempt sequences atomically', () => {
   const session = initialPresentedSession();
+
   for (const attempts of [
     [],
     [[2, 2]],
@@ -57,6 +58,7 @@ test('opening resolution rejects incomplete, invalid, and post-winner attempt se
     ],
   ] as [number, number][][]) {
     const result = transitionSession(session, { type: 'resolveOpening', attempts });
+
     assert.equal(result.ok, false);
     assert.equal(session.state.phase, 'OPENING');
     assert.deepEqual(session.state.opening, { status: 'PENDING' });
@@ -68,13 +70,17 @@ test('automatic opening is a no-op once opening authority has already advanced',
     type: 'resolveOpening',
     attempts: [[6, 1]],
   });
+
   assert.equal(opened.ok, true);
+
   if (!opened.ok) return;
 
   let samples = 0;
+
   assert.equal(
     resolveAutomaticOpening(opened.session, CLASSIC_RULES, () => {
       samples++;
+
       return 0;
     }),
     null,
@@ -86,6 +92,7 @@ test('automatic opening stops safely after the bounded number of tied attempts',
   let samples = 0;
   const result = resolveAutomaticOpening(initialPresentedSession(), CLASSIC_RULES, () => {
     samples++;
+
     return 2;
   });
 

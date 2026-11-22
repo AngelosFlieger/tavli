@@ -6,7 +6,9 @@ import { resolvedOpeningState } from './support/resolved-opening';
 
 test('local actions sequence roll, move, animation completion, undo, and restart', () => {
   const controller = new GameController();
+
   controller.adopt(resolvedOpeningState(), false);
+
   let setup = false;
   let moveDone = () => {};
   let animations = 0;
@@ -27,13 +29,16 @@ test('local actions sequence roll, move, animation completion, undo, and restart
     play() {},
     playOpening() {},
   });
+
   setup = true;
   assert.equal(actions.beginRoll(), false);
   setup = false;
   assert.equal(actions.beginRoll(), true);
   actions.receiveRoll([2, 3]);
+
   const before = structuredClone(controller.state);
   const move = controller.moves()[0];
+
   actions.move([move]);
   assert.equal(animations, 1);
   assert.equal(controller.busy, true);
@@ -57,7 +62,9 @@ test('local actions sequence roll, move, animation completion, undo, and restart
 
 test('interrupted local animation releases the move lock before a late callback', () => {
   const controller = new GameController();
+
   controller.adopt(resolvedOpeningState(), false);
+
   let done = () => {};
   let refreshes = 0;
   const scene: ActionScene = {
@@ -73,13 +80,16 @@ test('interrupted local animation releases the move lock before a late callback'
     play() {},
     playOpening() {},
   });
+
   actions.beginRoll();
   actions.receiveRoll([2, 3]);
   actions.move([controller.moves()[0]]);
   assert.equal(controller.busy, true);
   actions.finishInterruptedMove();
   assert.equal(controller.busy, false);
+
   const afterInterruption = refreshes;
+
   done();
   assert.equal(refreshes, afterInterruption);
 });

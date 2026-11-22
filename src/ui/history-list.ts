@@ -9,14 +9,20 @@ export function matchHistoryMarkup(): string {
 /** Render the stored entries newest-first from `loadHistory()`, or an empty-state line. */
 export function renderMatchHistory(root: HTMLElement): void {
   const list = root.querySelector<HTMLUListElement>('#match-history-list');
+
   if (!list) return;
+
   const entries = loadHistory();
+
   list.replaceChildren();
+
   if (!entries.length) {
     const empty = document.createElement('li');
+
     empty.className = 'history-empty';
     empty.textContent = t('settings.history.empty');
     list.append(empty);
+
     return;
   }
   for (const entry of entries) list.append(historyItem(entry));
@@ -36,6 +42,8 @@ function historyItem(entry: HistoryEntry): HTMLElement {
       : t('settings.history.result.win', { player: entry.winner + 1 });
   const date = new Date(entry.at).toLocaleDateString();
   const rounds = t('settings.history.rounds', { rounds: entry.rounds });
+
   item.textContent = `${date} · ${mode} · ${ruleset} · ${result} · ${rounds}`;
+
   return item;
 }

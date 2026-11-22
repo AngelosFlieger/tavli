@@ -12,6 +12,7 @@ const steps = [
   { name: 'lint', args: ['run', 'lint'] },
   { name: 'format', args: ['run', 'format:check'] },
 ];
+
 const verbose = process.argv.includes('--verbose');
 
 function execute(step) {
@@ -24,11 +25,15 @@ function execute(step) {
   });
   const collect = (chunk) => {
     const text = chunk.toString();
+
     output.push(text);
+
     if (verbose) process.stdout.write(text.replace(/^/gm, `[${step.name}] `));
   };
+
   child.stdout.on('data', collect);
   child.stderr.on('data', collect);
+
   return new Promise((resolve) => {
     child.on('error', (error) => {
       output.push(`${error.message}\n`);
@@ -46,13 +51,17 @@ function execute(step) {
 }
 
 console.log(`Running ${steps.map((step) => step.name).join(', ')} in parallel…`);
+
 const results = await Promise.all(steps.map(execute));
 
 const coverageResult = results.find(({ step }) => step.name === 'coverage');
+
 const coverageText = coverageResult?.output.join('') ?? '';
+
 const coverageMatch = coverageText.match(
   /^\s*(?:ℹ\s+)?all files\s+\|\s*([\d.]+)\s*\|\s*([\d.]+)\s*\|\s*([\d.]+)\s*\|/m,
 );
+
 const coverageSummary = coverageMatch
   ? {
       lines: Number(coverageMatch[1]),
@@ -63,11 +72,14 @@ const coverageSummary = coverageMatch
 
 for (const result of results) {
   const status = result.ok ? '✓' : '✗';
+
   console.log(`${status} ${result.step.name} (${result.seconds.toFixed(1)}s)`);
+
   if (!result.ok) {
     const text = result.output.join('');
     const lines = text.trimEnd().split('\n');
     const tail = lines.slice(-60);
+
     console.log(`\n--- ${result.step.name} output ---`);
     console.log(tail.join('\n'));
     console.log(`--- end ${result.step.name} output ---\n`);
@@ -76,9 +88,11 @@ for (const result of results) {
 
 if (results.every((result) => result.ok)) {
   if (!coverageSummary) throw new Error('Coverage passed but its summary could not be parsed');
+
   console.log(
     `Coverage: ${coverageSummary.lines.toFixed(2)}% lines, ${coverageSummary.branches.toFixed(2)}% branches, ${coverageSummary.functions.toFixed(2)}% functions.`,
   );
+
   if (process.env.GITHUB_STEP_SUMMARY) {
     await appendFile(
       process.env.GITHUB_STEP_SUMMARY,
@@ -97,11 +111,13 @@ if (results.every((result) => result.ok)) {
       `::notice title=Test coverage::Lines ${coverageSummary.lines.toFixed(2)}% · Branches ${coverageSummary.branches.toFixed(2)}% · Functions ${coverageSummary.functions.toFixed(2)}%`,
     );
   }
+
   console.log(
     'All checks passed. Browser smoke: `npm run test:browser:local` or `npm run test:browser`.',
   );
 } else {
   const failed = results.filter((result) => !result.ok).map((result) => result.step.name);
+
   console.error(`Checks failed: ${failed.join(', ')}`);
   process.exitCode = 1;
 }

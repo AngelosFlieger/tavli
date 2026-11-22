@@ -25,31 +25,40 @@ export class Game {
       command,
       this.rules,
     );
+
     if (!result.ok) return result;
+
     this.state = result.session.state;
     this.history = result.session.history;
+
     return result;
   }
 
   moves(): Move[] {
     if (this.state.active === null || this.state.phase !== 'WAITING_FOR_MOVE') return [];
+
     const key = JSON.stringify([
       this.state.board,
       this.state.remaining,
       this.state.active,
       this.state.powerups?.activeEffects,
     ]);
+
     if (key !== this.moveKey) {
       this.moveKey = key;
       this.cachedMoves = legalMoves(this.state, this.state.active, this.state.remaining);
     }
+
     return this.cachedMoves;
   }
 
   beginRoll(): boolean {
     if (this.pendingRoll) return false;
+
     const accepted = this.dispatch({ type: 'beginRoll' }).ok;
+
     if (accepted) this.pendingRoll = true;
+
     return accepted;
   }
 
@@ -64,6 +73,7 @@ export class Game {
 
   moveSequence(sequence: Move[]): Position[] | null {
     const result = this.dispatch({ type: 'move', sequence });
+
     return result.ok ? result.stages! : null;
   }
 

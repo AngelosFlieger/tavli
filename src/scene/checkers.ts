@@ -44,16 +44,20 @@ export async function createGameplay(
   const assets = await Promise.all(['Checker_Red', 'Checker_Ivory'].map((name) => loadModel(name)));
   const checkers: THREE.Group[] = [];
   const heights: number[] = [];
+
   assets.forEach((asset, player) => {
     const bounds = new THREE.Box3().setFromObject(asset.scene),
       size = bounds.getSize(new THREE.Vector3()),
       mid = bounds.getCenter(new THREE.Vector3());
     const scale = 0.0304 / Math.max(size.x, size.z);
+
     heights[player] = size.y * scale + 0.0004;
+
     for (let i = 0; i < 15; i++) {
       const checker = new THREE.Group(),
         scaled = new THREE.Group(),
         mesh = asset.scene.clone(true);
+
       mesh.position.set(-mid.x, -bounds.min.y, -mid.z);
       scaled.add(mesh);
       scaled.scale.setScalar(scale);
@@ -62,14 +66,18 @@ export async function createGameplay(
       checkers[player * 15 + i] = checker;
     }
   });
+
   const board = createBoardPresentation(center, layout, checkers, heights);
   const abilityEffects = createAbilityEffects(root, checkers, heights);
   const preview = createMovePreview(root, camera, checkers, center);
   function updatePresentation() {
     const title = document.body.classList.contains('on-title');
     const waiting = document.body.classList.contains('is-waiting');
+
     checkers.forEach((checker) => (checker.visible = !title));
+
     const portrait = matchMedia('(max-aspect-ratio: 1/1)').matches;
+
     canvas.setAttribute(
       'aria-label',
       waiting
@@ -81,8 +89,10 @@ export async function createGameplay(
             : t('scene.aria.board'),
     );
   }
+
   updatePresentation();
   window.addEventListener('resize', updatePresentation);
+
   const hitTargets: THREE.Mesh[] = [];
   const markers: THREE.Mesh[] = [];
   const columns: THREE.Mesh<THREE.PlaneGeometry, THREE.ShaderMaterial>[] = [];
@@ -92,6 +102,7 @@ export async function createGameplay(
     opacity: 0.7,
     depthWrite: false,
   });
+
   for (let point = 0; point < 24; point++) {
     const { x, z } = pointPosition(point);
     const hit = new THREE.Mesh(
@@ -103,18 +114,23 @@ export async function createGameplay(
         side: THREE.DoubleSide,
       }),
     );
+
     hit.rotation.x = -Math.PI / 2;
     hit.userData.point = point;
     hit.userData.anchor = point < 12 ? -0.126 : 0.126;
     hit.position.set(x - center.x, 0.065 - center.y, hit.userData.anchor - center.z);
     root.add(hit);
     hitTargets.push(hit);
+
     const marker = new THREE.Mesh(new THREE.RingGeometry(0.0163, 0.018, 40), mat.clone());
+
     marker.rotation.x = -Math.PI / 2;
     marker.position.set(x - center.x, 0.028 - center.y, z - center.z);
     root.add(marker);
     markers.push(marker);
+
     const column = new THREE.Mesh(new THREE.PlaneGeometry(0.047, 0.19), destinationGlow());
+
     column.rotation.set(-Math.PI / 2, 0, point < 12 ? Math.PI : 0);
     column.userData.anchor = point < 12 ? -0.1265 : 0.1265;
     column.position.set(x - center.x, 0.0282 - center.y, column.userData.anchor - center.z);
@@ -122,6 +138,7 @@ export async function createGameplay(
     root.add(column);
     columns.push(column);
   }
+
   const animator = createMoveAnimator({
     root,
     camera,
@@ -165,6 +182,7 @@ export async function createGameplay(
           break;
         case 'abilityTarget':
           if (controller.targetSelectedAbility(intent.point)) refresh(false);
+
           break;
         case 'cancelAbility':
           controller.cancelSelectedAbility();
@@ -184,12 +202,16 @@ export async function createGameplay(
     bearOff: hooks.onMove,
     pickAbility(abilityId, replaceInstanceId) {
       const picked = controller.pickAbility(abilityId, replaceInstanceId);
+
       if (picked) refresh(false);
+
       return picked;
     },
     selectAbility(instanceId) {
       const selected = controller.selectAbility(instanceId);
+
       if (selected) refresh(false);
+
       return selected;
     },
     cancelAbility() {
@@ -202,11 +224,14 @@ export async function createGameplay(
   });
   function refresh(updatePositions = true) {
     if (updatePositions && setupTime === null) board.sync(controller.state);
+
     const state = controller.state;
     const presentedEffects = abilityEffects.sync(state);
+
     canvas.dataset.effectVisuals = presentedEffects
       .map((effect) => `${effect.abilityId}:${effect.point}`)
       .join(',');
+
     const moves = mine() && !locked() ? controller.moves() : [];
     const abilityTargets = controller.abilityTargetPoints();
     const effectPoints = new Set(
@@ -216,6 +241,7 @@ export async function createGameplay(
     );
     const pickupView = input.refresh();
     const { queue, pickable, sequences } = pickupView;
+
     markers.forEach((marker, point) => {
       const source =
         moves.some((move) => move.from === point) || (queue.length > 0 && pickable[point] !== null);
@@ -223,8 +249,11 @@ export async function createGameplay(
       const queuedSource = state.board[point].some((id) => queue.includes(id));
       const abilityTarget = abilityTargets.includes(point);
       const activeEffect = effectPoints.has(point);
+
       marker.visible = source || queuedSource || abilityTarget || activeEffect;
+
       const column = columns[point];
+
       column.visible = landed.length > 0;
       column.material.uniforms.color.value.setHex(
         landed.length > 0 && landed.every((sequence) => sequence.length > 1) ? 0xffb52e : 0x29e1cd,
@@ -233,8 +262,10 @@ export async function createGameplay(
         abilityTarget ? 0x6de3d5 : activeEffect ? 0x69a7ff : queuedSource ? 0xffd46b : 0xeac678,
       );
       (marker.material as THREE.MeshBasicMaterial).opacity = queuedSource ? 0.35 : 0.7;
+
       const stack = state.board[point],
         top = stack.at(-1);
+
       marker.position.z =
         top !== undefined
           ? checkers[top].position.z
@@ -246,7 +277,9 @@ export async function createGameplay(
     });
     hud.render(pickupView);
   }
+
   refresh();
+
   return {
     startSetup,
     isSetupActive: () => setupTime !== null,
@@ -278,16 +311,22 @@ export async function createGameplay(
       if (setupTime !== null) {
         setupTime += dt;
         board.deal(controller.state, setupTime);
+
         if (setupTime > 1.75) {
           setupTime = null;
           refresh();
+
           const complete = setupComplete;
+
           setupComplete = null;
           complete?.();
         }
+
         return;
       }
+
       animator.update(dt);
+
       if (!reducedMotion.matches && preferences.motion) abilityEffects.update(dt);
     },
     playRemoteMove(sequence: Move[], checker: number, start: Position, done: () => void) {
@@ -298,14 +337,19 @@ export async function createGameplay(
 
   function startSetup(complete?: () => void) {
     setupComplete = complete ?? null;
+
     if (reducedMotion.matches) {
       setupTime = null;
       refresh();
+
       const done = setupComplete;
+
       setupComplete = null;
       done?.();
+
       return;
     }
+
     setupTime = 0;
     controller.clearPickup();
     refresh(false);
@@ -318,15 +362,20 @@ export async function createGameplay(
     camera.lookAt(0, 0, 0);
     camera.updateMatrixWorld();
     root.updateMatrixWorld(true);
+
     if (controller.seat === null) return;
+
     const screenY = (point: number) => {
       const { x, z } = pointPosition(point);
+
       return new THREE.Vector3(x - center.x, 0, (z - center.z) * layout.depth)
         .applyMatrix4(root.matrixWorld)
         .project(camera).y;
     };
     const own = controller.seat === 0 ? 0 : 12;
+
     if (screenY(own) <= screenY(own === 0 ? 12 : 0)) return;
+
     camera.position.z *= -1;
     camera.lookAt(0, 0, 0);
     camera.updateMatrixWorld();
@@ -335,6 +384,7 @@ export async function createGameplay(
   function presentState(resetDice = false) {
     animator.cancel();
     refresh();
+
     if (resetDice && !document.body.classList.contains('on-title')) startSetup();
   }
 }

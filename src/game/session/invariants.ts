@@ -22,8 +22,11 @@ export function gameStateInvariantViolations(state: GameState): StateInvariantVi
 
   const locations = [...state.board, ...state.off];
   const checkers = locations.flat();
+
   if (checkers.length !== 30) add('board/off', 'must contain exactly 30 checkers');
+
   const unique = new Set(checkers);
+
   if (unique.size !== checkers.length) add('board/off', 'each checker must appear exactly once');
   for (const checker of checkers) {
     if (!Number.isInteger(checker) || checker < 0 || checker > 29) {
@@ -54,7 +57,9 @@ export function gameStateInvariantViolations(state: GameState): StateInvariantVi
         else if (index < opening.attempts.length - 1 && attempt[0] !== attempt[1])
           add(`opening.attempts.${index}`, 'must be a tie before the final attempt');
       }
+
     const final = opening.attempts.at(-1);
+
     if (final?.[0] === final?.[1]) add('opening.attempts', 'final attempt must choose a winner');
     if (final && opening.winner !== (final[0] > final[1] ? 0 : 1))
       add('opening.winner', 'must match the final attempt');
@@ -114,7 +119,9 @@ export function sessionInvariantViolations(session: Session): StateInvariantViol
 
 export function assertGameStateInvariants(state: GameState): void {
   const violations = gameStateInvariantViolations(state);
+
   if (!violations.length) return;
+
   throw new Error(
     `Invalid game state: ${violations.map(({ path, reason }) => `${path} ${reason}`).join('; ')}`,
   );

@@ -55,6 +55,7 @@ test('an unsent matchmaking request survives a temporary connection failure', ()
     value: {
       setTimeout(callback: () => void) {
         retries.push(callback);
+
         return retries.length;
       },
       clearTimeout() {},
@@ -82,6 +83,7 @@ test('an unsent matchmaking request survives a temporary connection failure', ()
       onClose: noop,
     };
     const table = connectTable(events);
+
     table.find({ ruleset: 'CLASSIC' });
     assert.equal(sockets.length, 1);
     sockets[0]!.open();

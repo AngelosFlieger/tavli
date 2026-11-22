@@ -44,8 +44,11 @@ import { PlaytestRecorder } from './app/playtest-report';
 import { addHistoryEntry, createHistoryEntry, loadHistory, saveHistory } from './app/history';
 
 const host = document.querySelector<HTMLElement>('#scene')!;
+
 const boardFrame = document.querySelector<HTMLElement>('#board-frame')!;
+
 const status = document.querySelector<HTMLElement>('#status')!;
+
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
 
 const session: Session = {
@@ -59,15 +62,21 @@ const session: Session = {
   onSignOut() {},
   playtestReport: () => null,
 };
+
 loadLocalePreference();
+
 translateDOM();
+
 let reconnect = () => {};
+
 initShell(session);
+
 initAuthScreen({
   onSignedIn() {
     reconnect();
   },
 });
+
 void restoreSession().then((signedIn) => {
   if (signedIn) reconnect();
 });
@@ -83,8 +92,10 @@ async function start() {
   const playtest = new PlaytestRecorder();
   let historyMode: 'LOCAL' | 'ONLINE' = 'LOCAL';
   let historyRecordedFor: GameState | null = null;
+
   controller.setEventSink((events, state) => {
     playtest.record(events, state);
+
     if (
       preferences.history &&
       state.phase === 'GAME_OVER' &&
@@ -105,6 +116,7 @@ async function start() {
       );
     }
   });
+
   let actions: ReturnType<typeof createGameplayActions>;
   let dice: Awaited<ReturnType<typeof createDice>> | undefined;
   const boardAnnouncement = createBoardAnnouncement();
@@ -128,6 +140,7 @@ async function start() {
       onBeforeRollAbility: (target) => actions.playBeforeRollAbility(target),
     },
   );
+
   actions = createGameplayActions(controller, gameplay, {
     reset: () => dice?.reset(),
     play: (values, rerolledDie) => dice?.play(values, rerolledDie),
@@ -140,10 +153,12 @@ async function start() {
   stage.attachWaiting(
     createWaitingScatter(gameplay.checkerArtwork, (await loadModel('Die')).scene),
   );
+
   const wideStage = matchMedia('(min-aspect-ratio: 1/1)');
   let homeLoading = false;
   const loadHome = () => {
     if (homeLoading || !wideStage.matches) return;
+
     homeLoading = true;
     void import('./scene/home-falling')
       .then(({ createHomeFalling }) => {
@@ -156,13 +171,18 @@ async function start() {
         console.warn('Home decoration unavailable', error);
       });
   };
+
   wideStage.addEventListener('change', loadHome);
   loadHome();
+
   let onlineFlow: ReturnType<typeof createOnlineGameFlow> | undefined;
+
   stage.mount(() => {
     gameplay.resize();
+
     if (onlineFlow?.hasRemoteMove()) onlineFlow.finishRemoteMove();
     else actions.finishInterruptedMove();
+
     dice?.resize();
   });
   dice = await createDice(
@@ -186,9 +206,11 @@ async function start() {
           : [],
       selectDie: (index) => {
         if (controller.selectedAbility?.abilityId !== 'recast') return;
+
         const option = controller
           .rollAbilityOptions()
           .find((candidate) => candidate.target.index === index);
+
         if (option) actions.playRollAbility(option);
       },
       openingStarted: () => boardAnnouncement.openingStarted(),
@@ -221,13 +243,18 @@ async function start() {
     },
     connectTable,
   );
+
   session.onLocal = (selection, seed) => {
     historyMode = 'LOCAL';
+
     const accepted = match.startLocal(selection, seed);
+
     if (!accepted || seed === undefined) {
       playtest.clear();
+
       return;
     }
+
     playtest.start({
       mode: 'LOCAL',
       selection,
@@ -260,12 +287,14 @@ async function start() {
   reconnect = () => match.reconnect();
 
   enablePlay();
+
   if (
     sameOrigin() &&
     !document.body.classList.contains('signed-out') &&
     !document.body.classList.contains('auth-pending')
   )
     match.reconnect();
+
   gameplay.refresh();
   syncShell();
   status.hidden = true;
@@ -278,11 +307,15 @@ async function start() {
 
   let elapsed = 0;
   let last = performance.now();
+
   stage.setLoop((now) => {
     const dt = Math.min((now - last) / 1000, 0.05);
+
     last = now;
+
     if (document.hidden) return;
     if (!reducedMotion.matches && preferences.motion) elapsed += dt;
+
     water.update(dt);
     stage.render(elapsed, !reducedMotion.matches && preferences.motion, preferences.texture, dt);
     dice!.update(dt);

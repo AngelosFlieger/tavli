@@ -21,6 +21,7 @@ function abilityHelp(): string {
         ? t('help.ability.powerup')
         : t('help.ability.passive');
     const details = [copy.summary, copy.benefit, copy.drawback].filter(Boolean).join(' ');
+
     return `<li><strong>${copy.name}</strong> <small>${kind}</small><br>${details}</li>`;
   }).join('');
 }
