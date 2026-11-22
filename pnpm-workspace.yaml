@@ -5,3 +5,6 @@ allowBuilds:
 minimumReleaseAgeExclude:
   # This exact version was already reviewed and locked before the pnpm migration.
   - fast-check@4.11.0
+overrides:
+  '@stryker-mutator/core>minimatch': ^11.0.9
+  'typed-rest-client>qs': ^6.17.1
