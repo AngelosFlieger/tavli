@@ -3,6 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "engines": {
+    "node": ">=22.12.0"
+  },
   "scripts": {
     "dev": "node scripts/dev.mjs",
     "build": "tsc --noEmit && vite build && node scripts/bundle-server.mjs",
@@ -15,13 +18,15 @@
     "verify:full": "npm run check && npm run test:browser",
     "test": "node scripts/test.mjs",
     "test:coverage": "node scripts/test.mjs --coverage",
+    "test:mutation": "stryker run",
+    "test:mutation:dry": "stryker run --dryRunOnly",
     "test:property": "node --import=tsx --test tests/session-properties.test.ts",
     "test:browser": "node scripts/browser-smoke.mjs",
     "test:browser:local": "node scripts/browser-smoke.mjs --local",
     "test:browser:headed": "node scripts/browser-smoke.mjs --headed",
     "ios:sync": "npm run build && cap sync ios",
-    "format": "prettier --write src server tests scripts index.html vite.config.ts tsconfig.json .oxlintrc.json package.json",
-    "format:check": "prettier --check src server tests scripts index.html vite.config.ts tsconfig.json .oxlintrc.json package.json"
+    "format": "prettier --write src server tests scripts index.html vite.config.ts stryker.config.mjs tsconfig.json .oxlintrc.json package.json",
+    "format:check": "prettier --check src server tests scripts index.html vite.config.ts stryker.config.mjs tsconfig.json .oxlintrc.json package.json"
   },
   "dependencies": {
     "@capacitor/core": "^8.6.2",
@@ -33,6 +38,7 @@
   },
   "devDependencies": {
     "@capacitor/cli": "^8.6.2",
+    "@stryker-mutator/core": "^10.1.1",
     "@types/node": "^26.6.6",
     "@types/three": "0.180.0",
     "@types/ws": "^8.18.2",
@@ -46,5 +52,13 @@
     "tsx": "^4.23.15",
     "typescript": "~5.9.3",
     "vite": "^7.1.12"
+  },
+  "overrides": {
+    "@stryker-mutator/core": {
+      "minimatch": "^11.0.9",
+      "typed-rest-client": {
+        "qs": "^6.17.1"
+      }
+    }
   }
 }

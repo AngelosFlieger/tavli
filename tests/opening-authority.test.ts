@@ -62,3 +62,33 @@ test('opening resolution rejects incomplete, invalid, and post-winner attempt se
     assert.deepEqual(session.state.opening, { status: 'PENDING' });
   }
 });
+
+test('automatic opening is a no-op once opening authority has already advanced', () => {
+  const opened = transitionSession(initialPresentedSession(), {
+    type: 'resolveOpening',
+    attempts: [[6, 1]],
+  });
+  assert.equal(opened.ok, true);
+  if (!opened.ok) return;
+
+  let samples = 0;
+  assert.equal(
+    resolveAutomaticOpening(opened.session, CLASSIC_RULES, () => {
+      samples++;
+      return 0;
+    }),
+    null,
+  );
+  assert.equal(samples, 0);
+});
+
+test('automatic opening stops safely after the bounded number of tied attempts', () => {
+  let samples = 0;
+  const result = resolveAutomaticOpening(initialPresentedSession(), CLASSIC_RULES, () => {
+    samples++;
+    return 2;
+  });
+
+  assert.equal(result, null);
+  assert.equal(samples, 128);
+});

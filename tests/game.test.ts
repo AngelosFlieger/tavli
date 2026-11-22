@@ -6,6 +6,7 @@ import {
   applyMove,
   canBearOff,
   initialPosition,
+  other,
   pinned,
   type Position,
 } from '../src/game/rules/position';
@@ -33,6 +34,10 @@ test('initial 15-checker positions are inside the leftmost physical points', () 
   assert.ok(Math.abs(pointPosition(12).x + 0.2265) < 1e-9);
   assert.ok(pointPosition(0).z < 0);
   assert.ok(pointPosition(12).z > 0);
+});
+test('player helpers preserve the two-seat ownership boundary', () => {
+  assert.equal(other(0), 1);
+  assert.equal(other(1), 0);
 });
 test('explicit opposite paths each cover exactly 24 physical points', () => {
   for (const path of PATHS) {
@@ -163,6 +168,17 @@ test('mother pin wins two points when own starting checkers have departed', () =
     kind: 'MOTHER_VICTORY',
   });
 });
+test('an enemy checker on the winner start does not prevent a mother victory', () => {
+  const p = empty();
+  p.board[12] = [15, 0];
+  p.board[0] = [16];
+  assert.deepEqual(outcome(p), {
+    winner: 0,
+    points: 2,
+    reason: 'Mother victory',
+    kind: 'MOTHER_VICTORY',
+  });
+});
 test('mother exception continues until own start empties, both pinned is a draw', () => {
   const p = empty();
   p.board[12] = [15, 0];
@@ -187,6 +203,18 @@ test('bearing off requires all remaining checkers home and none pinned', () => {
   p.board[12] = [0, 15];
   assert.equal(canBearOff(p, 0), false);
 });
+test('pin detection distinguishes a controlled checker from ordinary stacks', () => {
+  const p = empty();
+  p.board[3] = [0];
+  p.board[4] = [0, 1];
+  p.board[5] = [15, 16];
+  assert.equal(pinned(p, 0), false);
+  assert.equal(pinned(p, 1), false);
+
+  p.board[6] = [0, 15];
+  assert.equal(pinned(p, 0), true);
+  assert.equal(pinned(p, 1), false);
+});
 test('exact bearing off and higher die only from highest occupied lower point', () => {
   const p = empty();
   p.board[14] = [0];
@@ -197,6 +225,12 @@ test('exact bearing off and higher die only from highest occupied lower point', 
     rawMoves(p, 0, 6).some((m) => m.from === 14 && m.to === -1),
     false,
   );
+});
+test('opponent checkers do not affect the highest occupied bearing-off point', () => {
+  const p = empty();
+  p.board[16] = [0];
+  p.board[23] = [15];
+  assert.deepEqual(rawMoves(p, 0, 6), [{ from: 16, to: -1, die: 6 }]);
 });
 test('home moves may be chosen instead of bearing off and lower dice move forward', () => {
   const p = empty();
@@ -210,9 +244,19 @@ test('normal win awards one, Mars awards two', () => {
   const p = empty();
   p.off[0] = Array.from({ length: 15 }, (_, i) => i);
   p.off[1] = [15];
-  assert.equal(outcome(p)?.points, 1);
+  assert.deepEqual(outcome(p), {
+    winner: 0,
+    points: 1,
+    reason: 'All checkers borne off',
+    kind: 'BEAR_OFF',
+  });
   p.off[1] = [];
-  assert.equal(outcome(p)?.points, 2);
+  assert.deepEqual(outcome(p), {
+    winner: 0,
+    points: 2,
+    reason: 'Mars',
+    kind: 'MARS',
+  });
 });
 test('turns enable end only after compulsory moves', () => {
   const g = startTurn([1, 2]);
