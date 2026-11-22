@@ -3,8 +3,7 @@ import type { GameState } from '../../session/state';
 import type { AbilityConfigBase, PassivePolicyState, PowerupsState } from '../types';
 
 export type PassiveCapacityAdjustment =
-  | { mode: 'ADD'; slots: number }
-  | { mode: 'REPLACE'; slots: number };
+  { mode: 'ADD'; slots: number } | { mode: 'REPLACE'; slots: number };
 
 export type PassiveLifecycleEvent = { type: 'FocusGained'; player: Player; focus: number };
 

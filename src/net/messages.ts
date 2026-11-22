@@ -153,17 +153,15 @@ export function isPresentationJob(value: unknown): value is PresentationJob {
 export function isRevisionedUpdate(value: unknown): value is RevisionedUpdate {
   if (!value || typeof value !== 'object' || !isAuthorityCursor(value)) return false;
   const update = value as Partial<RevisionedUpdate>;
-  if (
-    !(
-      isNetworkGameState(update.state) &&
-      typeof update.canUndo === 'boolean' &&
-      Array.isArray(update.presentations) &&
-      update.presentations.length <= 1 &&
-      update.presentations.every(isPresentationJob) &&
-      (update.commandResult === undefined || isCommandResult(update.commandResult)) &&
-      (update.events === undefined || isSessionEvents(update.events))
-    )
-  )
+  if (!(
+    isNetworkGameState(update.state) &&
+    typeof update.canUndo === 'boolean' &&
+    Array.isArray(update.presentations) &&
+    update.presentations.length <= 1 &&
+    update.presentations.every(isPresentationJob) &&
+    (update.commandResult === undefined || isCommandResult(update.commandResult)) &&
+    (update.events === undefined || isSessionEvents(update.events))
+  ))
     return false;
   const opening = update.presentations.find((job) => job.type === 'OPENING');
   return (

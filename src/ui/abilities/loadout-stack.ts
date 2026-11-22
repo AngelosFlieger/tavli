@@ -26,8 +26,8 @@ export function createAbilityLoadouts(
     trayRoot.querySelector<HTMLElement>('.ability-tray[data-player="0"]')!,
     trayRoot.querySelector<HTMLElement>('.ability-tray[data-player="1"]')!,
   ];
-  const loadoutViews = playerTrays.map(
-    (tray) => tray.querySelector<HTMLElement>('.ability-loadout')!,
+  const loadoutViews = playerTrays.map((tray) =>
+    tray.querySelector<HTMLElement>('.ability-loadout')!,
   );
   let focusedInstanceId: string | null = null;
   let displayedPlayer: Player | null = null;
