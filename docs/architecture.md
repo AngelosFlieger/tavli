@@ -69,6 +69,7 @@ Node.js 20.19+ or 22.12+ is required. Run `npm ci` once, then:
 | `npm run dev`          | Bundles the server, runs it on port 3001, and starts Vite on port 3000 with `/ws` proxied to 3001.                                       |
 | `npm test`             | Discovers and runs all `tests/*.test.ts` files directly through the TypeScript loader.                                                   |
 | `npm run test:coverage` | Runs the unit suite with enforced line, branch, and function coverage floors.                                                           |
+| `npm run test:property` | Runs generated reachable Classic sessions through the deterministic transition and invariant contracts.                               |
 | `npm run lint`         | Runs type-aware Oxlint checks through `tsrs`, including unsafe floating-promise and async-handler detection.                            |
 | `npm run test:browser` | Starts isolated web/game servers and checks local interaction plus authoritative two-seat drafts, activation, and replacement in Chrome. |
 | `npm run build`        | Type-checks, builds the browser into `dist/`, and bundles the server into `dist-server/`.                                                |

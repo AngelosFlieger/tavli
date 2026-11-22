@@ -23,6 +23,7 @@ npm run verify:full # check plus both browser paths (about 70s): run before push
 npm run check       # build, coverage-gated tests, lint, and formatting in parallel (about 10s)
 npm test
 npm run test:coverage
+npm run test:property
 npm run lint
 npm run typecheck
 npm run test:browser        # local play plus two-seat online drafts/ability smoke test (about 1 min)
