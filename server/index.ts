@@ -90,7 +90,7 @@ wss.on('connection', (socket, request) => {
 
 async function attach(socket: Socket, request: IncomingMessage) {
   const token = sessionToken(request.headers.cookie);
-  const user = token ? await accounts.authenticate(token) : null;
+  const user = await accounts.authenticate(token);
 
   if (!user) {
     sendSocket(socket, { type: 'rejected', reason: 'AUTH' });

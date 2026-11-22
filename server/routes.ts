@@ -15,7 +15,9 @@ export function sessionToken(cookieHeader: string | undefined) {
 
     if (name !== cookieName) continue;
     try {
-      return decodeURIComponent(rest.join('=')) || null;
+      const token = decodeURIComponent(rest.join('='));
+
+      return /^[A-Za-z0-9_-]{43}$/.test(token) ? token : null;
     } catch {
       return null;
     }
@@ -47,7 +49,7 @@ export async function handleAuth(
   const token = sessionToken(request.headers.cookie);
 
   if (request.method === 'GET' && url.pathname === '/auth/me') {
-    const user = token ? await accounts.authenticate(token) : null;
+    const user = await accounts.authenticate(token);
 
     send(
       response,
@@ -58,7 +60,7 @@ export async function handleAuth(
     return true;
   }
   if (request.method === 'POST' && url.pathname === '/auth/logout') {
-    if (token) await accounts.logout(token);
+    await accounts.logout(token);
 
     setSessionCookie(request, response, null);
     send(response, 204, null);

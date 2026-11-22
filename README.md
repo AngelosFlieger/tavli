@@ -56,7 +56,7 @@ Stop `pnpm dev` before `pnpm start`. Both want port 3000.
 
 The server validates `PORT`, `PLAKOTO_MONGO_URL`, and `PLAKOTO_DB_NAME` at startup and exits with a clear error for unsafe values. `GET /healthz` reports process liveness and `GET /readyz` checks MongoDB. WebSocket frames are capped at 64 KiB and limited to 20 messages per second with a burst of 40; HTTP requests share a per-address token bucket. Responses include a restrictive content-security policy, frame, referrer, permissions, and MIME-sniffing headers. Hashed Vite assets are cached immutably, non-hashed media for one day, and HTML is never cached.
 
-Accounts, login sessions, and live matches are stored in MongoDB. The game uses `mongodb://127.0.0.1:27017` and the `plakoto` database. In Compass, connect to that address and open `plakoto`. The collections are `users`, `sessions`, `matches`, `playing`, and `queue`. Start the local MongoDB server before `pnpm dev`. Run one game server per database; the server owns live authoritative sessions and clears stale queue entries when it starts.
+Accounts, login sessions, and live matches are stored in MongoDB. Passwords use versioned scrypt parameters; an account with the earlier hash format is upgraded after its next successful login. Session cookies contain a strictly validated 32-byte random token, while MongoDB stores only its SHA-256 lookup digest. The game uses `mongodb://127.0.0.1:27017` and the `plakoto` database. In Compass, connect to that address and open `plakoto`. The collections are `users`, `sessions`, `matches`, `playing`, and `queue`. Start the local MongoDB server before `pnpm dev`. Run one game server per database; the server owns live authoritative sessions and clears stale queue entries when it starts.
 
 ## Multiplayer
 

@@ -1,10 +1,21 @@
-import { createHash, randomBytes, randomUUID, scrypt, timingSafeEqual } from 'node:crypto';
-import { promisify } from 'node:util';
+import {
+  createHash,
+  randomBytes,
+  randomUUID,
+  scrypt,
+  timingSafeEqual,
+  type ScryptOptions,
+} from 'node:crypto';
 import type { Store } from './store';
 
-const scryptHash = promisify(scrypt);
-
 const sessionDays = 30;
+
+const passwordScrypt = Object.freeze({
+  N: 2 ** 17,
+  r: 8,
+  p: 1,
+  maxmem: 256 * 1024 * 1024,
+}) satisfies ScryptOptions;
 
 export type AuthSuccess = { ok: true; token: string; username: string };
 
@@ -18,11 +29,11 @@ export function createAccounts(store: Store, now = () => Date.now()) {
     login(identifier: string, password: string) {
       return signIn(store, now, identifier, password);
     },
-    authenticate(token: string) {
-      return store.userForSession(hashToken(token), now());
+    authenticate(token: string | null) {
+      return store.userForSession(hashToken(token ?? ''), now());
     },
-    async logout(token: string) {
-      await store.deleteSession(hashToken(token));
+    async logout(token: string | null) {
+      await store.deleteSession(hashToken(token ?? ''));
     },
   };
 }
@@ -72,8 +83,14 @@ async function signIn(
   const email = normalizeEmail(trimmed);
   const existing = email ? await store.userByEmail(email) : await store.userByUsername(trimmed);
 
-  if (!existing || !(await verifyPassword(password, existing.passwordHash)))
+  if (!existing) return { ok: false, status: 401, error: 'Email, username, or password is wrong.' };
+
+  const passwordStatus = await verifyPassword(password, existing.passwordHash);
+
+  if (passwordStatus === 'INVALID')
     return { ok: false, status: 401, error: 'Email, username, or password is wrong.' };
+  if (passwordStatus === 'LEGACY')
+    await store.updatePasswordHash(existing.id, await hashPassword(password));
 
   return { ok: true, token: await issue(store, existing.id, now), username: existing.username };
 }
@@ -114,20 +131,55 @@ export function cleanUsername(value: string) {
 
 async function hashPassword(password: string) {
   const salt = randomBytes(16);
-  const hash = (await scryptHash(password, salt, 32)) as Buffer;
+  const hash = await derivePassword(password, salt, passwordScrypt);
 
-  return `scrypt:${salt.toString('base64url')}:${hash.toString('base64url')}`;
+  return [
+    'scrypt',
+    passwordScrypt.N,
+    passwordScrypt.r,
+    passwordScrypt.p,
+    salt.toString('base64url'),
+    hash.toString('base64url'),
+  ].join(':');
 }
 
 async function verifyPassword(password: string, stored: string) {
-  const [kind, salt, hash] = stored.split(':');
+  const parts = stored.split(':');
+  const legacy = parts.length === 3 && parts[0] === 'scrypt';
+  const current =
+    parts.length === 6 &&
+    parts[0] === 'scrypt' &&
+    parts[1] === String(passwordScrypt.N) &&
+    parts[2] === String(passwordScrypt.r) &&
+    parts[3] === String(passwordScrypt.p);
 
-  if (kind !== 'scrypt' || !salt || !hash) return false;
+  if (!legacy && !current) return 'INVALID';
 
-  const actual = (await scryptHash(password, Buffer.from(salt, 'base64url'), 32)) as Buffer;
+  const salt = legacy ? parts[1] : parts[4];
+  const hash = legacy ? parts[2] : parts[5];
+
+  if (!salt || !hash) return 'INVALID';
+
+  const actual = await derivePassword(
+    password,
+    Buffer.from(salt, 'base64url'),
+    current ? passwordScrypt : undefined,
+  );
   const expected = Buffer.from(hash, 'base64url');
 
-  if (actual.length !== expected.length) return false;
+  if (actual.length !== expected.length || !timingSafeEqual(actual, expected)) return 'INVALID';
 
-  return timingSafeEqual(actual, expected);
+  return legacy ? 'LEGACY' : 'CURRENT';
+}
+
+function derivePassword(password: string, salt: Buffer, options?: ScryptOptions) {
+  return new Promise<Buffer>((resolve, reject) => {
+    const complete = (error: Error | null, derivedKey: Buffer) => {
+      if (error) reject(error);
+      else resolve(derivedKey);
+    };
+
+    if (options) scrypt(password, salt, 32, options, complete);
+    else scrypt(password, salt, 32, complete);
+  });
 }

@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { connectTable, type TableEvents } from '../src/net/client';
+import { connectTable, decodeServerMessage, type TableEvents } from '../src/net/client';
+import { initialGameState } from '../src/game/session/state';
 import { PROTOCOL_VERSION } from '../src/net/messages';
 
 test('an unsent matchmaking request survives a temporary connection failure', () => {
@@ -111,6 +112,50 @@ test('an unsent matchmaking request survives a temporary connection failure', ()
     restore('window', originalWindow);
     restore('WebSocket', originalWebSocket);
   }
+});
+
+test('server messages are reconstructed only after complete validation', () => {
+  const state = initialGameState();
+  const update = {
+    type: 'update',
+    matchId: 'match-1',
+    revision: 0,
+    state,
+    canUndo: false,
+    presentations: [],
+  };
+
+  assert.deepEqual(decodeServerMessage(JSON.stringify(update)), update);
+  assert.deepEqual(
+    decodeServerMessage(JSON.stringify({ type: 'ready', protocol: PROTOCOL_VERSION, name: 'Ada' })),
+    { type: 'ready', protocol: PROTOCOL_VERSION, name: 'Ada' },
+  );
+  assert.deepEqual(decodeServerMessage(JSON.stringify({ type: 'room', code: '12ABEF' })), {
+    type: 'room',
+    code: '12ABEF',
+  });
+  assert.deepEqual(decodeServerMessage(JSON.stringify({ type: 'error', code: 'AUTH' })), {
+    type: 'error',
+    code: 'AUTH',
+  });
+
+  const invalidMessages = [
+    null,
+    { type: 'ready', protocol: PROTOCOL_VERSION, name: 123 },
+    { type: 'room', code: '../bad' },
+    { type: 'error', code: 'USER_CONTROLLED' },
+    { type: 'matched', you: 0 },
+    { ...update, revision: -1 },
+    { ...update, state: { ...state, phase: 'HACKED' } },
+    { type: 'rematch', status: 'FORCED' },
+    { type: 'unknown' },
+  ];
+
+  for (const message of invalidMessages)
+    assert.equal(decodeServerMessage(JSON.stringify(message)), null);
+
+  assert.equal(decodeServerMessage('{not json'), null);
+  assert.equal(decodeServerMessage(new Uint8Array()), null);
 });
 
 function restore(name: 'location' | 'window' | 'WebSocket', descriptor?: PropertyDescriptor) {

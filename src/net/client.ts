@@ -82,91 +82,86 @@ export function connectTable(events: TableEvents) {
     socket.onmessage = (event) => {
       if (socket !== currentSocket) return;
 
-      const message = parse(event.data);
+      const message = decodeServerMessage(event.data);
 
       if (!message) return;
-      if (message.type === 'rejected') {
-        intentional = true;
-        queued.length = 0;
-        events.onRejected();
-        socket.close();
-
-        return;
-      }
-      if (message.type === 'error') {
-        events.onError(message.code);
-
-        return;
-      }
-      if (message.type === 'ready') {
-        if (message.protocol !== PROTOCOL_VERSION) {
+      switch (message.type) {
+        case 'rejected':
           intentional = true;
-          events.onError('PROTOCOL');
+          queued.length = 0;
+          events.onRejected();
           socket.close();
 
           return;
-        }
+        case 'error':
+          events.onError(message.code);
 
-        authed = true;
-        retry = 0;
-        flush();
-        events.onReady(message.name);
+          return;
+        case 'ready':
+          if (message.protocol !== PROTOCOL_VERSION) {
+            intentional = true;
+            events.onError('PROTOCOL');
+            socket.close();
 
-        return;
+            return;
+          }
+
+          authed = true;
+          retry = 0;
+          flush();
+          events.onReady(message.name);
+
+          return;
+        case 'resume':
+          authed = true;
+          retry = 0;
+          queued.length = 0;
+          events.onResume(
+            message.you,
+            message.players,
+            message.state,
+            message.canUndo,
+            message.variantConfig,
+            { matchId: message.matchId, revision: message.revision },
+            message.presentations,
+            message.events,
+          );
+
+          return;
+        case 'waiting':
+          authed = true;
+          retry = 0;
+          flush();
+          events.onWaiting();
+
+          return;
+        case 'room':
+          events.onRoom(message.code);
+
+          return;
+        case 'matched':
+          events.onMatched(
+            message.you,
+            message.players,
+            message.state,
+            message.variantConfig,
+            { matchId: message.matchId, revision: message.revision },
+            message.presentations,
+            message.events,
+          );
+
+          return;
+        case 'update':
+          events.onUpdate(message);
+
+          return;
+        case 'rematch':
+          events.onRematch(message.status);
+
+          return;
+        case 'left':
+          events.onLeft();
       }
-      if (
-        message.type === 'resume' &&
-        (message.you === 0 || message.you === 1) &&
-        isPlayerNames(message.players) &&
-        isNetworkGameState(message.state) &&
-        isAuthorityCursor(message) &&
-        isVariantConfigValid(message.state, message.variantConfig) &&
-        isInitialPresentationValid(message, message.canUndo === true)
-      ) {
-        authed = true;
-        retry = 0;
-        queued.length = 0;
-        events.onResume(
-          message.you,
-          message.players,
-          message.state,
-          message.canUndo === true,
-          message.variantConfig,
-          { matchId: message.matchId, revision: message.revision },
-          message.presentations,
-          message.events,
-        );
-
-        return;
-      }
-      if (message.type === 'waiting') {
-        authed = true;
-        retry = 0;
-        flush();
-        events.onWaiting();
-      } else if (message.type === 'room') {
-        events.onRoom(message.code);
-      } else if (
-        message.type === 'matched' &&
-        (message.you === 0 || message.you === 1) &&
-        isPlayerNames(message.players) &&
-        isNetworkGameState(message.state) &&
-        isAuthorityCursor(message) &&
-        isVariantConfigValid(message.state, message.variantConfig) &&
-        isInitialPresentationValid(message, false)
-      )
-        events.onMatched(
-          message.you,
-          message.players,
-          message.state,
-          message.variantConfig,
-          { matchId: message.matchId, revision: message.revision },
-          message.presentations,
-          message.events,
-        );
-      else if (message.type === 'update' && isRevisionedUpdate(message)) events.onUpdate(message);
-      else if (message.type === 'rematch') events.onRematch(message.status);
-      else if (message.type === 'left') events.onLeft();
     };
     socket.onerror = () => {
       if (socket === currentSocket) events.onError('INTERNAL');
@@ -238,7 +233,7 @@ function isPlayerNames(value: unknown): value is [string, string] {
   return (
     Array.isArray(value) &&
     value.length === 2 &&
-    value.every((name) => typeof name === 'string' && name.length > 0)
+    value.every((name) => typeof name === 'string' && name.length > 0 && name.length <= 20)
   );
 }
 
@@ -268,28 +263,130 @@ function isVariantConfigValid(
   }
 }
 
-function parse(data: unknown): ServerMessage | null {
+const clientErrorCodes: readonly ClientErrorCode[] = [
+  'PROTOCOL',
+  'AUTH',
+  'NOT_FOUND',
+  'NOT_YOUR_TURN',
+  'MATCH_ENDED',
+  'MATCH_NOT_FINISHED',
+  'WAITING_FOR_OPPONENT',
+  'INVALID_COMMAND',
+  'ROOM_NOT_FOUND',
+  'ROOM_OWNED',
+  'ROOM_CLOSED',
+  'INTERNAL',
+];
+
+function isClientErrorCode(value: unknown): value is ClientErrorCode {
+  return typeof value === 'string' && clientErrorCodes.includes(value as ClientErrorCode);
+}
+
+export function decodeServerMessage(data: unknown): ServerMessage | null {
   if (typeof data !== 'string') return null;
   try {
-    const message = JSON.parse(data) as ServerMessage;
+    const parsed: unknown = JSON.parse(data);
 
-    if (
-      message &&
-      (message.type === 'ready' ||
-        message.type === 'rejected' ||
-        message.type === 'error' ||
-        message.type === 'waiting' ||
-        message.type === 'room' ||
-        message.type === 'matched' ||
-        message.type === 'resume' ||
-        message.type === 'update' ||
-        message.type === 'rematch' ||
-        message.type === 'left')
-    )
-      return message;
+    if (!parsed || typeof parsed !== 'object') return null;
+
+    const message = parsed as Record<string, unknown>;
+
+    switch (message.type) {
+      case 'ready':
+        return Number.isSafeInteger(message.protocol) &&
+          typeof message.name === 'string' &&
+          message.name.length > 0 &&
+          message.name.length <= 20
+          ? { type: 'ready', protocol: Number(message.protocol), name: message.name }
+          : null;
+      case 'rejected':
+        return message.reason === undefined ||
+          message.reason === 'AUTH' ||
+          message.reason === 'PROTOCOL'
+          ? { type: 'rejected', ...(message.reason ? { reason: message.reason } : {}) }
+          : null;
+      case 'error':
+        return isClientErrorCode(message.code) ? { type: 'error', code: message.code } : null;
+      case 'waiting':
+        return { type: 'waiting' };
+      case 'room':
+        return typeof message.code === 'string' && /^[A-F0-9]{6}$/.test(message.code)
+          ? { type: 'room', code: message.code }
+          : null;
+      case 'matched':
+        return decodeInitialMessage(message, false);
+      case 'resume':
+        return typeof message.canUndo === 'boolean'
+          ? decodeInitialMessage(message, message.canUndo)
+          : null;
+      case 'update':
+        return isRevisionedUpdate(message)
+          ? {
+              type: 'update',
+              matchId: message.matchId,
+              revision: message.revision,
+              state: message.state,
+              canUndo: message.canUndo,
+              presentations: message.presentations,
+              ...(message.events ? { events: message.events } : {}),
+              ...(message.commandResult ? { commandResult: message.commandResult } : {}),
+            }
+          : null;
+      case 'rematch':
+        return message.status === 'OFFERED' || message.status === 'DECLINED'
+          ? { type: 'rematch', status: message.status }
+          : null;
+      case 'left':
+        return { type: 'left' };
+      default:
+        return null;
+    }
   } catch {
     return null;
   }
+}
 
-  return null;
+function decodeInitialMessage(
+  message: Record<string, unknown>,
+  canUndo: boolean,
+): Extract<ServerMessage, { type: 'matched' | 'resume' }> | null {
+  if (
+    (message.you !== 0 && message.you !== 1) ||
+    !isPlayerNames(message.players) ||
+    !isNetworkGameState(message.state) ||
+    !isVariantConfigValid(message.state, message.variantConfig) ||
+    !isAuthorityCursor(message)
+  )
+    return null;
+
+  const validated = message as Record<string, unknown> & AuthorityCursor;
+  const candidate = {
+    type: validated.type,
+    you: validated.you,
+    players: validated.players,
+    state: validated.state,
+    canUndo,
+    variantConfig: validated.variantConfig,
+    matchId: validated.matchId,
+    revision: validated.revision,
+    presentations: validated.presentations,
+    events: validated.events,
+  } as Extract<ServerMessage, { type: 'matched' | 'resume' }>;
+
+  if (!isInitialPresentationValid(candidate, canUndo)) return null;
+
+  const common = {
+    you: candidate.you,
+    players: candidate.players,
+    state: candidate.state,
+    variantConfig: candidate.variantConfig,
+    matchId: candidate.matchId,
+    revision: candidate.revision,
+    ...(candidate.presentations ? { presentations: candidate.presentations } : {}),
+    ...(candidate.events ? { events: candidate.events } : {}),
+  };
+
+  return validated.type === 'resume'
+    ? { type: 'resume', ...common, canUndo }
+    : { type: 'matched', ...common };
 }
