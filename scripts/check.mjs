@@ -3,7 +3,7 @@ import { appendFile } from 'node:fs/promises';
 
 /**
  * Mirrors the CI verify job (build+coverage+lint+format) in one command, running the
- * independent steps concurrently. `npm run build` already typechecks, so a separate
+ * independent steps concurrently. `pnpm build` already typechecks, so a separate
  * `tsc --noEmit` pass would only duplicate work.
  */
 const steps = [
@@ -18,10 +18,11 @@ const verbose = process.argv.includes('--verbose');
 function execute(step) {
   const started = Date.now();
   const output = [];
-  const child = spawn('npm', step.args, {
+  const packageManager = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm';
+  const child = spawn(packageManager, step.args, {
     stdio: ['ignore', 'pipe', 'pipe'],
     env: process.env,
-    shell: process.platform === 'win32',
+    shell: false,
   });
   const collect = (chunk) => {
     const text = chunk.toString();
@@ -113,7 +114,7 @@ if (results.every((result) => result.ok)) {
   }
 
   console.log(
-    'All checks passed. Browser smoke: `npm run test:browser:local` or `npm run test:browser`.',
+    'All checks passed. Browser smoke: `pnpm test:browser:local` or `pnpm test:browser`.',
   );
 } else {
   const failed = results.filter((result) => !result.ok).map((result) => result.step.name);

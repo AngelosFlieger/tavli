@@ -246,9 +246,9 @@ features require the same extension point.
 Each stage must pass:
 
 - focused unit and contract tests for the changed boundary;
-- `npm run check`;
-- `npm run test:browser:local` for local-only changes;
-- `npm run verify:full` for protocol, server, clock, reconnect, or online-flow changes;
+- `pnpm check`;
+- `pnpm test:browser:local` for local-only changes;
+- `pnpm verify:full` for protocol, server, clock, reconnect, or online-flow changes;
 - updated `game-spec.md` for behavior changes and `architecture.md` for ownership changes.
 
 At least one online integration test must use an enabled short clock. The long software-rendered

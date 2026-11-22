@@ -57,7 +57,7 @@ steps, extract a named helper or introduce a concrete workflow state instead of 
 
 ## Enforcement
 
-`npm run format` runs Prettier and then restores required semantic spacing. `npm run format:check`
+`pnpm format` runs Prettier and then restores required semantic spacing. `pnpm format:check`
 checks both layers. The readability pass enforces stable boundaries between declarations,
 control-flow sections, actions, and terminal returns; review still owns boundaries between two
 same-shaped action sequences that represent different domain phases.

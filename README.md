@@ -12,45 +12,51 @@ Ability inventories appear as overlapping cards beside each player. Select a car
 
 ## Run
 
-Node.js 24.11+ is required; Node 26 LTS is recommended and used by CI.
+Node.js 24.11+ is required; Node 26 LTS is recommended and used by CI. The repository pins pnpm
+11.29.0 so local development and CI resolve the same dependency graph. Install it once with
+`npm install --global pnpm@11.29.0` if `pnpm --version` is unavailable.
 
 ```sh
-npm ci
-npm run dev
+pnpm install --frozen-lockfile
+pnpm dev
 ```
 
 Open http://localhost:3000. Vite also prints a Network address: anyone on the same Wi-Fi can open that and click Multiplayer. The dev server and the game server start together. The game server listens on port 3001; the page proxies it.
 
 ```sh
-npm run verify      # check plus the local browser path (about 20s): run before most commits
-npm run verify:full # check plus both browser paths (about 70s): run before pushing
-npm run check       # build, coverage-gated tests, lint, and formatting in parallel (about 10s)
-npm test
-npm run test:coverage
-npm run test:property
-npm run test:mutation     # deeper core-rules mutation analysis (about 2-3 min initially)
-npm run test:mutation:dry # validate the mutation runner without executing mutants
-npm run lint
-npm run typecheck
-npm run test:browser        # local play plus two-seat online drafts/ability smoke test (about 1 min)
-npm run test:browser:local  # local play path only, for presentation changes (about 10s)
-npm run build
-npm start          # serve dist/ and the game server on port 3000
-npm run format       # apply Prettier and semantic logic-section spacing
-npm run format:check # verify both formatting layers without writing files
+pnpm verify      # check plus the local browser path (about 20s): run before most commits
+pnpm verify:full # check plus both browser paths (about 70s): run before pushing
+pnpm check       # build, coverage-gated tests, lint, and formatting in parallel (about 10s)
+pnpm test
+pnpm test:coverage
+pnpm test:property
+pnpm test:mutation     # deeper core-rules mutation analysis (about 2-3 min initially)
+pnpm test:mutation:dry # validate the mutation runner without executing mutants
+pnpm lint
+pnpm typecheck
+pnpm test:browser        # local play plus two-seat online drafts/ability smoke test (about 1 min)
+pnpm test:browser:local  # local play path only, for presentation changes (about 10s)
+pnpm build
+pnpm start          # serve dist/ and the game server on port 3000
+pnpm format       # apply Prettier and semantic logic-section spacing
+pnpm format:check # verify both formatting layers without writing files
 ```
 
-GitHub Actions runs the type, coverage, lint, formatting, build, and browser checks on the minimum Node 24.11 runtime and the recommended Node 26 runtime. Formatting combines Prettier's syntax layout with the repository's semantic-spacing pass; see the [code readability guidelines](docs/code-style.md). Coverage must stay above 89% of lines, 79% of branches, and 87% of functions across loaded `src` and `server` modules; each verification job publishes the measured percentages in its GitHub summary. A separate CI job mutation-tests relevant changes to pure movement, position, outcome, opening authority, and their variant policies, while completing successfully as skipped for unrelated changes so it can safely be required. It enforces an 80% floor against an established baseline above 85%, publishes the measured score, has a ten-minute timeout, and uploads its HTML and JSON reports when it fails. Mutation analysis remains outside the fast local `check` loop. Security CI runs CodeQL over TypeScript and workflow files, audits the current lockfile weekly, and rejects pull requests that introduce dependencies with moderate-or-higher known vulnerabilities. The browser smoke test finds Chrome in the common Linux locations. Set `PLAKOTO_CHROME_PATH` when using another compatible executable. Both smoke variants log elapsed seconds per stage, pick a free port pair so leftover servers never block a run, and `npm run test:browser:headed` shows the browser window at full resolution.
+GitHub Actions runs the type, coverage, lint, formatting, build, and browser checks on the minimum Node 24.11 runtime and the recommended Node 26 runtime. Formatting combines Prettier's syntax layout with the repository's semantic-spacing pass; see the [code readability guidelines](docs/code-style.md). Coverage must stay above 89% of lines, 79% of branches, and 87% of functions across loaded `src` and `server` modules; each verification job publishes the measured percentages in its GitHub summary. A separate CI job mutation-tests relevant changes to pure movement, position, outcome, opening authority, and their variant policies, while completing successfully as skipped for unrelated changes so it can safely be required. It enforces an 80% floor against an established baseline above 85%, publishes the measured score, has a ten-minute timeout, and uploads its HTML and JSON reports when it fails. Mutation analysis remains outside the fast local `check` loop. Security CI runs CodeQL over TypeScript and workflow files, audits the current lockfile weekly, and rejects pull requests that introduce dependencies with moderate-or-higher known vulnerabilities. The browser smoke test finds Chrome in the common Linux locations. Set `PLAKOTO_CHROME_PATH` when using another compatible executable. Both smoke variants log elapsed seconds per stage, pick a free port pair so leftover servers never block a run, and `pnpm test:browser:headed` shows the browser window at full resolution.
+
+pnpm stores package contents once and links them into each project, reducing duplicate disk use.
+Version 11 remains pinned while GitHub's dependency graph has incomplete support for pnpm 12's
+two-document lockfile; revisit the pin when GitHub supports that format.
 
 Development builds also show local balance-playtest controls in Settings. Leave the seed blank for fresh cryptographic randomness on every new game, or enter an unsigned 32-bit seed when a balance run must be reproducible. The same profile and explicit seed reproduce dice, draft offers/order, passive probability checks, and powerup rerolls. During that game, Settings can download an in-memory JSON report with semantic events, public effect snapshots, picks, uses, stalled turns, and the result. Settings can also import multiple reports, show a compact comparison, and download aggregate JSON. Aggregation keeps distinct configuration hashes separate and distinguishes completed hold times from unfinished, censored observations. Production builds do not expose these controls, and no report data is sent anywhere.
 
-Stop `npm run dev` before `npm start`. Both want port 3000.
+Stop `pnpm dev` before `pnpm start`. Both want port 3000.
 
 ### Operations
 
 The server validates `PORT`, `PLAKOTO_MONGO_URL`, and `PLAKOTO_DB_NAME` at startup and exits with a clear error for unsafe values. `GET /healthz` reports process liveness and `GET /readyz` checks MongoDB. WebSocket frames are capped at 64 KiB and limited to 20 messages per second with a burst of 40; HTTP requests share a per-address token bucket. Responses include a restrictive content-security policy, frame, referrer, permissions, and MIME-sniffing headers. Hashed Vite assets are cached immutably, non-hashed media for one day, and HTML is never cached.
 
-Accounts, login sessions, and live matches are stored in MongoDB. The game uses `mongodb://127.0.0.1:27017` and the `plakoto` database. In Compass, connect to that address and open `plakoto`. The collections are `users`, `sessions`, `matches`, `playing`, and `queue`. Start the local MongoDB server before `npm run dev`. Run one game server per database; the server owns live authoritative sessions and clears stale queue entries when it starts.
+Accounts, login sessions, and live matches are stored in MongoDB. The game uses `mongodb://127.0.0.1:27017` and the `plakoto` database. In Compass, connect to that address and open `plakoto`. The collections are `users`, `sessions`, `matches`, `playing`, and `queue`. Start the local MongoDB server before `pnpm dev`. Run one game server per database; the server owns live authoritative sessions and clears stale queue entries when it starts.
 
 ## Multiplayer
 
@@ -60,7 +66,7 @@ Choose Classic or Powerups, then click Multiplayer to wait. The next person sear
 
 Online matches use a server-owned clock. The automatic opening has no player deadline; after it resolves, each turn gets 2 minutes and a 15-second bank. Draft phases pause the clock. The same values apply to every table on the server and can be changed with `PLAKOTO_CLOCK_TURN_SECONDS` and `PLAKOTO_CLOCK_BANK_SECONDS`; set `PLAKOTO_CLOCK=off` to disable clocks. When the active player's deadline expires, the opponent wins with a timeout result.
 
-To share the game running on this Mac, leave `npm run dev` or `npm start` going and start a tunnel:
+To share the game running on this Mac, leave `pnpm dev` or `pnpm start` going and start a tunnel:
 
 ```sh
 ~/.local/bin/cloudflared tunnel --url http://localhost:3000

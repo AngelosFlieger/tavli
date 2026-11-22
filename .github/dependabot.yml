@@ -1,5 +1,6 @@
 version: 2
 updates:
+  # GitHub calls the JavaScript ecosystem "npm" for npm, pnpm, and pnpm-lock.yaml.
   - package-ecosystem: npm
     directory: /
     schedule:

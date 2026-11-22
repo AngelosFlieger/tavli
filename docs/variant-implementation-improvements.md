@@ -152,10 +152,10 @@ the full unit suite and both browser paths.
 Each stage requires focused rule/session/application/multiplayer tests as appropriate, followed by:
 
 ```sh
-npm test
-npm run build
-npm run format:check
+pnpm test
+pnpm build
+pnpm format:check
 ```
 
-Run `npm run test:browser` for controller or presentation changes. Update the game specification and
+Run `pnpm test:browser` for controller or presentation changes. Update the game specification and
 architecture map whenever externally visible behavior or ownership boundaries change.

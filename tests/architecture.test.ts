@@ -60,3 +60,22 @@ test('the interaction controller delegates session transitions to local authorit
 
   assert.doesNotMatch(interaction, authoritativeTransitionImport);
 });
+
+test('the repository uses the pinned pnpm toolchain exclusively', async () => {
+  const manifest = JSON.parse(await readFile('package.json', 'utf8')) as {
+    packageManager?: string;
+    scripts?: Record<string, string>;
+  };
+
+  assert.equal(manifest.packageManager, 'pnpm@11.29.0');
+  assert.ok(manifest.scripts);
+
+  for (const [name, command] of Object.entries(manifest.scripts)) {
+    assert.doesNotMatch(command, /\bnpm(?:\s+run)?\b/, `${name} bypasses the pnpm toolchain`);
+  }
+
+  const lockfile = await readFile('pnpm-lock.yaml', 'utf8');
+
+  assert.match(lockfile, /^lockfileVersion: '9\.0'/);
+  await assert.rejects(readFile('package-lock.json', 'utf8'), { code: 'ENOENT' });
+});
