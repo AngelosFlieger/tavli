@@ -238,5 +238,5 @@ This is enough variety to test control, protection, dice adjustment, counterplay
 4. Add `ability.<id>.name` and an `ability.<id>.summary...` entry to `ui/i18n/en.ts` and
    `ui/i18n/el.ts`. A presenter entry is optional and only needed when the shared prompt or die
    label is not enough.
-5. Run `npm run verify`. `tests/ability-catalog.test.ts` freezes ID order, profile hashes, and
+5. Run `pnpm verify`. `tests/ability-catalog.test.ts` freezes ID order, profile hashes, and
    seeded draft offers; `tests/variant-imports.test.ts` keeps the runtime import graph acyclic.

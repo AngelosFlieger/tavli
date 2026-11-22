@@ -129,7 +129,7 @@ async function main() {
   } else if (findings.length) {
     console.error('Missing a blank line at these logic boundaries:');
     console.error(findings.join('\n'));
-    console.error('Run `npm run format` to repair them.');
+    console.error('Run `pnpm format` to repair them.');
     process.exitCode = 1;
   } else {
     console.log('Readability formatting is consistent.');

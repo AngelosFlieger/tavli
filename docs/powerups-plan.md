@@ -354,7 +354,7 @@ Add focused tests in the existing layers:
 - **Lobby/protocol:** server-only randomness, config-hash mismatch, out-of-turn picks, spoofed rolls, stale instance IDs, illegal targets, separate matchmaking queues, and sender-only rejection.
 - **Browser:** a full local draft and one authoritative online draft, keyboard targeting/cancel, phone-sized replacement UI, and active-effect text.
 
-Run `npm test`, `npm run build`, `npm run format:check`, and `npm run test:browser` for implementation changes.
+Run `pnpm test`, `pnpm build`, `pnpm format:check`, and `pnpm test:browser` for implementation changes.
 
 ## Balance process
 

@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "packageManager": "pnpm@11.29.0",
   "engines": {
     "node": ">=24.11.0"
   },
@@ -14,8 +15,8 @@
     "typecheck": "tsc --noEmit",
     "lint": "oxlint --type-aware --report-unused-disable-directives --max-warnings=0 .",
     "check": "node scripts/check.mjs",
-    "verify": "npm run check && npm run test:browser:local",
-    "verify:full": "npm run check && npm run test:browser",
+    "verify": "pnpm check && pnpm test:browser:local",
+    "verify:full": "pnpm check && pnpm test:browser",
     "test": "node scripts/test.mjs",
     "test:coverage": "node scripts/test.mjs --coverage",
     "test:mutation": "stryker run",
@@ -24,9 +25,9 @@
     "test:browser": "node scripts/browser-smoke.mjs",
     "test:browser:local": "node scripts/browser-smoke.mjs --local",
     "test:browser:headed": "node scripts/browser-smoke.mjs --headed",
-    "ios:sync": "npm run build && cap sync ios",
-    "format": "prettier --write src server tests scripts index.html vite.config.ts stryker.config.mjs tsconfig.json .oxlintrc.json package.json && node scripts/readability.mjs --write",
-    "format:check": "prettier --check src server tests scripts index.html vite.config.ts stryker.config.mjs tsconfig.json .oxlintrc.json package.json && node scripts/readability.mjs"
+    "ios:sync": "pnpm build && cap sync ios",
+    "format": "prettier --write src server tests scripts .github index.html vite.config.ts stryker.config.mjs tsconfig.json .oxlintrc.json package.json pnpm-workspace.yaml && node scripts/readability.mjs --write",
+    "format:check": "prettier --check src server tests scripts .github index.html vite.config.ts stryker.config.mjs tsconfig.json .oxlintrc.json package.json pnpm-workspace.yaml && node scripts/readability.mjs"
   },
   "dependencies": {
     "@capacitor/core": "^8.6.2",
@@ -52,13 +53,5 @@
     "tsx": "^4.23.15",
     "typescript": "~5.9.3",
     "vite": "^8.3.8"
-  },
-  "overrides": {
-    "@stryker-mutator/core": {
-      "minimatch": "^11.0.9",
-      "typed-rest-client": {
-        "qs": "^6.17.1"
-      }
-    }
   }
 }

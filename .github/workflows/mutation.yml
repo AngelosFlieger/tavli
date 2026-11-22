@@ -46,22 +46,25 @@ jobs:
             'tests/variant-session.test.ts' \
             'stryker.config.mjs' \
             'package.json' \
-            'package-lock.json' \
+            'pnpm-lock.yaml' \
+            'pnpm-workspace.yaml' \
             '.github/workflows/mutation.yml'; then
             echo "run=false" >> "$GITHUB_OUTPUT"
             echo "No mutation-relevant files changed." >> "$GITHUB_STEP_SUMMARY"
           else
             echo "run=true" >> "$GITHUB_OUTPUT"
           fi
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6
+        if: steps.changes.outputs.run == 'true'
       - uses: actions/setup-node@v7
         if: steps.changes.outputs.run == 'true'
         with:
           node-version: 26
-          cache: npm
+          cache: pnpm
       - if: steps.changes.outputs.run == 'true'
-        run: npm ci
+        run: pnpm install --frozen-lockfile
       - if: steps.changes.outputs.run == 'true'
-        run: npm run test:mutation
+        run: pnpm test:mutation
       - name: Publish mutation summary
         if: always() && steps.changes.outputs.run == 'true'
         run: node scripts/write-mutation-summary.mjs

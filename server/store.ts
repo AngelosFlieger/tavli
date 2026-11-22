@@ -48,6 +48,7 @@ export type Store = {
   userById(id: string): Promise<StoredUser | null>;
   userByEmail(email: string): Promise<StoredUser | null>;
   userByUsername(username: string): Promise<StoredUser | null>;
+  updatePasswordHash(userId: string, passwordHash: string): Promise<void>;
   createSession(tokenHash: string, userId: string, expiresAt: number): Promise<void>;
   userForSession(tokenHash: string, now: number): Promise<Omit<StoredUser, 'passwordHash'> | null>;
   deleteSession(tokenHash: string): Promise<void>;
@@ -134,6 +135,9 @@ export async function openStore(options: StoreOptions = {}): Promise<Store> {
     },
     async userByUsername(username) {
       return readUser(await users.findOne({ username }, { collation: usernameCollation }));
+    },
+    async updatePasswordHash(userId, passwordHash) {
+      await users.updateOne({ _id: userId }, { $set: { passwordHash } });
     },
     async createSession(tokenHash, userId, expiresAt) {
       await sessions.insertOne({ _id: tokenHash, userId, expiresAt: new Date(expiresAt) });
